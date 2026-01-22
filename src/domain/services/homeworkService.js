@@ -6,7 +6,9 @@ class HomeworkService {
     this.homeworkData = {}; // Cache
   }
 
-  
+  /**
+   * Assign homework to a class
+   */
   async assignHomework(classId, description, dueDate, attachments = []) {
     const { data, error } = await supabase
       .from('homework')
@@ -33,8 +35,23 @@ class HomeworkService {
     this.homeworkData[classId] = homework;
     return homework;
   }
+  safeParseAttachments(value) {
+  if (!value || typeof value !== "string" || !value.trim()) {
+    return [];
+  }
 
-  
+  try {
+    return JSON.parse(value);
+  } catch (e) {
+    console.error("Invalid attachments JSON:", value);
+    return [];
+  }
+}
+
+
+  /**
+   * Get homework for a specific class
+   */
   async getHomework(classId) {
     // Check cache first
     if (this.homeworkData[classId]) {
@@ -65,7 +82,9 @@ class HomeworkService {
     return homework;
   }
 
-  
+  /**
+   * Get all homework assignments
+   */
   async getAllHomework() {
     const { data, error } = await supabase
       .from('homework')
@@ -74,21 +93,31 @@ class HomeworkService {
 
     if (error) throw error;
 
-    return data.map(hw => {
+    const homeworkList = [];
+    
+    data.forEach(hw => {
       const homework = new Homework(
         hw.id,
         hw.class_id,
         hw.description,
         hw.due_date,
         hw.assigned_date,
-        JSON.parse(hw.attachments || '[]')
+        this.safeParseAttachments(hw.attachments)
       );
       this.homeworkData[hw.class_id] = homework;
-      return [hw.class_id, homework];
+      homeworkList.push({
+  classId: hw.class_id,
+  homework
+});
+
     });
+
+    return homeworkList;
   }
 
-  
+  /**
+   * Update homework
+   */
   async updateHomework(classId, description, dueDate) {
     const { data, error } = await supabase
       .from('homework')
@@ -115,6 +144,9 @@ class HomeworkService {
     return homework;
   }
 
+  /**
+   * Delete homework
+   */
   async deleteHomework(classId) {
     const { error } = await supabase
       .from('homework')
@@ -127,30 +159,38 @@ class HomeworkService {
     return true;
   }
 
-  
+  /**
+   * Get homework statistics
+   */
   async getStats() {
     const allHomework = await this.getAllHomework();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const all = allHomework.length;
-    const upcoming = allHomework.filter(([_, hw]) => hw.isUpcoming()).length;
-    const overdue = allHomework.filter(([_, hw]) => hw.isOverdue()).length;
-    const dueToday = allHomework.filter(([_, hw]) => hw.isDueToday()).length;
+    const upcoming = allHomework.filter(
+  ({ homework }) => homework.isUpcoming() && !homework.isDueToday()
+).length;
+
+    const overdue = allHomework.filter(({ homework }) => homework.isOverdue())
+.length;
+    const dueToday = allHomework.filter(({homework }) => homework.isDueToday()).length;
 
     return { all, upcoming, overdue, dueToday };
   }
 
-  
+  /**
+   * Get filtered homework
+   */
   async getFilteredHomework(filter = 'all') {
-    let allHomework = await this.getAllHomework();
+    const allHomework = await this.getAllHomework();
 
     if (filter === 'upcoming') {
-      allHomework = allHomework.filter(([_, hw]) => hw.isUpcoming() && !hw.isDueToday());
+      return allHomework.filter(([_, hw]) => hw.isUpcoming() && !hw.isDueToday());
     } else if (filter === 'overdue') {
-      allHomework = allHomework.filter(([_, hw]) => hw.isOverdue());
+      return allHomework.filter(([_, hw]) => hw.isOverdue());
     } else if (filter === 'dueToday') {
-      allHomework = allHomework.filter(([_, hw]) => hw.isDueToday());
+      return allHomework.filter(([_, hw]) => hw.isDueToday());
     }
 
     return allHomework;

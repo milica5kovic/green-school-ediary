@@ -3,6 +3,7 @@ import AttendanceService from '../domain/services/attendanceService';
 import HomeworkService from '../domain/services/homeworkService';
 import StudentService from '../domain/services/studentService';
 import GradingService from '../domain/services/gradingService';
+import ClassService from '../domain/services/classService';
 
 const AppContext = createContext();
 
@@ -20,6 +21,7 @@ export const AppProvider = ({ children }) => {
   const [homeworkService] = useState(() => new HomeworkService());
   const [gradingService] = useState(() => new GradingService());
   const [studentService] = useState(() => new StudentService());
+  const [classService] = useState(() => new ClassService())
 
   
   const [currentPage, setCurrentPage] = useState('home');
@@ -31,9 +33,10 @@ export const AppProvider = ({ children }) => {
   const [studentsDb, setStudentsDb] = useState({});
 
   // Load students on 
-  useEffect(() => {
-    loadAllStudents();
-  }, []);
+ useEffect(() => {
+  loadAllStudents();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   const loadAllStudents = async () => {
     try {
@@ -91,6 +94,7 @@ export const AppProvider = ({ children }) => {
     homeworkService,
     gradingService,
     studentService,
+    classService,
 
     // Helpers
     getDateKey,
