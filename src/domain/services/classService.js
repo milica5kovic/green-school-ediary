@@ -1,74 +1,121 @@
-import { supabase } from '../../infrastructure/supabaseClient';
+// services/ClassService.js
+export class ClassService {
+  constructor(supabase) {
+    if (!supabase) {
+      throw new Error('Supabase client is required for ClassService');
+    }
+    this.supabase = supabase;
+    console.log('ClassService initialized');
+  }
 
-class ClassService {
   /**
    * Add a class session for a specific day
    */
   async addClass(dateKey, className, subject, time, title) {
-    const classId = `${className}-${time}-${dateKey}`;
+    try {
+      const classId = `${className}-${time}-${dateKey}`;
+      console.log('Adding class:', { classId, dateKey, className, subject, time, title });
 
-    const { data, error } = await supabase
-      .from('classes')
-      .upsert({
-        class_id: classId,
-        date_key: dateKey,
-        class_name: className,
-        subject,
-        time,
-        title
-      }, {
-        onConflict: 'class_id'
-      })
-      .select()
-      .single();
+      const { data, error } = await this.supabase
+        .from('classes')
+        .upsert({
+          class_id: classId,
+          date_key: dateKey,
+          class_name: className,
+          subject,
+          time,
+          title,
+          created_at: new Date().toISOString()
+        }, {
+          onConflict: 'class_id'
+        })
+        .select()
+        .single();
 
-    if (error) throw error;
-    return data;
+      if (error) {
+        console.error('Supabase error adding class:', error);
+        throw error;
+      }
+      
+      console.log('Class added successfully:', data);
+      return data;
+    } catch (error) {
+      console.error('Error in addClass:', error);
+      throw error;
+    }
   }
 
   /**
    * Get all classes for a specific date
    */
   async getClassesByDate(dateKey) {
-    const { data, error } = await supabase
-      .from('classes')
-      .select('*')
-      .eq('date_key', dateKey)
-      .order('created_at', { ascending: false });
+    try {
+      console.log('Fetching classes for date:', dateKey);
+      
+      const { data, error } = await this.supabase
+        .from('classes')
+        .select('*')
+        .eq('date_key', dateKey)
+        .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    return data || [];
+      if (error) {
+        console.error('Supabase error fetching classes:', error);
+        throw error;
+      }
+      
+      console.log('Classes fetched:', data?.length || 0);
+      return data || [];
+    } catch (error) {
+      console.error('Error in getClassesByDate:', error);
+      throw error;
+    }
   }
 
   /**
    * Delete a class session
    */
   async deleteClass(classId) {
-    const { error } = await supabase
-      .from('classes')
-      .delete()
-      .eq('class_id', classId);
+    try {
+      console.log('Deleting class:', classId);
+      
+      const { error } = await this.supabase
+        .from('classes')
+        .delete()
+        .eq('class_id', classId);
 
-    if (error) throw error;
-    return true;
+      if (error) {
+        console.error('Supabase error deleting class:', error);
+        throw error;
+      }
+      
+      console.log('Class deleted successfully');
+      return true;
+    } catch (error) {
+      console.error('Error in deleteClass:', error);
+      throw error;
+    }
   }
 
   /**
    * Get class by ID
    */
   async getClassById(classId) {
-    const { data, error } = await supabase
-      .from('classes')
-      .select('*')
-      .eq('class_id', classId)
-      .single();
+    try {
+      const { data, error } = await this.supabase
+        .from('classes')
+        .select('*')
+        .eq('class_id', classId)
+        .single();
 
-    if (error) {
-      if (error.code === 'PGRST116') return null;
+      if (error) {
+        if (error.code === 'PGRST116') return null; // Not found
+        throw error;
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error in getClassById:', error);
       throw error;
     }
-    return data;
   }
 }
-
-export default ClassService;

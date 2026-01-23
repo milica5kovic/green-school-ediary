@@ -1,200 +1,233 @@
-import Homework from '../entities/homework';
-import { supabase } from '../../infrastructure/supabaseClient';
-
-class HomeworkService {
-  constructor() {
-    this.homeworkData = {}; // Cache
-  }
-
-  /**
-   * Assign homework to a class
-   */
-  async assignHomework(classId, description, dueDate, attachments = []) {
-    const { data, error } = await supabase
-      .from('homework')
-      .insert({
-        class_id: classId,
-        description,
-        due_date: dueDate,
-        attachments: JSON.stringify(attachments)
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    const homework = new Homework(
-      data.id,
-      data.class_id,
-      data.description,
-      data.due_date,
-      data.assigned_date,
-      JSON.parse(data.attachments || '[]')
-    );
-
-    this.homeworkData[classId] = homework;
-    return homework;
-  }
-  safeParseAttachments(value) {
-  if (!value || typeof value !== "string" || !value.trim()) {
-    return [];
-  }
-
-  try {
-    return JSON.parse(value);
-  } catch (e) {
-    console.error("Invalid attachments JSON:", value);
-    return [];
-  }
-}
-
-
-  /**
-   * Get homework for a specific class
-   */
-  async getHomework(classId) {
-    // Check cache first
-    if (this.homeworkData[classId]) {
-      return this.homeworkData[classId];
+// services/HomeworkService.js
+export class HomeworkService {
+  constructor(supabase) {
+    if (!supabase) {
+      throw new Error('Supabase client is required for HomeworkService');
     }
+    this.supabase = supabase;
+    console.log('HomeworkService initialized');
+  }
 
-    const { data, error } = await supabase
-      .from('homework')
-      .select('*')
-      .eq('class_id', classId)
-      .single();
+  // Generate unique homework ID
+  generateHomeworkId() {
+    return `hw_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
 
-    if (error) {
-      if (error.code === 'PGRST116') return null; // No rows
+  // Get all homework
+  async getAllHomework() {
+    try {
+      console.log('Fetching all homework...');
+      const { data, error } = await this.supabase
+        .from('homework')
+        .select('*')
+        .order('due_date', { ascending: true });
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+      
+      console.log('Homework fetched:', data?.length || 0);
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching homework:', error);
       throw error;
     }
-
-    const homework = new Homework(
-      data.id,
-      data.class_id,
-      data.description,
-      data.due_date,
-      data.assigned_date,
-      JSON.parse(data.attachments || '[]')
-    );
-
-    this.homeworkData[classId] = homework;
-    return homework;
   }
 
-  /**
-   * Get all homework assignments
-   */
-  async getAllHomework() {
-    const { data, error } = await supabase
-      .from('homework')
-      .select('*')
-      .order('due_date', { ascending: true });
+  // Get homework by class
+  async getHomeworkByClass(className) {
+    try {
+      console.log('Fetching homework for class:', className);
+      const { data, error } = await this.supabase
+        .from('homework')
+        .select('*')
+        .eq('class_name', className)
+        .order('due_date', { ascending: true });
 
-    if (error) throw error;
-
-    const homeworkList = [];
-    
-    data.forEach(hw => {
-      const homework = new Homework(
-        hw.id,
-        hw.class_id,
-        hw.description,
-        hw.due_date,
-        hw.assigned_date,
-        this.safeParseAttachments(hw.attachments)
-      );
-      this.homeworkData[hw.class_id] = homework;
-      homeworkList.push({
-  classId: hw.class_id,
-  homework
-});
-
-    });
-
-    return homeworkList;
-  }
-
-  /**
-   * Update homework
-   */
-  async updateHomework(classId, description, dueDate) {
-    const { data, error } = await supabase
-      .from('homework')
-      .update({
-        description,
-        due_date: dueDate
-      })
-      .eq('class_id', classId)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    const homework = new Homework(
-      data.id,
-      data.class_id,
-      data.description,
-      data.due_date,
-      data.assigned_date,
-      JSON.parse(data.attachments || '[]')
-    );
-
-    this.homeworkData[classId] = homework;
-    return homework;
-  }
-
-  /**
-   * Delete homework
-   */
-  async deleteHomework(classId) {
-    const { error } = await supabase
-      .from('homework')
-      .delete()
-      .eq('class_id', classId);
-
-    if (error) throw error;
-
-    delete this.homeworkData[classId];
-    return true;
-  }
-
-  /**
-   * Get homework statistics
-   */
-  async getStats() {
-    const allHomework = await this.getAllHomework();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const all = allHomework.length;
-    const upcoming = allHomework.filter(
-  ({ homework }) => homework.isUpcoming() && !homework.isDueToday()
-).length;
-
-    const overdue = allHomework.filter(({ homework }) => homework.isOverdue())
-.length;
-    const dueToday = allHomework.filter(({homework }) => homework.isDueToday()).length;
-
-    return { all, upcoming, overdue, dueToday };
-  }
-
-  /**
-   * Get filtered homework
-   */
-  async getFilteredHomework(filter = 'all') {
-    const allHomework = await this.getAllHomework();
-
-    if (filter === 'upcoming') {
-      return allHomework.filter(([_, hw]) => hw.isUpcoming() && !hw.isDueToday());
-    } else if (filter === 'overdue') {
-      return allHomework.filter(([_, hw]) => hw.isOverdue());
-    } else if (filter === 'dueToday') {
-      return allHomework.filter(([_, hw]) => hw.isDueToday());
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+      
+      console.log('Homework fetched for class:', data?.length || 0);
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching homework by class:', error);
+      throw error;
     }
+  }
 
-    return allHomework;
+  // Get homework by ID
+  async getHomeworkById(homeworkId) {
+    try {
+      const { data, error } = await this.supabase
+        .from('homework')
+        .select('*')
+        .eq('homework_id', homeworkId)
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error fetching homework by ID:', error);
+      throw error;
+    }
+  }
+
+  // Add new homework
+  async addHomework(homeworkData) {
+    try {
+      console.log('Adding homework:', homeworkData);
+      
+      const homeworkId = this.generateHomeworkId();
+      
+      const { data, error } = await this.supabase
+        .from('homework')
+        .insert([{
+          homework_id: homeworkId,
+          class_name: homeworkData.class_name,
+          subject: homeworkData.subject,
+          title: homeworkData.title,
+          description: homeworkData.description || null,
+          due_date: homeworkData.due_date,
+          assigned_date: homeworkData.assigned_date || new Date().toISOString().split('T')[0],
+          status: homeworkData.status || 'pending',
+          created_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+      
+      console.log('Homework added successfully:', data);
+      return data;
+    } catch (error) {
+      console.error('Error adding homework:', error);
+      throw error;
+    }
+  }
+
+  // Update homework
+  async updateHomework(homeworkId, homeworkData) {
+    try {
+      console.log('Updating homework:', homeworkId, homeworkData);
+      
+      const { data, error } = await this.supabase
+        .from('homework')
+        .update({
+          class_name: homeworkData.class_name,
+          subject: homeworkData.subject,
+          title: homeworkData.title,
+          description: homeworkData.description || null,
+          due_date: homeworkData.due_date,
+          status: homeworkData.status,
+          updated_at: new Date().toISOString()
+        })
+        .eq('homework_id', homeworkId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+      
+      console.log('Homework updated successfully:', data);
+      return data;
+    } catch (error) {
+      console.error('Error updating homework:', error);
+      throw error;
+    }
+  }
+
+  // Delete homework
+  async deleteHomework(homeworkId) {
+    try {
+      console.log('Deleting homework:', homeworkId);
+      
+      const { error } = await this.supabase
+        .from('homework')
+        .delete()
+        .eq('homework_id', homeworkId);
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+      
+      console.log('Homework deleted successfully');
+      return true;
+    } catch (error) {
+      console.error('Error deleting homework:', error);
+      throw error;
+    }
+  }
+
+  // Update homework status
+  async updateStatus(homeworkId, status) {
+    try {
+      const { data, error } = await this.supabase
+        .from('homework')
+        .update({ 
+          status: status,
+          updated_at: new Date().toISOString()
+        })
+        .eq('homework_id', homeworkId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error updating homework status:', error);
+      throw error;
+    }
+  }
+
+  // Get upcoming homework (due in next 7 days)
+  async getUpcomingHomework() {
+    try {
+      const today = new Date();
+      const nextWeek = new Date(today);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+
+      const { data, error } = await this.supabase
+        .from('homework')
+        .select('*')
+        .gte('due_date', today.toISOString().split('T')[0])
+        .lte('due_date', nextWeek.toISOString().split('T')[0])
+        .eq('status', 'pending')
+        .order('due_date', { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching upcoming homework:', error);
+      throw error;
+    }
+  }
+
+  // Get overdue homework
+  async getOverdueHomework() {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      const { data, error } = await this.supabase
+        .from('homework')
+        .select('*')
+        .lt('due_date', today)
+        .eq('status', 'pending')
+        .order('due_date', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching overdue homework:', error);
+      throw error;
+    }
   }
 }
-
-export default HomeworkService;

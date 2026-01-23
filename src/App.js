@@ -1,14 +1,22 @@
-import React from 'react';
-import { BookOpen, Calendar, FileText, ClipboardList, Users, BarChart3, Settings } from 'lucide-react';
-import { AppProvider, useApp } from './context/AppContext';
-import NavItem from './components/shared/NavItem';
-import LoadingSpinner from './components/shared/LoadingSpinner';
-import ErrorMessage from './components/shared/ErrorMessage';
-import HomePage from './components/home/HomePage';
-import HomeworkPage from './components/homework/HomeworkPage';
-import SchedulePage from './components/schedule/SchedulePage';
-
-
+import React from "react";
+import {
+  BookOpen,
+  Calendar,
+  FileText,
+  ClipboardList,
+  Users,
+  BarChart3,
+  Settings,
+} from "lucide-react";
+import { AppProvider, useApp } from "./context/AppContext";
+import NavItem from "./components/shared/NavItem";
+import LoadingSpinner from "./components/shared/LoadingSpinner";
+import ErrorMessage from "./components/shared/ErrorMessage";
+import HomePage from "./components/home/HomePage";
+import HomeworkPage from "./components/homework/HomeworkPage";
+import SchedulePage from "./components/schedule/SchedulePage";
+import StudentsPage from "./components/students/StudentsPage";
+import AttendanceLogPage from "./components/attendanceLog/AttendanceLogPage";
 
 const ComingSoonPage = ({ title, icon: Icon }) => {
   return (
@@ -27,7 +35,7 @@ const AppContent = () => {
 
   const renderPage = () => {
     if (loading) {
-      return <LoadingSpinner message="Loading students..." />;
+      return <LoadingSpinner message="Loading..." />;
     }
 
     if (error) {
@@ -35,19 +43,19 @@ const AppContent = () => {
     }
 
     switch (currentPage) {
-      case 'home':
+      case "home":
         return <HomePage />;
-      case 'schedule':
+      case "schedule":
         return <SchedulePage />;
-      case 'homework':
+      case "homework":
         return <HomeworkPage />;
-      case 'attendance':
-        return <ComingSoonPage title="Attendance Log" icon={ClipboardList} />;
-      case 'students':
-        return <ComingSoonPage title="Students" icon={Users} />;
-      case 'grading':
+      case "students":
+        return <StudentsPage />;
+      case "grading":
         return <ComingSoonPage title="Grading" icon={BarChart3} />;
-      case 'settings':
+      case "attendance":
+        return <AttendanceLogPage />;
+      case "settings":
         return <ComingSoonPage title="Settings" icon={Settings} />;
       default:
         return <HomePage />;
@@ -67,12 +75,16 @@ const AppContent = () => {
               <h1 className="text-2xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
                 Green School E-Diary
               </h1>
-              <p className="text-sm text-gray-500 mt-1">Digital Learning Management</p>
+              <p className="text-sm text-gray-500 mt-1">
+                Digital Learning Management
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right">
-              <p className="text-sm font-semibold text-gray-700">Milica Petković</p>
+              <p className="text-sm font-semibold text-gray-700">
+                Milica Petković
+              </p>
               <p className="text-xs text-emerald-600">ICT & Mathematics</p>
             </div>
             <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center text-white font-bold">
@@ -90,16 +102,19 @@ const AppContent = () => {
             <NavItem icon={BookOpen} label="Home" page="home" />
             <NavItem icon={Calendar} label="My Schedule" page="schedule" />
             <NavItem icon={FileText} label="Homework" page="homework" />
-            <NavItem icon={ClipboardList} label="Attendance Log" page="attendance" />
             <NavItem icon={Users} label="Students" page="students" />
             <NavItem icon={BarChart3} label="Grading" page="grading" />
+            <NavItem
+              icon={ClipboardList}
+              label="Attendance Log"
+              page="attendance"
+            />
             <NavItem icon={Settings} label="Settings" page="settings" />
           </nav>
         </aside>
 
         {/* Main Content */}
         <main className="flex-1">{renderPage()}</main>
-        <title>E-Diary</title>
       </div>
     </div>
   );

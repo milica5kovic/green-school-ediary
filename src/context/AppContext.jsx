@@ -1,9 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import AttendanceService from '../domain/services/attendanceService';
-import HomeworkService from '../domain/services/homeworkService';
-import StudentService from '../domain/services/studentService';
+import { createClient } from '@supabase/supabase-js';
+
+import { AttendanceService } from '../domain/services/attendanceService';
+import { ClassService } from '../domain/services/classService';
+import { StudentsService } from '../domain/services/studentService';
 import GradingService from '../domain/services/gradingService';
-import ClassService from '../domain/services/classService';
+import { ScheduleService } from '../domain/services/scheduleService';
+
+// import { GradingService } from '../services/GradingService';
 
 const AppContext = createContext();
 
@@ -16,65 +20,121 @@ export const useApp = () => {
 };
 
 export const AppProvider = ({ children }) => {
-  // Services (singleton pattern)
-  const [attendanceService] = useState(() => new AttendanceService());
-  const [homeworkService] = useState(() => new HomeworkService());
-  const [gradingService] = useState(() => new GradingService());
-  const [studentService] = useState(() => new StudentService());
-  const [classService] = useState(() => new ClassService())
-
-  
   const [currentPage, setCurrentPage] = useState('home');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  
   const [studentsDb, setStudentsDb] = useState({});
+  const [supabase, setSupabase] = useState(null);
+  const [services, setServices] = useState(null);
 
-  // Load students on 
- useEffect(() => {
-  loadAllStudents();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+  // Initialize Supabase client
+  useEffect(() => {
+    const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
+    const SUPABASE_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
+
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+      console.error('Supabase credentials missing. Please check your .env file');
+      setError('Database configuration missing');
+      return;
+    }
+
+    try {
+      const client = createClient(SUPABASE_URL, SUPABASE_KEY);
+      setSupabase(client);
+      console.log('Supabase client initialized successfully');
+
+      // Initialize services
+      const servicesInstance = {
+        attendance: new AttendanceService(client),
+        class: new ClassService(client),
+        students: new StudentsService(client),
+        grading: new GradingService(client),
+        schedule: new ScheduleService(client),
+      };
+      
+      setServices(servicesInstance);
+      console.log('All services initialized successfully');
+    } catch (err) {
+      console.error('Error initializing Supabase:', err);
+      setError('Failed to connect to database');
+    }
+  }, []);
+
+  // Load all students when services are ready
+  useEffect(() => {
+    if (services?.students) {
+      loadAllStudents();
+    }
+  }, );
 
   const loadAllStudents = async () => {
+    if (!services?.students) {
+      console.error('Students service not initialized');
+      return;
+    }
+
     try {
-      setLoading(true);
-      const classes = ['Y5A', 'Y5B', 'Y6A', 'Y7C'];
-      const studentsData = {};
+      console.log('Loading all students...');
+      const allStudents = await services.students.getAllStudents();
+      
+      // Group students by class
+      const grouped = allStudents.reduce((acc, student) => {
+        if (!acc[student.class_name]) {
+          acc[student.class_name] = [];
+        }
+        acc[student.class_name].push({
+          id: student.id,
+          name: student.name,
+          student_no: student.student_no,
+          class: student.class_name
+        });
+        return acc;
+      }, {});
 
-      for (const className of classes) {
-        const students = await studentService.getStudentsByClass(className);
-        studentsData[className] = students;
-      }
-
-      setStudentsDb(studentsData);
+      setStudentsDb(grouped);
+      console.log('Students loaded successfully:', Object.keys(grouped).length, 'classes');
     } catch (err) {
       console.error('Error loading students:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      setError('Failed to load students. Please check your connection.');
     }
   };
 
-  // Helper functions
+  // Date utilities
   const getDateKey = (date) => {
-    return date.toISOString().split('T')[0];
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   const getDayName = (date) => {
-    return date.toLocaleDateString('en-US', { weekday: 'long' });
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return days[new Date(date).getDay()];
   };
 
   const formatDate = (date) => {
-    return date.toLocaleDateString('en-US', {
+    return new Date(date).toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
       day: 'numeric'
     });
   };
+
+  // Don't render children until Supabase is initialized
+  if (!supabase || !services) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Initializing application...</p>
+          {error && <p className="text-red-600 mt-2">{error}</p>}
+        </div>
+      </div>
+    );
+  }
 
   const value = {
     // State
@@ -87,20 +147,24 @@ export const AppProvider = ({ children }) => {
     error,
     setError,
     studentsDb,
-    loadAllStudents,
+    setStudentsDb,
 
-    // Services
-    attendanceService,
-    homeworkService,
-    gradingService,
-    studentService,
-    classService,
+    // Supabase & Services
+    supabase,
+    attendanceService: services.attendance,
+    classService: services.class,
+    studentsService: services.students,
+    gradingService: services.grading,
+    scheduleService: services.schedule,
 
-    // Helpers
+    // Utilities
     getDateKey,
     getDayName,
     formatDate,
+    loadAllStudents
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
+
+export default AppContext;

@@ -1,41 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Clock } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import DateNavigator from '../shared/DateNavigator';
 import ClassCard from './ClassCard';
 import AddClassModal from './AddClassModal';
-import LoadingSpinner from '../shared/LoadingSpinner';
 
 const HomePage = () => {
-  const { getDateKey, getDayName, selectedDate, classService, setLoading } = useApp();
+  const { getDateKey, getDayName, selectedDate, classService, scheduleService } = useApp();
   const [dailyClasses, setDailyClasses] = useState([]);
   const [showAddClass, setShowAddClass] = useState(false);
-  const [loadingClasses, setLoadingClasses] = useState(false);
-  const [schedule, setSchedule] = useState({
-    Monday: [],
-    Tuesday: [],
-    Wednesday: [],
-    Thursday: [],
-    Friday: [],
-  });
+  const [todaySchedule, setTodaySchedule] = useState([]);
+  const [localLoading, setLocalLoading] = useState(false);
 
-  // Load schedule from localStorage
-  useEffect(() => {
-    const savedSchedule = localStorage.getItem('teacherSchedule');
-    if (savedSchedule) {
-      setSchedule(JSON.parse(savedSchedule));
+  // Load schedule for selected date
+  const loadSchedule = useCallback(async () => {
+    if (!scheduleService) return;
+    
+    try {
+      const dayName = getDayName(selectedDate);
+      const schedule = await scheduleService.getScheduleByDay(dayName);
+      setTodaySchedule(schedule);
+    } catch (error) {
+      console.error('Error loading schedule:', error);
+      setTodaySchedule([]);
     }
-  }, []);
+  }, [scheduleService, selectedDate, getDayName]);
 
   // Load classes from database when date changes
-  useEffect(() => {
-    loadClasses();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate]);
-
-  const loadClasses = async () => {
+  const loadClasses = useCallback(async () => {
+    if (!classService) return;
+    
     try {
-      setLoadingClasses(true);
       const dateKey = getDateKey(selectedDate);
       const classes = await classService.getClassesByDate(dateKey);
 
@@ -51,19 +46,20 @@ const HomePage = () => {
       setDailyClasses(formattedClasses);
     } catch (error) {
       console.error('Error loading classes:', error);
-    } finally {
-      setLoadingClasses(false);
+      setDailyClasses([]);
     }
-  };
+  }, [classService, selectedDate, getDateKey]);
 
-  const getTodaySchedule = () => {
-    const dayName = getDayName(selectedDate);
-    return schedule[dayName] || [];
-  };
+  useEffect(() => {
+    loadSchedule();
+    loadClasses();
+  }, [selectedDate, loadSchedule, loadClasses]);
 
   const addClass = async (scheduleClass, title) => {
+    if (!classService) return;
+    
     try {
-      setLoading(true);
+      setLocalLoading(true);
       const dateKey = getDateKey(selectedDate);
 
       await classService.addClass(
@@ -74,37 +70,30 @@ const HomePage = () => {
         title
       );
 
-      // Reload classes from database
       await loadClasses();
       setShowAddClass(false);
     } catch (error) {
       console.error('Error adding class:', error);
       alert('Failed to add class. Please try again.');
     } finally {
-      setLoading(false);
+      setLocalLoading(false);
     }
   };
 
   const removeClass = async (classId) => {
+    if (!classService) return;
+    
     try {
-      setLoading(true);
+      setLocalLoading(true);
       await classService.deleteClass(classId);
-
-      // Reload classes from database
       await loadClasses();
     } catch (error) {
       console.error('Error removing class:', error);
       alert('Failed to remove class. Please try again.');
     } finally {
-      setLoading(false);
+      setLocalLoading(false);
     }
   };
-
-  const todaySchedule = getTodaySchedule();
-
-  if (loadingClasses) {
-    return <LoadingSpinner message="Loading today's classes..." />;
-  }
 
   return (
     <div className="space-y-6">
@@ -112,19 +101,22 @@ const HomePage = () => {
 
       <button
         onClick={() => setShowAddClass(true)}
-        className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-4 rounded-2xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2"
+        disabled={localLoading || todaySchedule.length === 0}
+        className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-4 rounded-2xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <Plus size={20} />
-        Add Class for Today
+        {todaySchedule.length === 0 ? 'No classes scheduled for this day' : 'Add Class for Today'}
       </button>
 
       {dailyClasses.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-lg p-12 text-center border border-emerald-100">
           <Clock size={48} className="mx-auto text-emerald-300 mb-4" />
           <p className="text-gray-500">No classes added for this day yet</p>
-          <p className="text-sm text-gray-400 mt-2">
-            Click "Add Class for Today" to get started
-          </p>
+          {todaySchedule.length > 0 && (
+            <p className="text-sm text-gray-400 mt-2">
+              Click "Add Class for Today" to get started
+            </p>
+          )}
         </div>
       ) : (
         <div className="space-y-6">

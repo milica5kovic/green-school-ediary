@@ -3,23 +3,52 @@ import React, { useState, useEffect } from 'react';
 const ScheduleModal = ({ onClose, onSave, existingSchedule, days }) => {
   const [day, setDay] = useState('Monday');
   const [time, setTime] = useState('');
-  const [year, setYear] = useState('');
   const [className, setClassName] = useState('');
   const [subject, setSubject] = useState('');
 
+  // Time slots
+  const timeSlots = [
+    '09:00-09:40',
+    '09:45-10:30',
+    '11:00-11:45',
+    '11:50-12:30',
+    '13:30-14:15',
+    '14:20-15:00'
+  ];
+
+  // Classes Y1-Y9 with A/B variants for Y5
+  const classes = [
+    'Y1', 'Y2', 'Y3', 'Y4', 
+    'Y5A', 'Y5B', 
+    'Y6', 'Y7', 'Y8', 'Y9'
+  ];
+
+  // Common subjects
+  const subjects = [
+    'Mathematics',
+    'English',
+    'Science',
+    'ICT',
+    'History',
+    'Geography',
+    'Art',
+    'Music',
+    'PE',
+    'Other'
+  ];
+
   useEffect(() => {
     if (existingSchedule) {
-      setDay(existingSchedule.day);
-      setTime(existingSchedule.time);
-      setYear(existingSchedule.year);
-      setClassName(existingSchedule.class);
-      setSubject(existingSchedule.subject);
+      setDay(existingSchedule.day || 'Monday');
+      setTime(existingSchedule.time || '');
+      setClassName(existingSchedule.class || '');
+      setSubject(existingSchedule.subject || '');
     }
   }, [existingSchedule]);
 
   const handleSave = () => {
     if (time && className && subject) {
-      onSave({ day, time, year, class: className, subject });
+      onSave({ day, time, class: className, subject });
     }
   };
 
@@ -31,6 +60,7 @@ const ScheduleModal = ({ onClose, onSave, existingSchedule, days }) => {
         </h3>
 
         <div className="space-y-4">
+          {/* Day */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Day of Week *
@@ -48,56 +78,61 @@ const ScheduleModal = ({ onClose, onSave, existingSchedule, days }) => {
             </select>
           </div>
 
+          {/* Time Slot */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Time *
+              Time Slot *
             </label>
-            <input
-              type="text"
+            <select
               className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              placeholder="e.g., 08:00-08:45"
               value={time}
               onChange={(e) => setTime(e.target.value)}
-            />
+            >
+              <option value="">Select time slot...</option>
+              {timeSlots.map((slot) => (
+                <option key={slot} value={slot}>
+                  {slot}
+                </option>
+              ))}
+            </select>
           </div>
 
+          {/* Class */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Year (Optional)
+              Class/Year Group *
             </label>
-            <input
-              type="text"
+            <select
               className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              placeholder="e.g., Y5, Y6, Y7"
-              value={year}
-              onChange={(e) => setYear(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Class *
-            </label>
-            <input
-              type="text"
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              placeholder="e.g., Y5A, Y5B, Y6A"
               value={className}
               onChange={(e) => setClassName(e.target.value)}
-            />
+            >
+              <option value="">Select class...</option>
+              {classes.map((cls) => (
+                <option key={cls} value={cls}>
+                  {cls}
+                </option>
+              ))}
+            </select>
           </div>
 
+          {/* Subject */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Subject *
             </label>
-            <input
-              type="text"
+            <select
               className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              placeholder="e.g., Mathematics, ICT, English"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-            />
+            >
+              <option value="">Select subject...</option>
+              {subjects.map((subj) => (
+                <option key={subj} value={subj}>
+                  {subj}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

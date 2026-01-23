@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Clock } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
 import ScheduleModal from './ScheduleModal';
 
 const SchedulePage = () => {
+  const { scheduleService } = useApp();
   const [schedule, setSchedule] = useState({
     Monday: [],
     Tuesday: [],
@@ -12,84 +14,95 @@ const SchedulePage = () => {
   });
   const [showModal, setShowModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
+  const [localLoading, setLocalLoading] = useState(false);
 
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
-  // Load schedule from localStorage on mount
-  useEffect(() => {
-    const savedSchedule = localStorage.getItem('teacherSchedule');
-    if (savedSchedule) {
-      setSchedule(JSON.parse(savedSchedule));
-    } else {
-      // Initialize with default schedule
-      setSchedule({
-        Monday: [
-          { time: '08:00-08:45', year: 'Y5', class: 'Y5A', subject: 'Mathematics' },
-          { time: '09:00-09:45', year: 'Y5', class: 'Y5B', subject: 'Mathematics' },
-          { time: '10:00-10:45', year: 'Y6', class: 'Y6A', subject: 'ICT' },
-        ],
-        Tuesday: [
-          { time: '08:00-08:45', year: 'Y5', class: 'Y5A', subject: 'Mathematics' },
-          { time: '11:00-11:45', year: 'Y7', class: 'Y7C', subject: 'ICT' },
-        ],
-        Wednesday: [
-          { time: '09:00-09:45', year: 'Y5', class: 'Y5B', subject: 'Mathematics' },
-          { time: '10:00-10:45', year: 'Y6', class: 'Y6A', subject: 'ICT' },
-        ],
-        Thursday: [
-          { time: '08:00-08:45', year: 'Y5', class: 'Y5A', subject: 'Mathematics' },
-          { time: '09:00-09:45', year: 'Y5', class: 'Y5B', subject: 'Mathematics' },
-          { time: '13:00-13:45', year: 'Y7', class: 'Y7C', subject: 'ICT' },
-        ],
-        Friday: [
-          { time: '10:00-10:45', year: 'Y6', class: 'Y6A', subject: 'ICT' },
-          { time: '11:00-11:45', year: 'Y5', class: 'Y5B', subject: 'Mathematics' },
-        ],
-      });
+  // Load schedule from Supabase
+  const loadSchedule = useCallback(async () => {
+    if (!scheduleService) return;
+    
+    try {
+      setLocalLoading(true);
+      const weekSchedule = await scheduleService.getWeekSchedule();
+      setSchedule(weekSchedule);
+      console.log('Schedule loaded from Supabase');
+    } catch (error) {
+      console.error('Error loading schedule:', error);
+      alert('Failed to load schedule');
+    } finally {
+      setLocalLoading(false);
     }
-  }, []);
+  }, [scheduleService]);
 
-  // Save to localStorage whenever schedule changes
   useEffect(() => {
-    localStorage.setItem('teacherSchedule', JSON.stringify(schedule));
-  }, [schedule]);
+    loadSchedule();
+  }, [loadSchedule]);
 
-  const handleSave = (entry) => {
-    if (editingEntry) {
-      // Update existing entry
-      setSchedule((prev) => ({
-        ...prev,
-        [entry.day]: prev[entry.day]
-          .map((e) =>
-            e === editingEntry.entry ? entry : e
-          )
-          .sort((a, b) => a.time.localeCompare(b.time)),
-      }));
-    } else {
-      // Add new entry
-      setSchedule((prev) => ({
-        ...prev,
-        [entry.day]: [...(prev[entry.day] || []), entry].sort((a, b) =>
-          a.time.localeCompare(b.time)
-        ),
-      }));
-    }
+  const handleSave = async (entry) => {
+    if (!scheduleService) return;
+    
+    try {
+      setLocalLoading(true);
 
-    setShowModal(false);
-    setEditingEntry(null);
-  };
+      if (editingEntry) {
+        // Delete old entry and add new one (update)
+        await scheduleService.deleteScheduleClass(editingEntry.id);
+        await scheduleService.addScheduleClass(
+          entry.day,
+          entry.time,
+          entry.class,
+          entry.subject
+        );
+      } else {
+        // Add new entry
+        await scheduleService.addScheduleClass(
+          entry.day,
+          entry.time,
+          entry.class,
+          entry.subject
+        );
+      }
 
-  const handleDelete = (day, index) => {
-    if (window.confirm('Are you sure you want to delete this schedule entry?')) {
-      setSchedule((prev) => ({
-        ...prev,
-        [day]: prev[day].filter((_, i) => i !== index),
-      }));
+      // Reload schedule from database
+      await loadSchedule();
+      setShowModal(false);
+      setEditingEntry(null);
+    } catch (error) {
+      console.error('Error saving schedule:', error);
+      alert('Failed to save schedule entry. Please try again.');
+    } finally {
+      setLocalLoading(false);
     }
   };
 
-  const handleEdit = (day, entry) => {
-    setEditingEntry({ day, entry });
+  const handleDelete = async (scheduleItem) => {
+    if (!scheduleService) return;
+    
+    if (!window.confirm('Are you sure you want to delete this schedule entry?')) {
+      return;
+    }
+
+    try {
+      setLocalLoading(true);
+      
+      // Use the id directly from the schedule item
+      if (scheduleItem.id) {
+        await scheduleService.deleteScheduleClass(scheduleItem.id);
+        await loadSchedule();
+      } else {
+        alert('Cannot delete: schedule item ID not found');
+      }
+    } catch (error) {
+      console.error('Error deleting schedule entry:', error);
+      alert('Failed to delete schedule entry: ' + error.message);
+    } finally {
+      setLocalLoading(false);
+    }
+  };
+
+  const handleEdit = (day, entry, id) => {
+    setEditingEntry({ day, entry, id });
     setShowModal(true);
   };
 
@@ -123,7 +136,8 @@ const SchedulePage = () => {
               setEditingEntry(null);
               setShowModal(true);
             }}
-            className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2"
+            disabled={localLoading}
+            className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus size={20} />
             Add Class
@@ -136,7 +150,7 @@ const SchedulePage = () => {
             <p className="text-3xl font-bold text-emerald-700">{getTotalClasses()}</p>
             <p className="text-sm text-emerald-600 mt-1">Total Classes/Week</p>
           </div>
-          {Object.entries(subjectStats).map(([subject, count]) => (
+          {Object.entries(subjectStats).slice(0, 3).map(([subject, count]) => (
             <div
               key={subject}
               className="bg-blue-50 rounded-xl p-4 border border-blue-200"
@@ -162,14 +176,14 @@ const SchedulePage = () => {
               </span>
             </div>
 
-            {schedule[day]?.length === 0 ? (
+            {!schedule[day] || schedule[day].length === 0 ? (
               <div className="text-center py-8 bg-gray-50 rounded-lg">
                 <Clock size={40} className="mx-auto text-gray-300 mb-2" />
                 <p className="text-sm text-gray-500 italic">No classes scheduled</p>
               </div>
             ) : (
               <div className="space-y-2">
-                {schedule[day]?.map((cls, idx) => (
+                {schedule[day].map((cls, idx) => (
                   <div
                     key={idx}
                     className="flex items-center justify-between p-4 bg-emerald-50 rounded-lg border border-emerald-200 hover:bg-emerald-100 transition-colors"
@@ -188,8 +202,9 @@ const SchedulePage = () => {
                     </div>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => handleEdit(day, cls)}
-                        className="p-2 hover:bg-emerald-200 text-emerald-700 rounded-lg transition-colors"
+                        onClick={() => handleEdit(day, cls, cls.id)}
+                        disabled={localLoading}
+                        className="p-2 hover:bg-emerald-200 text-emerald-700 rounded-lg transition-colors disabled:opacity-50"
                         title="Edit"
                       >
                         <svg
@@ -205,8 +220,9 @@ const SchedulePage = () => {
                         </svg>
                       </button>
                       <button
-                        onClick={() => handleDelete(day, idx)}
-                        className="p-2 hover:bg-red-100 text-red-500 rounded-lg transition-colors"
+                        onClick={() => handleDelete(cls)}
+                        disabled={localLoading}
+                        className="p-2 hover:bg-red-100 text-red-500 rounded-lg transition-colors disabled:opacity-50"
                         title="Delete"
                       >
                         <Trash2 size={16} />
