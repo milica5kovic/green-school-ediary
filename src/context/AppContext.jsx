@@ -1,11 +1,18 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+} from "react";
+import { createClient } from "@supabase/supabase-js";
 
-import { AttendanceService } from '../domain/services/attendanceService';
-import { ClassService } from '../domain/services/classService';
-import { StudentsService } from '../domain/services/studentService';
-import GradingService from '../domain/services/gradingService';
-import { ScheduleService } from '../domain/services/scheduleService';
+import { AttendanceService } from "../domain/services/attendanceService";
+import { ClassService } from "../domain/services/classService";
+import { StudentsService } from "../domain/services/studentService";
+
+import GradingService from "../domain/services/gradeService";
+import { ScheduleService } from "../domain/services/scheduleService";
 
 // import { GradingService } from '../services/GradingService';
 
@@ -14,19 +21,22 @@ const AppContext = createContext();
 export const useApp = () => {
   const context = useContext(AppContext);
   if (!context) {
-    throw new Error('useApp must be used within AppProvider');
+    throw new Error("useApp must be used within AppProvider");
   }
   return context;
 };
 
 export const AppProvider = ({ children }) => {
-  const [currentPage, setCurrentPage] = useState('home');
+  const [currentPage, setCurrentPage] = useState("home");
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [studentsDb, setStudentsDb] = useState({});
   const [supabase, setSupabase] = useState(null);
   const [services, setServices] = useState(null);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+
+  const studentsFetchInProgress = useRef(false);
 
   // Initialize Supabase client
   useEffect(() => {
@@ -34,15 +44,17 @@ export const AppProvider = ({ children }) => {
     const SUPABASE_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
 
     if (!SUPABASE_URL || !SUPABASE_KEY) {
-      console.error('Supabase credentials missing. Please check your .env file');
-      setError('Database configuration missing');
+      console.error(
+        "Supabase credentials missing. Please check your .env file",
+      );
+      setError("Database configuration missing");
       return;
     }
 
     try {
       const client = createClient(SUPABASE_URL, SUPABASE_KEY);
       setSupabase(client);
-      console.log('Supabase client initialized successfully');
+      console.log("Supabase client initialized successfully");
 
       // Initialize services
       const servicesInstance = {
@@ -52,33 +64,33 @@ export const AppProvider = ({ children }) => {
         grading: new GradingService(client),
         schedule: new ScheduleService(client),
       };
-      
+
       setServices(servicesInstance);
-      console.log('All services initialized successfully');
+      console.log("All services initialized successfully");
     } catch (err) {
-      console.error('Error initializing Supabase:', err);
-      setError('Failed to connect to database');
+      console.error("Error initializing Supabase:", err);
+      setError("Failed to connect to database");
     }
   }, []);
 
   // Load all students when services are ready
   useEffect(() => {
-    if (services?.students) {
-      loadAllStudents();
-    }
-  }, );
+    if (!services?.students) return;
+    loadAllStudents();
+  }, [services]);
 
   const loadAllStudents = async () => {
-    if (!services?.students) {
-      console.error('Students service not initialized');
+    if (studentsFetchInProgress.current) {
+      console.log("⏭️ Student fetch already in progress, skipping");
       return;
     }
 
+    studentsFetchInProgress.current = true;
+
     try {
-      console.log('Loading all students...');
+      console.log("Loading all students...");
       const allStudents = await services.students.getAllStudents();
-      
-      // Group students by class
+
       const grouped = allStudents.reduce((acc, student) => {
         if (!acc[student.class_name]) {
           acc[student.class_name] = [];
@@ -87,16 +99,28 @@ export const AppProvider = ({ children }) => {
           id: student.id,
           name: student.name,
           student_no: student.student_no,
-          class: student.class_name
+          class: student.class_name,
         });
         return acc;
       }, {});
 
       setStudentsDb(grouped);
-      console.log('Students loaded successfully:', Object.keys(grouped).length, 'classes');
+      console.log(
+        "Students loaded successfully:",
+        Object.keys(grouped).length,
+        "classes",
+      );
     } catch (err) {
-      console.error('Error loading students:', err);
-      setError('Failed to load students. Please check your connection.');
+      // 👇 THIS IS IMPORTANT
+      if (err?.name === "AbortError") {
+        console.warn("⚠️ Supabase aborted request (safe to ignore)");
+        return;
+      }
+
+      console.error("Error loading students:", err);
+      setError("Failed to load students. Please check your connection.");
+    } finally {
+      studentsFetchInProgress.current = false;
     }
   };
 
@@ -104,22 +128,30 @@ export const AppProvider = ({ children }) => {
   const getDateKey = (date) => {
     const d = new Date(date);
     const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   };
 
   const getDayName = (date) => {
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const days = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
     return days[new Date(date).getDay()];
   };
 
   const formatDate = (date) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+    return new Date(date).toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
   };
 
@@ -161,7 +193,7 @@ export const AppProvider = ({ children }) => {
     getDateKey,
     getDayName,
     formatDate,
-    loadAllStudents
+    loadAllStudents,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

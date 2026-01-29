@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Edit, Trash2, UserPlus, Users, Mail, Phone } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+// import { useAuth } from '../../context/AppContext';
 
 const CLASSES = ['Y1', 'Y2', 'Y3', 'Y4', 'Y5A', 'Y5B', 'Y6', 'Y7', 'Y8', 'Y9'];
 
@@ -480,6 +481,18 @@ const StudentsPage = () => {
                   onChange={(e) => setFormData({ ...formData, parent_contact: e.target.value })}
                 />
               </div>
+         
+<div className="form-group">
+  <label>Parent Email/Contact</label>
+  <input
+    type="text"
+    name="parent_contact"
+    value={formData.parent_contact}
+    // onChange={handleChange}a
+    placeholder="parent@example.com"
+  />
+  <small>Parent will be able to view this student's grades</small>
+</div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

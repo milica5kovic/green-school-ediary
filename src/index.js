@@ -3,15 +3,17 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import { AuthProvider } from './context/AuthContext';
+import { supabase } from './infrastructure/supabaseClient';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
+
+// Remove StrictMode in development to avoid Supabase lock errors
+// StrictMode causes components to mount twice, which conflicts with Supabase's lock mechanism
 root.render(
-  <React.StrictMode>
+  <AuthProvider supabase={supabase}>
     <App />
-  </React.StrictMode>
+  </AuthProvider>
 );
 
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals();

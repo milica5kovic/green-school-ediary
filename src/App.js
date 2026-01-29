@@ -9,6 +9,7 @@ import {
   Settings,
 } from "lucide-react";
 import { AppProvider, useApp } from "./context/AppContext";
+import { useAuth } from "./context/AuthContext";
 import NavItem from "./components/shared/NavItem";
 import LoadingSpinner from "./components/shared/LoadingSpinner";
 import ErrorMessage from "./components/shared/ErrorMessage";
@@ -17,6 +18,9 @@ import HomeworkPage from "./components/homework/HomeworkPage";
 import SchedulePage from "./components/schedule/SchedulePage";
 import StudentsPage from "./components/students/StudentsPage";
 import AttendanceLogPage from "./components/attendanceLog/AttendanceLogPage";
+import SettingsPage from "./components/settings/SettingsPage";
+
+import LoginPage from "./components/auth/LoginPage";
 
 const ComingSoonPage = ({ title, icon: Icon }) => {
   return (
@@ -32,6 +36,21 @@ const ComingSoonPage = ({ title, icon: Icon }) => {
 
 const AppContent = () => {
   const { currentPage, loading, error, loadAllStudents } = useApp();
+  const { user, profile, teacher, loading: authLoading, signOut } = useAuth();
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 flex items-center justify-center">
+        <LoadingSpinner message="Loading..." />
+      </div>
+    );
+  }
+
+  // Show login page if not authenticated
+  if (!user) {
+    return <LoginPage />;
+  }
 
   const renderPage = () => {
     if (loading) {
@@ -56,10 +75,14 @@ const AppContent = () => {
       case "attendance":
         return <AttendanceLogPage />;
       case "settings":
-        return <ComingSoonPage title="Settings" icon={Settings} />;
+        return <SettingsPage />;
       default:
         return <HomePage />;
     }
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
   };
 
   return (
@@ -83,13 +106,19 @@ const AppContent = () => {
           <div className="flex items-center gap-4">
             <div className="text-right">
               <p className="text-sm font-semibold text-gray-700">
-                Milica Petković
+                {teacher?.full_name || profile?.email || 'User'}
               </p>
-              <p className="text-xs text-emerald-600">ICT & Mathematics</p>
+              <p className="text-xs text-emerald-600">
+                {teacher?.subjects?.join(', ') || profile?.role || 'Teacher'}
+              </p>
             </div>
-            <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center text-white font-bold">
-              MP
-            </div>
+            <button
+              onClick={handleSignOut}
+              className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center text-white font-bold hover:from-emerald-500 hover:to-teal-600 transition-all"
+              title="Sign Out"
+            >
+              {teacher?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2) || 'U'}
+            </button>
           </div>
         </div>
       </header>
