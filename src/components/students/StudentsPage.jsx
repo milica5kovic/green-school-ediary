@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Edit, Trash2, UserPlus, Users, Mail, Phone } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
-// import { useAuth } from '../../context/AppContext';
-
-const CLASSES = ['Y1', 'Y2', 'Y3', 'Y4', 'Y5A', 'Y5B', 'Y6', 'Y7', 'Y8', 'Y9'];
+import { Search, Edit, Trash2, UserPlus, Users, Mail, Phone, Calendar } from 'lucide-react';
+import { supabase } from '../../infrastructure/supabaseClient';
 
 const StudentsPage = () => {
-  const { studentsService, supabase } = useApp();
+
   const [students, setStudents] = useState([]);
   const [filteredStudents, setFilteredStudents] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [selectedClass, setSelectedClass] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -16,116 +14,50 @@ const StudentsPage = () => {
   const [localLoading, setLocalLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
-    class_name: 'Y1',
+    class_name: '',
     student_no: 1,
     email: '',
     parent_contact: '',
+    date_of_birth: '',
     notes: ''
   });
 
-  // Create service instance if not provided by context
-  const service = React.useMemo(() => {
-    if (studentsService) return studentsService;
-    if (!supabase) return null;
-    
-    class LocalStudentsService {
-      constructor(supabaseClient) {
-        this.supabase = supabaseClient;
-      }
-      
-      async getAllStudents() {
-        const { data, error } = await this.supabase
-          .from('students')
-          .select('*')
-          .order('class_name', { ascending: true })
-          .order('student_no', { ascending: true });
-        if (error) throw error;
-        return data || [];
-      }
-      
-      async addStudent(studentData) {
-        const { data, error } = await this.supabase
-          .from('students')
-          .insert([{
-            name: studentData.name,
-            class_name: studentData.class_name,
-            student_no: studentData.student_no,
-            email: studentData.email || null,
-            parent_contact: studentData.parent_contact || null,
-            notes: studentData.notes || null,
-            created_at: new Date().toISOString()
-          }])
-          .select()
-          .single();
-        if (error) throw error;
-        return data;
-      }
-      
-      async updateStudent(studentId, studentData) {
-        const { data, error } = await this.supabase
-          .from('students')
-          .update({
-            name: studentData.name,
-            class_name: studentData.class_name,
-            student_no: studentData.student_no,
-            email: studentData.email || null,
-            parent_contact: studentData.parent_contact || null,
-            notes: studentData.notes || null,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', studentId)
-          .select()
-          .single();
-        if (error) throw error;
-        return data;
-      }
-      
-      async deleteStudent(studentId) {
-        const { error } = await this.supabase
-          .from('students')
-          .delete()
-          .eq('id', studentId);
-        if (error) throw error;
-        return true;
-      }
-      
-      async getNextStudentNumber(className) {
-        const { data, error } = await this.supabase
-          .from('students')
-          .select('student_no')
-          .eq('class_name', className)
-          .order('student_no', { ascending: false })
-          .limit(1);
-        if (error) return 1;
-        if (data && data.length > 0) return data[0].student_no + 1;
-        return 1;
-      }
-      
-      groupStudentsByClass(students) {
-        return students.reduce((acc, student) => {
-          if (!acc[student.class_name]) {
-            acc[student.class_name] = [];
-          }
-          acc[student.class_name].push(student);
-          return acc;
-        }, {});
-      }
-    }
-    
-    return new LocalStudentsService(supabase);
-  }, [studentsService, supabase]);
-
-  const loadStudents = useCallback(async () => {
-    if (!service) return;
+  // Load classes from database
+  const loadClasses = useCallback(async () => {
+    if (!supabase) return;
     
     try {
-      const data = await service.getAllStudents();
-      setStudents(data);
+      const { data, error } = await supabase
+        .from('custom_classes')
+        .select('*')
+        .eq('is_active', true)
+        .order('class_name');
+      
+      if (error) throw error;
+      setClasses(data || []);
+    } catch (error) {
+      console.error('Error loading classes:', error);
+    }
+  }, [supabase]);
+
+  const loadStudents = useCallback(async () => {
+    if (!supabase) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .select('*')
+        .or('status.is.null,status.neq.archived')
+        .order('class_name', { ascending: true })
+        .order('student_no', { ascending: true });
+        
+      if (error) throw error;
+      setStudents(data || []);
     } catch (error) {
       console.error('Error loading students:', error);
       alert('Failed to load students. Error: ' + error.message);
     }
-  }, [service]);
+  }, [supabase]);
 
   const filterStudents = useCallback(() => {
     let filtered = students;
@@ -145,24 +77,44 @@ const StudentsPage = () => {
   }, [students, selectedClass, searchTerm]);
 
   useEffect(() => {
-    if (service) {
+    if (supabase) {
+      loadClasses();
       loadStudents();
     }
-  }, [service, loadStudents]);
+  }, [supabase, loadClasses, loadStudents]);
 
   useEffect(() => {
     filterStudents();
   }, [filterStudents]);
 
+  const getNextStudentNumber = async () => {
+    if (!supabase) return 1;
+    
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .select('student_no')
+        .order('student_no', { ascending: false })
+        .limit(1);
+        
+      if (error) return 1;
+      if (data && data.length > 0) return data[0].student_no + 1;
+      return 1;
+    } catch (error) {
+      console.error('Error getting next student number:', error);
+      return 1;
+    }
+  };
+
   const openAddModal = async () => {
-    if (!service) return;
-    const nextNo = await service.getNextStudentNumber(formData.class_name);
+    const nextNo = await getNextStudentNumber();
     setFormData({
       name: '',
-      class_name: 'Y1',
+      class_name: classes.length > 0 ? classes[0].class_name : '',
       student_no: nextNo,
       email: '',
       parent_contact: '',
+      date_of_birth: '',
       notes: ''
     });
     setEditingStudent(null);
@@ -176,6 +128,7 @@ const StudentsPage = () => {
       student_no: student.student_no,
       email: student.email || '',
       parent_contact: student.parent_contact || '',
+      date_of_birth: student.date_of_birth || '',
       notes: student.notes || ''
     });
     setEditingStudent(student);
@@ -183,8 +136,8 @@ const StudentsPage = () => {
   };
 
   const handleSubmit = async () => {
-    if (!service) {
-      alert('Service not ready');
+    if (!supabase) {
+      alert('Database connection not ready');
       return;
     }
     
@@ -193,13 +146,39 @@ const StudentsPage = () => {
       return;
     }
 
+    if (!formData.class_name) {
+      alert('Please select a class');
+      return;
+    }
+
     try {
       setLocalLoading(true);
       
+      const studentData = {
+        name: formData.name,
+        class_name: formData.class_name,
+        student_no: formData.student_no,
+        email: formData.email || null,
+        parent_contact: formData.parent_contact || null,
+        date_of_birth: formData.date_of_birth || null,
+        notes: formData.notes || null,
+        school_year: '2025-26',
+        status: 'active'
+      };
+
       if (editingStudent) {
-        await service.updateStudent(editingStudent.id, formData);
+        const { error } = await supabase
+          .from('students')
+          .update({ ...studentData, updated_at: new Date().toISOString() })
+          .eq('id', editingStudent.id);
+          
+        if (error) throw error;
       } else {
-        await service.addStudent(formData);
+        const { error } = await supabase
+          .from('students')
+          .insert([studentData]);
+          
+        if (error) throw error;
       }
 
       await loadStudents();
@@ -214,7 +193,7 @@ const StudentsPage = () => {
   };
 
   const handleDelete = async (studentId, studentName) => {
-    if (!service) return;
+    if (!supabase) return;
     
     if (!window.confirm(`Are you sure you want to delete ${studentName}?`)) {
       return;
@@ -222,7 +201,12 @@ const StudentsPage = () => {
 
     try {
       setLocalLoading(true);
-      await service.deleteStudent(studentId);
+      const { error } = await supabase
+        .from('students')
+        .delete()
+        .eq('id', studentId);
+        
+      if (error) throw error;
       await loadStudents();
     } catch (error) {
       console.error('Error deleting student:', error);
@@ -232,18 +216,21 @@ const StudentsPage = () => {
     }
   };
 
-  const handleClassChange = async (newClass) => {
-    if (!service) return;
-    const nextNo = await service.getNextStudentNumber(newClass);
-    setFormData({ ...formData, class_name: newClass, student_no: nextNo });
+  const groupStudentsByClass = (students) => {
+    return students.reduce((acc, student) => {
+      if (!acc[student.class_name]) {
+        acc[student.class_name] = [];
+      }
+      acc[student.class_name].push(student);
+      return acc;
+    }, {});
   };
 
   const getClassStats = () => {
-    if (!service) return [];
-    const grouped = service.groupStudentsByClass(students);
-    return CLASSES.map(className => ({
-      className,
-      count: grouped[className]?.length || 0
+    const grouped = groupStudentsByClass(students);
+    return classes.map(cls => ({
+      className: cls.class_name,
+      count: grouped[cls.class_name]?.length || 0
     }));
   };
 
@@ -252,6 +239,7 @@ const StudentsPage = () => {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="bg-white rounded-2xl shadow-lg p-6 border border-emerald-100">
         <div className="flex justify-between items-center">
           <div>
@@ -260,7 +248,9 @@ const StudentsPage = () => {
           </div>
           <button
             onClick={openAddModal}
-            className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-3 rounded-xl font-medium hover:shadow-lg transition-all flex items-center gap-2"
+            disabled={classes.length === 0}
+            className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-3 rounded-xl font-medium hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={classes.length === 0 ? 'Please add classes first in Settings' : 'Add new student'}
           >
             <UserPlus size={20} />
             Add Student
@@ -268,7 +258,8 @@ const StudentsPage = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-5 gap-4">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-2xl p-6 shadow-lg">
           <Users size={32} className="mb-2 opacity-80" />
           <p className="text-3xl font-bold">{totalStudents}</p>
@@ -283,16 +274,19 @@ const StudentsPage = () => {
         ))}
       </div>
 
-      <div className="grid grid-cols-5 gap-4">
-        {classStats.slice(4, 9).map(stat => (
-          <div key={stat.className} className="bg-white rounded-2xl p-6 shadow-lg border border-emerald-100">
-            <p className="text-sm text-gray-500 mb-1">{stat.className}</p>
-            <p className="text-3xl font-bold text-emerald-600">{stat.count}</p>
-            <p className="text-xs text-gray-400">students</p>
-          </div>
-        ))}
-      </div>
+      {classStats.length > 4 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          {classStats.slice(4).map(stat => (
+            <div key={stat.className} className="bg-white rounded-2xl p-6 shadow-lg border border-emerald-100">
+              <p className="text-sm text-gray-500 mb-1">{stat.className}</p>
+              <p className="text-3xl font-bold text-emerald-600">{stat.count}</p>
+              <p className="text-xs text-gray-400">students</p>
+            </div>
+          ))}
+        </div>
+      )}
 
+      {/* Search and Filter */}
       <div className="bg-white rounded-2xl shadow-lg p-6 border border-emerald-100">
         <div className="flex gap-4">
           <div className="flex-1 relative">
@@ -306,18 +300,19 @@ const StudentsPage = () => {
             />
           </div>
           <select
-            className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+            className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
             value={selectedClass}
             onChange={(e) => setSelectedClass(e.target.value)}
           >
             <option value="all">All Classes</option>
-            {CLASSES.map(cls => (
-              <option key={cls} value={cls}>{cls}</option>
+            {classes.map(cls => (
+              <option key={cls.id} value={cls.class_name}>{cls.class_name}</option>
             ))}
           </select>
         </div>
       </div>
 
+      {/* Students Table */}
       <div className="bg-white rounded-2xl shadow-lg border border-emerald-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -328,14 +323,15 @@ const StudentsPage = () => {
                 <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-700">Class</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-700">Email</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-700">Parent Contact</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-700">Date of Birth</th>
                 <th className="px-6 py-4 text-right text-sm font-semibold text-emerald-700">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
-                    No students found
+                  <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                    {students.length === 0 ? 'No students added yet' : 'No students found'}
                   </td>
                 </tr>
               ) : (
@@ -380,6 +376,16 @@ const StudentsPage = () => {
                       )}
                     </td>
                     <td className="px-6 py-4">
+                      {student.date_of_birth ? (
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <Calendar size={14} />
+                          {new Date(student.date_of_birth).toLocaleDateString()}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-sm">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
                       <div className="flex justify-end gap-2">
                         <button
                           onClick={() => openEditModal(student)}
@@ -405,39 +411,43 @@ const StudentsPage = () => {
         </div>
       </div>
 
+      {/* Add/Edit Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-8 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-2xl font-bold mb-6">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <h3 className="text-2xl font-bold mb-6 text-gray-800">
               {editingStudent ? 'Edit Student' : 'Add New Student'}
             </h3>
 
             <div className="space-y-4">
+              {/* Student Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Student Name *
                 </label>
                 <input
                   type="text"
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   placeholder="Enter student name"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 />
               </div>
 
+              {/* Class and Student No */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Class *
                   </label>
                   <select
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
                     value={formData.class_name}
-                    onChange={(e) => handleClassChange(e.target.value)}
+                    onChange={(e) => setFormData({ ...formData, class_name: e.target.value })}
                   >
-                    {CLASSES.map(cls => (
-                      <option key={cls} value={cls}>{cls}</option>
+                    <option value="">Select class...</option>
+                    {classes.map(cls => (
+                      <option key={cls.id} value={cls.class_name}>{cls.class_name}</option>
                     ))}
                   </select>
                 </div>
@@ -448,70 +458,79 @@ const StudentsPage = () => {
                   </label>
                   <input
                     type="number"
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     value={formData.student_no}
-                    onChange={(e) => setFormData({ ...formData, student_no: parseInt(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, student_no: parseInt(e.target.value) || 1 })}
                     min="1"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email (Optional)
-                </label>
-                <input
-                  type="email"
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  placeholder="student@email.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                />
+              {/* Email and Date of Birth */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Student Email (Optional)
+                  </label>
+                  <input
+                    type="email"
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    placeholder="student@email.com"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Date of Birth (Optional)
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    value={formData.date_of_birth}
+                    onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
+                  />
+                </div>
               </div>
 
+              {/* Parent Contact */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Parent Contact (Optional)
+                  Parent Email/Contact
                 </label>
                 <input
-                  type="tel"
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  placeholder="+381 60 123 4567"
+                  type="text"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  placeholder="parent@email.com or phone number"
                   value={formData.parent_contact}
                   onChange={(e) => setFormData({ ...formData, parent_contact: e.target.value })}
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  💡 Parent will be able to view this student's information and grades
+                </p>
               </div>
-         
-<div className="form-group">
-  <label>Parent Email/Contact</label>
-  <input
-    type="text"
-    name="parent_contact"
-    value={formData.parent_contact}
-    // onChange={handleChange}a
-    placeholder="parent@example.com"
-  />
-  <small>Parent will be able to view this student's grades</small>
-</div>
 
+              {/* Notes */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Notes (Optional)
                 </label>
                 <textarea
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   rows={3}
-                  placeholder="Any additional notes..."
+                  placeholder="Any additional notes about the student..."
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 />
               </div>
 
-              <div className="flex gap-3 mt-6">
+              {/* Action Buttons */}
+              <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200">
                 <button
                   onClick={handleSubmit}
-                  disabled={!formData.name.trim() || localLoading}
-                  className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-2 rounded-lg font-medium hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!formData.name.trim() || !formData.class_name || localLoading}
+                  className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-3 rounded-lg font-medium hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {localLoading ? 'Saving...' : (editingStudent ? 'Update Student' : 'Add Student')}
                 </button>
@@ -520,7 +539,8 @@ const StudentsPage = () => {
                     setShowAddModal(false);
                     setEditingStudent(null);
                   }}
-                  className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-300 transition-all"
+                  disabled={localLoading}
+                  className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>

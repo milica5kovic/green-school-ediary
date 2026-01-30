@@ -3,7 +3,7 @@ import { MessageSquare, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 const ClassCard = ({ cls, onRemove }) => {
-  const { attendanceService, studentsDb, getDateKey, selectedDate } = useApp();
+  const { attendanceService, getDateKey, selectedDate } = useApp();
   const [students, setStudents] = useState([]);
   const [stats, setStats] = useState({ total: 0, present: 0, absent: 0, late: 0 });
   const [showBehaviorModal, setShowBehaviorModal] = useState(false);
@@ -14,31 +14,47 @@ const ClassCard = ({ cls, onRemove }) => {
   const dateKey = getDateKey(selectedDate);
 
   // Load students and attendance once
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const classStudents = studentsDb[cls.class] || [];
-        setStudents(classStudents);
+// Load students and attendance once
+useEffect(() => {
+  const loadData = async () => {
+    try {
+      // Load students from database with proper filters
+      const { data: classStudents, error } = await attendanceService.supabase
+        .from('students')
+        .select('*')
+        .eq('class_name', cls.class)
+        .eq('school_year', '2025-26')  // CRITICAL: Only current year
+        .eq('status', 'active')          // CRITICAL: Only active students
+        .order('student_no', { ascending: true });
 
-        // Load attendance from Supabase
-        await attendanceService.loadClassAttendance(dateKey, cls.id);
-
-        // Initialize local attendance state
-        const attendance = {};
-        classStudents.forEach(student => {
-          attendance[student.id] = attendanceService.getAttendance(dateKey, cls.id, student.id);
-        });
-        setLocalAttendance(attendance);
-
-        // Calculate stats
-        updateStats(classStudents, attendance);
-      } catch (error) {
-        console.error('Error loading attendance:', error);
+      if (error) {
+        console.error('Error loading students:', error);
+        setStudents([]);
+        return;
       }
-    };
 
-    loadData();
-  }, [cls.id, cls.class, dateKey, studentsDb, attendanceService]);
+      setStudents(classStudents || []);
+
+      // Load attendance from Supabase
+      await attendanceService.loadClassAttendance(dateKey, cls.id);
+
+      // Initialize local attendance state
+      const attendance = {};
+      (classStudents || []).forEach(student => {
+        attendance[student.id] = attendanceService.getAttendance(dateKey, cls.id, student.id);
+      });
+      setLocalAttendance(attendance);
+
+      // Calculate stats
+      updateStats(classStudents || [], attendance);
+    } catch (error) {
+      console.error('Error loading attendance:', error);
+      setStudents([]);
+    }
+  };
+
+  loadData();
+}, [cls.id, cls.class, dateKey, attendanceService]);
 
   const updateStats = (studentList, attendanceData) => {
     const newStats = {

@@ -16,11 +16,11 @@ import {
   GraduationCap,
   Users,
   FileSpreadsheet,
-  Calendar,
   Trash2,
   Edit2,
   Check,
-  X
+  X,
+  Calendar
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../infrastructure/supabaseClient';
@@ -41,10 +41,13 @@ const SettingsPage = () => {
 
   // Add Student State
   const [newStudent, setNewStudent] = useState({
-    full_name: '',
+    name: '',
     class_name: '',
-    parent_email: '',
+    student_no: '',
+    email: '',
     date_of_birth: '',
+    parent_contact: '',
+    notes: ''
   });
   const [addStudentError, setAddStudentError] = useState('');
   const [addStudentSuccess, setAddStudentSuccess] = useState('');
@@ -74,12 +77,28 @@ const SettingsPage = () => {
   const [subjectSuccess, setSubjectSuccess] = useState('');
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
 
-  // Archive/Export State
-  const [archiveYear, setArchiveYear] = useState(new Date().getFullYear());
-  const [isArchiving, setIsArchiving] = useState(false);
+  // Export/Archive State
   const [isExporting, setIsExporting] = useState(false);
-  const [archiveError, setArchiveError] = useState('');
-  const [archiveSuccess, setArchiveSuccess] = useState('');
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const [exportSuccess, setExportSuccess] = useState('');
+
+  // Get next student number
+  const getNextStudentNo = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .select('student_no')
+        .order('student_no', { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+      return data && data.length > 0 ? data[0].student_no + 1 : 1;
+    } catch (err) {
+      console.error('Error getting next student number:', err);
+      return 1;
+    }
+  };
 
   // Load classes and subjects on mount
   useEffect(() => {
@@ -91,11 +110,13 @@ const SettingsPage = () => {
 
   const loadClasses = async () => {
     setIsLoadingClasses(true);
+    setClassError('');
     try {
       const { data, error } = await supabase
-        .from('classes')
+        .from('custom_classes')
         .select('*')
-        .order('name');
+        .eq('is_active', true)
+        .order('class_name');
       
       if (error) throw error;
       setClasses(data || []);
@@ -109,11 +130,13 @@ const SettingsPage = () => {
 
   const loadSubjects = async () => {
     setIsLoadingSubjects(true);
+    setSubjectError('');
     try {
       const { data, error } = await supabase
-        .from('subjects')
+        .from('custom_subjects')
         .select('*')
-        .order('name');
+        .eq('is_active', true)
+        .order('subject_name');
       
       if (error) throw error;
       setSubjects(data || []);
@@ -172,7 +195,7 @@ const SettingsPage = () => {
     setAddStudentError('');
     setAddStudentSuccess('');
 
-    if (!newStudent.full_name || !newStudent.class_name) {
+    if (!newStudent.name || !newStudent.class_name) {
       setAddStudentError('Name and class are required');
       return;
     }
@@ -180,22 +203,36 @@ const SettingsPage = () => {
     setIsAddingStudent(true);
 
     try {
+      // Get next student number if not provided
+      const studentNo = newStudent.student_no ? parseInt(newStudent.student_no) : await getNextStudentNo();
+
       const { data, error } = await supabase
         .from('students')
         .insert([{
-          full_name: newStudent.full_name,
-          class: newStudent.class_name,
-          parent_email: newStudent.parent_email || null,
+          name: newStudent.name,
+          class_name: newStudent.class_name,
+          student_no: studentNo,
+          email: newStudent.email || null,
+          parent_contact: newStudent.parent_contact || null,
           date_of_birth: newStudent.date_of_birth || null,
-          school_year: new Date().getFullYear(),
-          status: 'active'
+          school_year: '2025-26',
+          status: 'active',
+          notes: newStudent.notes || null
         }])
         .select();
 
       if (error) throw error;
 
-      setAddStudentSuccess('Student added successfully!');
-      setNewStudent({ full_name: '', class_name: '', parent_email: '', date_of_birth: '' });
+      setAddStudentSuccess(`Student added successfully! Student #${studentNo}`);
+      setNewStudent({ 
+        name: '', 
+        class_name: '', 
+        student_no: '', 
+        email: '', 
+        date_of_birth: '', 
+        parent_contact: '', 
+        notes: '' 
+      });
       
       setTimeout(() => setAddStudentSuccess(''), 3000);
     } catch (err) {
@@ -220,7 +257,11 @@ const SettingsPage = () => {
 
     try {
       const text = await csvFile.text();
-      const rows = text.split('\n').map(row => row.split(',').map(cell => cell.trim()));
+      const rows = text.split('\n').map(row => {
+        // Handle CSV with quotes
+        const matches = row.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g);
+        return matches ? matches.map(cell => cell.replace(/^"|"$/g, '').trim()) : [];
+      });
       
       // Skip header row
       const dataRows = rows.slice(1).filter(row => row.length >= 2 && row[0]);
@@ -229,13 +270,19 @@ const SettingsPage = () => {
         throw new Error('No valid data found in CSV');
       }
 
+      // Get current max student number
+      let currentStudentNo = await getNextStudentNo();
+
       const students = dataRows.map(row => ({
-        full_name: row[0],
-        class: row[1],
-        parent_email: row[2] || null,
-        date_of_birth: row[3] || null,
-        school_year: new Date().getFullYear(),
-        status: 'active'
+        name: row[0],
+        class_name: row[1],
+        student_no: currentStudentNo++,
+        email: row[2] || null,
+        parent_contact: row[3] || null,
+        date_of_birth: row[4] || null,
+        school_year: '2025-26',
+        status: 'active',
+        notes: row[5] || null
       }));
 
       const { data, error } = await supabase
@@ -247,8 +294,10 @@ const SettingsPage = () => {
 
       setCsvSuccess(`Successfully imported ${data.length} students!`);
       setCsvFile(null);
+      // Reset file input
+      e.target.reset();
       
-      setTimeout(() => setCsvSuccess(''), 3000);
+      setTimeout(() => setCsvSuccess(''), 5000);
     } catch (err) {
       console.error('Error importing CSV:', err);
       setCsvError(err.message || 'Failed to import CSV');
@@ -265,11 +314,16 @@ const SettingsPage = () => {
 
     try {
       const { data, error } = await supabase
-        .from('classes')
-        .insert([{ name: newClassName.trim() }])
+        .from('custom_classes')
+        .insert([{ class_name: newClassName.trim() }])
         .select();
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === '23505') {
+          throw new Error('This class already exists');
+        }
+        throw error;
+      }
 
       setClasses([...classes, data[0]]);
       setNewClassName('');
@@ -289,13 +343,18 @@ const SettingsPage = () => {
 
     try {
       const { error } = await supabase
-        .from('classes')
-        .update({ name: editClassName.trim() })
+        .from('custom_classes')
+        .update({ class_name: editClassName.trim() })
         .eq('id', classId);
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === '23505') {
+          throw new Error('This class name already exists');
+        }
+        throw error;
+      }
 
-      setClasses(classes.map(c => c.id === classId ? { ...c, name: editClassName.trim() } : c));
+      setClasses(classes.map(c => c.id === classId ? { ...c, class_name: editClassName.trim() } : c));
       setEditingClass(null);
       setEditClassName('');
       setClassSuccess('Class updated successfully!');
@@ -307,7 +366,7 @@ const SettingsPage = () => {
   };
 
   const handleDeleteClass = async (classId) => {
-    if (!window.confirm('Are you sure you want to delete this class? This action cannot be undone.')) {
+    if (!window.confirm('Are you sure you want to deactivate this class?')) {
       return;
     }
 
@@ -316,18 +375,18 @@ const SettingsPage = () => {
 
     try {
       const { error } = await supabase
-        .from('classes')
-        .delete()
+        .from('custom_classes')
+        .update({ is_active: false })
         .eq('id', classId);
 
       if (error) throw error;
 
       setClasses(classes.filter(c => c.id !== classId));
-      setClassSuccess('Class deleted successfully!');
+      setClassSuccess('Class deactivated successfully!');
       setTimeout(() => setClassSuccess(''), 3000);
     } catch (err) {
-      console.error('Error deleting class:', err);
-      setClassError(err.message || 'Failed to delete class');
+      console.error('Error deactivating class:', err);
+      setClassError(err.message || 'Failed to deactivate class');
     }
   };
 
@@ -339,11 +398,16 @@ const SettingsPage = () => {
 
     try {
       const { data, error } = await supabase
-        .from('subjects')
-        .insert([{ name: newSubjectName.trim() }])
+        .from('custom_subjects')
+        .insert([{ subject_name: newSubjectName.trim() }])
         .select();
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === '23505') {
+          throw new Error('This subject already exists');
+        }
+        throw error;
+      }
 
       setSubjects([...subjects, data[0]]);
       setNewSubjectName('');
@@ -363,13 +427,18 @@ const SettingsPage = () => {
 
     try {
       const { error } = await supabase
-        .from('subjects')
-        .update({ name: editSubjectName.trim() })
+        .from('custom_subjects')
+        .update({ subject_name: editSubjectName.trim() })
         .eq('id', subjectId);
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === '23505') {
+          throw new Error('This subject name already exists');
+        }
+        throw error;
+      }
 
-      setSubjects(subjects.map(s => s.id === subjectId ? { ...s, name: editSubjectName.trim() } : s));
+      setSubjects(subjects.map(s => s.id === subjectId ? { ...s, subject_name: editSubjectName.trim() } : s));
       setEditingSubject(null);
       setEditSubjectName('');
       setSubjectSuccess('Subject updated successfully!');
@@ -381,7 +450,7 @@ const SettingsPage = () => {
   };
 
   const handleDeleteSubject = async (subjectId) => {
-    if (!window.confirm('Are you sure you want to delete this subject? This action cannot be undone.')) {
+    if (!window.confirm('Are you sure you want to deactivate this subject?')) {
       return;
     }
 
@@ -390,99 +459,326 @@ const SettingsPage = () => {
 
     try {
       const { error } = await supabase
-        .from('subjects')
-        .delete()
+        .from('custom_subjects')
+        .update({ is_active: false })
         .eq('id', subjectId);
 
       if (error) throw error;
 
       setSubjects(subjects.filter(s => s.id !== subjectId));
-      setSubjectSuccess('Subject deleted successfully!');
+      setSubjectSuccess('Subject deactivated successfully!');
       setTimeout(() => setSubjectSuccess(''), 3000);
     } catch (err) {
-      console.error('Error deleting subject:', err);
-      setSubjectError(err.message || 'Failed to delete subject');
+      console.error('Error deactivating subject:', err);
+      setSubjectError(err.message || 'Failed to deactivate subject');
     }
   };
 
-  const handleArchiveYear = async () => {
-    if (!window.confirm(`Are you sure you want to archive all data for year ${archiveYear}? This will mark all students, grades, and attendance as archived.`)) {
-      return;
-    }
+ const handleArchiveYear = async () => {
+  const currentYear = '2025-26';
+  const nextYear = '2026-27';
+  const previousYear = '2024-25';
 
-    setIsArchiving(true);
-    setArchiveError('');
-    setArchiveSuccess('');
+  // Safety check
+  const { data: currentStudents, error: checkError } = await supabase
+    .from('students')
+    .select('id')
+    .eq('school_year', currentYear)
+    .eq('status', 'active');
 
-    try {
-      // Archive students
-      const { error: studentsError } = await supabase
+  if (checkError) {
+    setExportError('Failed to check students: ' + checkError.message);
+    return;
+  }
+
+  if (!currentStudents || currentStudents.length === 0) {
+    setExportError(`No active ${currentYear} students found. Archive already completed?`);
+    return;
+  }
+
+  if (!window.confirm(
+    `This will:\n` +
+    `• Archive ${previousYear} students\n` +
+    `• Promote ${currentStudents.length} students: ${currentYear} → ${nextYear}\n` +
+    `• Graduate Y9 students\n\n` +
+    'This can only be run ONCE per year. Continue?'
+  )) {
+    return;
+  }
+
+  setIsArchiving(true);
+  setExportError('');
+  setExportSuccess('');
+
+  try {
+    // Step 1: Archive previous year
+    await supabase
+      .from('students')
+      .update({ status: 'archived' })
+      .eq('school_year', previousYear);
+
+    // Step 2: Get current students
+    const { data: students } = await supabase
+      .from('students')
+      .select('*')
+      .eq('school_year', currentYear)
+      .eq('status', 'active');
+
+    // Step 3: Process promotions and graduations
+    const updates = [];
+    const graduations = [];
+
+    students.forEach(student => {
+      const className = student.class_name;
+      
+      // Extract year number (handles Y1, Y5A, Y5B, etc.)
+      const yearMatch = className.match(/Y(\d+)/);
+      if (!yearMatch) return;
+      
+      const currentYearNum = parseInt(yearMatch[1]);
+      
+      if (currentYearNum === 9) {
+        // Graduate Y9 students
+        graduations.push(student.id);
+      } else {
+        // Promote to next year, preserving section letter (A/B)
+        const nextYearNum = currentYearNum + 1;
+        const sectionLetter = className.match(/[A-Z]$/)?.[0] || ''; // Get A or B if exists
+        const newClassName = `Y${nextYearNum}${sectionLetter}`;
+        
+        updates.push({
+          id: student.id,
+          class_name: newClassName,
+          school_year: nextYear
+        });
+      }
+    });
+
+    // Step 4: Graduate Y9 students
+    if (graduations.length > 0) {
+      await supabase
         .from('students')
-        .update({ status: 'archived' })
-        .eq('school_year', archiveYear);
-
-      if (studentsError) throw studentsError;
-
-      setArchiveSuccess(`Successfully archived year ${archiveYear}!`);
-      setTimeout(() => setArchiveSuccess(''), 5000);
-    } catch (err) {
-      console.error('Error archiving year:', err);
-      setArchiveError(err.message || 'Failed to archive year');
-    } finally {
-      setIsArchiving(false);
+        .update({ 
+          status: 'graduated',
+          school_year: currentYear
+        })
+        .in('id', graduations);
     }
-  };
 
+    // Step 5: Promote other students
+    for (const update of updates) {
+      await supabase
+        .from('students')
+        .update({ 
+          class_name: update.class_name,
+          school_year: update.school_year,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', update.id);
+    }
+
+    setExportSuccess(
+      `Archive completed:\n` +
+      `• Archived ${previousYear} students\n` +
+      `• Graduated ${graduations.length} Y9 students\n` +
+      `• Promoted ${updates.length} students to ${nextYear}\n\n` +
+      `Examples:\n` +
+      `Y1 → Y2, Y5A → Y6A, Y5B → Y6B, Y8 → Y9`
+    );
+    
+    setTimeout(() => setExportSuccess(''), 10000);
+  } catch (err) {
+    console.error('Error archiving:', err);
+    setExportError(err.message || 'Failed to archive');
+  } finally {
+    setIsArchiving(false);
+  }
+};
   const handleExportData = async () => {
-    setIsExporting(true);
-    setArchiveError('');
-    setArchiveSuccess('');
+  setIsExporting(true);
+  setExportError('');
+  setExportSuccess('');
 
-    try {
-      // Fetch all students
-      const { data: students, error } = await supabase
-        .from('students')
-        .select('*')
-        .order('class', { ascending: true })
-        .order('full_name', { ascending: true });
+  try {
+    // Fetch students
+    const { data: students, error: studentsError } = await supabase
+      .from('students')
+      .select('*')
+      .order('school_year', { ascending: false })
+      .order('class_name', { ascending: true })
+      .order('student_no', { ascending: true });
 
-      if (error) throw error;
+    if (studentsError) throw studentsError;
 
-      // Convert to CSV
-      const headers = ['ID', 'Full Name', 'Class', 'Parent Email', 'Date of Birth', 'School Year', 'Status'];
-      const csvContent = [
-        headers.join(','),
-        ...students.map(s => [
-          s.id,
-          `"${s.full_name}"`,
-          s.class,
-          s.parent_email || '',
-          s.date_of_birth || '',
-          s.school_year,
-          s.status
-        ].join(','))
-      ].join('\n');
+    // Fetch grades
+    const { data: grades, error: gradesError } = await supabase
+      .from('grades')
+      .select('*')
+      .order('date', { ascending: false });
 
-      // Download file
-      const blob = new Blob([csvContent], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `students_export_${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+    if (gradesError) throw gradesError;
 
-      setArchiveSuccess('Data exported successfully!');
-      setTimeout(() => setArchiveSuccess(''), 3000);
-    } catch (err) {
-      console.error('Error exporting data:', err);
-      setArchiveError(err.message || 'Failed to export data');
-    } finally {
-      setIsExporting(false);
-    }
-  };
+    // Fetch attendance
+    const { data: attendance, error: attendanceError } = await supabase
+      .from('attendance')
+      .select('*')
+      .order('date_key', { ascending: false });
+
+    if (attendanceError) throw attendanceError;
+
+    // Create Students CSV
+    const studentHeaders = [
+      'Student No', 'Name', 'Class', 'Email', 'Parent Contact', 
+      'Date of Birth', 'School Year', 'Status', 'Notes', 'Created At'
+    ];
+    const studentCsv = [
+      studentHeaders.join(','),
+      ...students.map(s => [
+        s.student_no,
+        `"${s.name}"`,
+        s.class_name,
+        s.email || '',
+        s.parent_contact || '',
+        s.date_of_birth || '',
+        s.school_year || '',
+        s.status || 'active',
+        s.notes ? `"${s.notes.replace(/"/g, '""')}"` : '',
+        new Date(s.created_at).toISOString()
+      ].join(','))
+    ].join('\n');
+
+    // Create Grades CSV
+    const gradeHeaders = [
+      'Student ID', 'Student Name', 'Class', 'Subject', 
+      'Assessment Type', 'Assessment Title', 'Grade', 'Max Grade', 
+      'Date', 'Notes', 'Created At'
+    ];
+    const gradeRows = grades.map(g => {
+      const student = students.find(s => s.id === g.student_id);
+      return [
+        g.student_id,
+        student ? `"${student.name}"` : '',
+        g.class_name,
+        g.subject,
+        g.assessment_type,
+        `"${g.assessment_title}"`,
+        g.grade,
+        g.max_grade,
+        g.date,
+        g.notes ? `"${g.notes.replace(/"/g, '""')}"` : '',
+        new Date(g.created_at).toISOString()
+      ].join(',');
+    });
+    const gradeCsv = [gradeHeaders.join(','), ...gradeRows].join('\n');
+
+    // Create Attendance CSV
+    const attendanceHeaders = [
+      'Date', 'Class ID', 'Student ID', 'Student Name', 
+      'Status', 'Comment', 'Created At'
+    ];
+    const attendanceRows = attendance.map(a => {
+      const student = students.find(s => s.id === a.student_id);
+      return [
+        a.date_key,
+        a.class_id,
+        a.student_id,
+        student ? `"${student.name}"` : '',
+        a.status,
+        a.comment ? `"${a.comment.replace(/"/g, '""')}"` : '',
+        new Date(a.created_at).toISOString()
+      ].join(',');
+    });
+    const attendanceCsv = [attendanceHeaders.join(','), ...attendanceRows].join('\n');
+
+    // Download all files
+    const timestamp = new Date().toISOString().split('T')[0];
+    
+    // Students file
+    downloadCsv(studentCsv, `students_${timestamp}.csv`);
+    
+    // Grades file
+    setTimeout(() => downloadCsv(gradeCsv, `grades_${timestamp}.csv`), 500);
+    
+    // Attendance file
+    setTimeout(() => downloadCsv(attendanceCsv, `attendance_${timestamp}.csv`), 1000);
+
+    setExportSuccess(
+      `Exported successfully!\n` +
+      `• ${students.length} students\n` +
+      `• ${grades.length} grades\n` +
+      `• ${attendance.length} attendance records`
+    );
+    setTimeout(() => setExportSuccess(''), 5000);
+  } catch (err) {
+    console.error('Error exporting data:', err);
+    setExportError(err.message || 'Failed to export data');
+  } finally {
+    setIsExporting(false);
+  }
+};
+const handleDeleteAllStudents = async () => {
+  const confirmText = prompt(
+    'WARNING: This will permanently delete ALL students and related data!\n\n' +
+    'Type "DELETE ALL STUDENTS" to confirm:'
+  );
+
+  if (confirmText !== 'DELETE ALL STUDENTS') {
+    return;
+  }
+
+  setIsExporting(true);
+  setExportError('');
+  setExportSuccess('');
+
+  try {
+    // Delete in order due to foreign key constraints
+    
+    // 1. Delete attendance records
+    const { error: attendanceError } = await supabase
+      .from('attendance')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+
+    if (attendanceError) throw attendanceError;
+
+    // 2. Delete grades
+    const { error: gradesError } = await supabase
+      .from('grades')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+
+    if (gradesError) throw gradesError;
+
+    // 3. Delete students
+    const { error: studentsError } = await supabase
+      .from('students')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+
+    if (studentsError) throw studentsError;
+
+    setExportSuccess('All students and related data deleted successfully!');
+    setTimeout(() => setExportSuccess(''), 5000);
+  } catch (err) {
+    console.error('Error deleting students:', err);
+    setExportError(err.message || 'Failed to delete students');
+  } finally {
+    setIsExporting(false);
+  }
+};
+
+// Helper function - add this above handleExportData
+const downloadCsv = (content, filename) => {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+};
 
   const renderAccountTab = () => (
     <div className="space-y-6">
@@ -506,7 +802,7 @@ const SettingsPage = () => {
             <User size={20} className="text-emerald-600 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm font-medium text-gray-700">Full Name</p>
-              <p className="text-gray-900">{teacher?.full_name || 'Not available'}</p>
+              <p className="text-gray-900">{teacher?.full_name || profile?.full_name || 'Not available'}</p>
             </div>
           </div>
 
@@ -646,6 +942,15 @@ const SettingsPage = () => {
 
   const renderStudentsTab = () => (
     <div className="space-y-6">
+      {/* Warning if no classes */}
+      {classes.length === 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <p className="text-sm text-yellow-800">
+            <strong>⚠️ No classes found!</strong> Please add classes in the "Classes" tab before adding students.
+          </p>
+        </div>
+      )}
+
       {/* Add Single Student */}
       <div className="bg-white rounded-2xl shadow-lg p-6 border border-emerald-100">
         <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
@@ -661,8 +966,8 @@ const SettingsPage = () => {
               </label>
               <input
                 type="text"
-                value={newStudent.full_name}
-                onChange={(e) => setNewStudent({ ...newStudent, full_name: e.target.value })}
+                value={newStudent.name}
+                onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
                 placeholder="Enter student name"
                 disabled={isAddingStudent}
@@ -673,24 +978,57 @@ const SettingsPage = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Class *
               </label>
-              <input
-                type="text"
+              <select
                 value={newStudent.class_name}
                 onChange={(e) => setNewStudent({ ...newStudent, class_name: e.target.value })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none bg-white"
+                disabled={isAddingStudent}
+              >
+                <option value="">Select a class...</option>
+                {classes.map((cls) => (
+                  <option key={cls.id} value={cls.class_name}>
+                    {cls.class_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Student Number (optional)
+              </label>
+              <input
+                type="number"
+                value={newStudent.student_no}
+                onChange={(e) => setNewStudent({ ...newStudent, student_no: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
-                placeholder="e.g., 5A"
+                placeholder="Auto-generated if empty"
                 disabled={isAddingStudent}
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Parent Email
+                Student Email
               </label>
               <input
                 type="email"
-                value={newStudent.parent_email}
-                onChange={(e) => setNewStudent({ ...newStudent, parent_email: e.target.value })}
+                value={newStudent.email}
+                onChange={(e) => setNewStudent({ ...newStudent, email: e.target.value })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
+                placeholder="student@email.com"
+                disabled={isAddingStudent}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Parent Contact Email
+              </label>
+              <input
+                type="email"
+                value={newStudent.parent_contact}
+                onChange={(e) => setNewStudent({ ...newStudent, parent_contact: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
                 placeholder="parent@email.com"
                 disabled={isAddingStudent}
@@ -709,6 +1047,20 @@ const SettingsPage = () => {
                 disabled={isAddingStudent}
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Notes
+            </label>
+            <textarea
+              value={newStudent.notes}
+              onChange={(e) => setNewStudent({ ...newStudent, notes: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
+              placeholder="Any additional notes..."
+              rows="3"
+              disabled={isAddingStudent}
+            />
           </div>
 
           {addStudentError && (
@@ -748,13 +1100,19 @@ const SettingsPage = () => {
 
         <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <p className="text-sm text-blue-800 mb-2">
-            <strong>CSV Format:</strong>
+            <strong>CSV Format (Header row required):</strong>
           </p>
-          <code className="text-xs bg-blue-100 px-2 py-1 rounded">
-            Full Name, Class, Parent Email, Date of Birth
+          <code className="text-xs bg-blue-100 px-2 py-1 rounded block">
+            Name,Class,Email,Parent Contact,Date of Birth,Notes
           </code>
           <p className="text-xs text-blue-700 mt-2">
-            Example: "John Doe","5A","parent@email.com","2015-05-15"
+            Example: "John Doe","5A","john@school.edu","parent@email.com","2015-05-15","Good student"
+          </p>
+          <p className="text-xs text-blue-700 mt-1">
+            <strong>Important:</strong> Class names must exactly match existing classes (e.g., {classes.slice(0, 3).map(c => c.class_name).join(', ')}).
+          </p>
+          <p className="text-xs text-blue-700 mt-1">
+            Note: Student numbers will be auto-generated. School year will be set to 2025-26.
           </p>
         </div>
 
@@ -823,7 +1181,8 @@ const SettingsPage = () => {
           />
           <button
             onClick={handleAddClass}
-            className="px-6 py-3 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+            disabled={!newClassName.trim()}
+            className="px-6 py-3 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Add Class
           </button>
@@ -892,12 +1251,12 @@ const SettingsPage = () => {
                   </>
                 ) : (
                   <>
-                    <span className="font-medium text-gray-800">{cls.name}</span>
+                    <span className="font-medium text-gray-800">{cls.class_name}</span>
                     <div className="flex gap-2">
                       <button
                         onClick={() => {
                           setEditingClass(cls.id);
-                          setEditClassName(cls.name);
+                          setEditClassName(cls.class_name);
                         }}
                         className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200"
                       >
@@ -940,7 +1299,8 @@ const SettingsPage = () => {
           />
           <button
             onClick={handleAddSubject}
-            className="px-6 py-3 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+            disabled={!newSubjectName.trim()}
+            className="px-6 py-3 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Add Subject
           </button>
@@ -1009,12 +1369,12 @@ const SettingsPage = () => {
                   </>
                 ) : (
                   <>
-                    <span className="font-medium text-gray-800">{subject.name}</span>
+                    <span className="font-medium text-gray-800">{subject.subject_name}</span>
                     <div className="flex gap-2">
                       <button
                         onClick={() => {
                           setEditingSubject(subject.id);
-                          setEditSubjectName(subject.name);
+                          setEditSubjectName(subject.subject_name);
                         }}
                         className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200"
                       >
@@ -1043,53 +1403,40 @@ const SettingsPage = () => {
       <div className="bg-white rounded-2xl shadow-lg p-6 border border-emerald-100">
         <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
           <Archive size={20} className="text-emerald-600" />
-          Archive School Year
+          Archive Previous School Year
         </h3>
 
         <p className="text-gray-600 mb-4">
-          Archive all students, grades, and attendance records for a specific year. 
-          This will mark all records as archived but won't delete them.
-        </p>
+  End the current school year (2025-26). This will:
+  • Graduate Year 9 students
+  • Promote all other students to next year (2026-27)
+  • Archive any remaining 2024-25 students
+  <br/><strong>⚠️ This should only be run ONCE at the end of the school year!</strong>
+</p>
+        <button
+  onClick={handleArchiveYear}
+  disabled={isArchiving}
+  className="px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+>
+  <Calendar size={18} />
+  {isArchiving ? 'Archiving...' : 'Promote 2025-26 → 2026-27 (End Year)'}
+</button>
 
-        <div className="flex gap-3 items-end">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              School Year
-            </label>
-            <input
-              type="number"
-              value={archiveYear}
-              onChange={(e) => setArchiveYear(parseInt(e.target.value))}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
-              min="2000"
-              max="2100"
-            />
-          </div>
-          <button
-            onClick={handleArchiveYear}
-            disabled={isArchiving}
-            className="px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            <Calendar size={18} />
-            {isArchiving ? 'Archiving...' : 'Archive Year'}
-          </button>
-        </div>
-
-        {archiveError && (
+        {exportError && (
           <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
             <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
               <span className="text-white text-xs font-bold">!</span>
             </div>
-            <p className="text-sm text-red-700 flex-1">{archiveError}</p>
+            <p className="text-sm text-red-700 flex-1">{exportError}</p>
           </div>
         )}
 
-        {archiveSuccess && (
+        {exportSuccess && (
           <div className="mt-4 bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-start gap-2">
             <div className="w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
               <span className="text-white text-xs font-bold">✓</span>
             </div>
-            <p className="text-sm text-emerald-700 flex-1">{archiveSuccess}</p>
+            <p className="text-sm text-emerald-700 flex-1">{exportSuccess}</p>
           </div>
         )}
       </div>
@@ -1114,6 +1461,27 @@ const SettingsPage = () => {
           {isExporting ? 'Exporting...' : 'Export to CSV'}
         </button>
       </div>
+      {/* Delete All Students - DANGER ZONE */}
+<div className="bg-white rounded-2xl shadow-lg p-6 border border-red-300">
+  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+    <Trash2 size={20} className="text-red-600" />
+    Danger Zone
+  </h3>
+
+  <p className="text-gray-600 mb-4">
+    Permanently delete ALL students and their data (grades, attendance). 
+    This action cannot be undone!
+  </p>
+
+  <button
+    onClick={handleDeleteAllStudents}
+    disabled={isExporting}
+    className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+  >
+    <Trash2 size={18} />
+    {isExporting ? 'Deleting...' : 'Delete All Students'}
+  </button>
+</div>
 
       {/* Warning */}
       <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
