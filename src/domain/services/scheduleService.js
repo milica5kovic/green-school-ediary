@@ -21,7 +21,6 @@ export class ScheduleService {
         .eq('day_of_week', dayOfWeek)
         .order('time_slot', { ascending: true });
 
-      // For now, teacherId is null, but later we'll filter by logged-in teacher
       if (teacherId) {
         query = query.eq('teacher_id', teacherId);
       } else {
@@ -35,14 +34,15 @@ export class ScheduleService {
         throw error;
       }
       
-      console.log('Schedule fetched:', data?.length || 0, 'classes');
+      console.log('Schedule fetched:', data?.length || 0, 'entries');
       
-      // Format for AddClassModal compatibility
+      // Format for compatibility
       return (data || []).map(item => ({
         id: item.id,
         time: item.time_slot,
         class: item.class_name,
-        subject: item.subject
+        subject: item.subject,
+        type: item.schedule_type || 'class'
       }));
     } catch (error) {
       console.error('Error fetching schedule:', error);
@@ -87,7 +87,8 @@ export class ScheduleService {
             id: item.id,
             time: item.time_slot,
             class: item.class_name,
-            subject: item.subject
+            subject: item.subject,
+            type: item.schedule_type || 'class'
           });
         }
       });
@@ -101,9 +102,9 @@ export class ScheduleService {
   }
 
   /**
-   * Add a class to schedule
+   * Add a class/duty/extracurricular to schedule
    */
-  async addScheduleClass(dayOfWeek, timeSlot, className, subject, teacherId = null) {
+  async addScheduleClass(dayOfWeek, timeSlot, className, subject, type = 'class', teacherId = null) {
     try {
       const { data, error } = await this.supabase
         .from('teacher_schedule')
@@ -113,15 +114,46 @@ export class ScheduleService {
           time_slot: timeSlot,
           class_name: className,
           subject: subject,
+          schedule_type: type,
           created_at: new Date().toISOString()
         }])
         .select()
         .single();
 
       if (error) throw error;
+
+      console.log(`Added ${type} to schedule:`, data);
       return data;
     } catch (error) {
-      console.error('Error adding schedule class:', error);
+      console.error('Error adding schedule entry:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update a schedule entry
+   */
+  async updateScheduleClass(scheduleId, dayOfWeek, timeSlot, className, subject, type = 'class') {
+    try {
+      const { data, error } = await this.supabase
+        .from('teacher_schedule')
+        .update({
+          day_of_week: dayOfWeek,
+          time_slot: timeSlot,
+          class_name: className,
+          subject: subject,
+          schedule_type: type
+        })
+        .eq('id', scheduleId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      console.log('Updated schedule entry:', data);
+      return data;
+    } catch (error) {
+      console.error('Error updating schedule entry:', error);
       throw error;
     }
   }
@@ -137,9 +169,51 @@ export class ScheduleService {
         .eq('id', scheduleId);
 
       if (error) throw error;
+
+      console.log('Deleted schedule entry:', scheduleId);
       return true;
     } catch (error) {
-      console.error('Error deleting schedule class:', error);
+      console.error('Error deleting schedule entry:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get statistics about schedule
+   */
+  async getScheduleStats(teacherId = null) {
+    try {
+      let query = this.supabase
+        .from('teacher_schedule')
+        .select('schedule_type');
+
+      if (teacherId) {
+        query = query.eq('teacher_id', teacherId);
+      } else {
+        query = query.is('teacher_id', null);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      const stats = {
+        total: data?.length || 0,
+        classes: 0,
+        duties: 0,
+        extracurriculars: 0
+      };
+
+      (data || []).forEach(item => {
+        const type = item.schedule_type || 'class';
+        if (type === 'class') stats.classes++;
+        else if (type === 'duty') stats.duties++;
+        else if (type === 'extracurricular') stats.extracurriculars++;
+      });
+
+      return stats;
+    } catch (error) {
+      console.error('Error getting schedule stats:', error);
       throw error;
     }
   }

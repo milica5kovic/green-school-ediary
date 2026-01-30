@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MessageSquare, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { supabase } from '../../infrastructure/supabaseClient';
 
 const ClassCard = ({ cls, onRemove }) => {
   const { attendanceService, getDateKey, selectedDate } = useApp();
@@ -19,7 +20,7 @@ useEffect(() => {
   const loadData = async () => {
     try {
       // Load students from database with proper filters
-      const { data: classStudents, error } = await attendanceService.supabase
+      const { data: classStudents, error } = await supabase
         .from('students')
         .select('*')
         .eq('class_name', cls.class)

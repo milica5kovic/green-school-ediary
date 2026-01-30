@@ -11,7 +11,7 @@ import { supabase } from "../infrastructure/supabaseClient";
 import { AttendanceService } from "../domain/services/attendanceService";
 import { ClassService } from "../domain/services/classService";
 import { StudentsService } from "../domain/services/studentService";
-import GradingService from "../domain/services/gradeService";
+import GradingService from "../domain/services/gradingService";
 import { ScheduleService } from "../domain/services/scheduleService";
 
 const AppContext = createContext(null);

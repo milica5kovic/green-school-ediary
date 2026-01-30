@@ -20,7 +20,9 @@ import StudentsPage from "./components/students/StudentsPage";
 import AttendanceLogPage from "./components/attendanceLog/AttendanceLogPage";
 import SettingsPage from "./components/settings/SettingsPage";
 
+
 import LoginPage from "./components/auth/LoginPage";
+import GradesPage from "./components/pages/GradesPage";
 
 const ComingSoonPage = ({ title, icon: Icon }) => {
   return (
@@ -71,7 +73,7 @@ const AppContent = () => {
       case "students":
         return <StudentsPage />;
       case "grading":
-        return <ComingSoonPage title="Grading" icon={BarChart3} />;
+        return <GradesPage />;
       case "attendance":
         return <AttendanceLogPage />;
       case "settings":
