@@ -1,574 +1,696 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Edit, Trash2, UserPlus, Users, Mail, Phone, Calendar } from 'lucide-react';
-import { supabase } from '../../infrastructure/supabaseClient';
-import { useAuth } from '../../context/AuthContext';
+import { Plus, Edit2, Trash2, Download, Upload, Link as LinkIcon } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
 
 const StudentsPage = () => {
-
+  const { supabase, studentsService, loadAllStudents } = useApp();
   const [students, setStudents] = useState([]);
-  const [filteredStudents, setFilteredStudents] = useState([]);
-  const [classes, setClasses] = useState([]);
-  const [selectedClass, setSelectedClass] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showLinkParentModal, setShowLinkParentModal] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState(null);
   const [editingStudent, setEditingStudent] = useState(null);
-  const [localLoading, setLocalLoading] = useState(false);
-  
-  const [formData, setFormData] = useState({
-    name: '',
-    class_name: '',
-    student_no: 1,
-    email: '',
-    parent_contact: '',
-    date_of_birth: '',
-    notes: ''
-  });
-  const { teacher, canManageStudents, canViewAllClasses } = useAuth();
+  const [loading, setLoading] = useState(true);
 
-  // Load classes from database
-  const loadClasses = useCallback(async () => {
-    if (!supabase) return;
-    
+  const loadStudents = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('custom_classes')
-        .select('*')
-        .eq('is_active', true)
-        .order('class_name');
+      setLoading(true);
+      const allStudents = await studentsService.getAllStudents();
       
-      if (error) throw error;
-      setClasses(data || []);
-    } catch (error) {
-      console.error('Error loading classes:', error);
-    }
-  }, [supabase]);
-
- const loadStudents = useCallback(async () => {
-    if (!supabase) return;
-    
-    try {
-      let query = supabase
-        .from('students')
-        .select('*')
-        .or('status.is.null,status.neq.archived')
-        .order('class_name', { ascending: true })
-        .order('student_no', { ascending: true });
+      // Load parent links for each student
+      const studentsWithParents = await Promise.all(
+        allStudents.map(async (student) => {
+          const { data: parentLinks } = await supabase
+            .from('student_parents')
+            .select('parents(full_name, email), relationship')
+            .eq('student_id', student.id);
+          
+          return {
+            ...student,
+            parents: parentLinks || []
+          };
+        })
+      );
       
-      // If not admin, filter by teacher's classes
-      if (!canViewAllClasses() && teacher?.id) {
-        const { data: scheduleData } = await supabase
-          .from('teacher_schedule')
-          .select('class_name')
-          .eq('teacher_id', teacher.id);
-        
-        const teacherClasses = [...new Set(scheduleData?.map(s => s.class_name) || [])];
-        
-        if (teacherClasses.length > 0) {
-          query = query.in('class_name', teacherClasses);
-        }
-      }
-        
-      const { data, error } = await query;
-      
-      if (error) throw error;
-      setStudents(data || []);
+      setStudents(studentsWithParents);
     } catch (error) {
       console.error('Error loading students:', error);
-      alert('Failed to load students. Error: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-  }, [supabase, teacher, canViewAllClasses]);
-
-  const filterStudents = useCallback(() => {
-    let filtered = students;
-
-    if (selectedClass !== 'all') {
-      filtered = filtered.filter(s => s.class_name === selectedClass);
-    }
-
-    if (searchTerm) {
-      filtered = filtered.filter(s =>
-        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.student_no.toString().includes(searchTerm)
-      );
-    }
-
-    setFilteredStudents(filtered);
-  }, [students, selectedClass, searchTerm]);
+  }, [studentsService, supabase]);
 
   useEffect(() => {
-    if (supabase) {
-      loadClasses();
-      loadStudents();
+    loadStudents();
+  }, [loadStudents]);
+
+  const handleDelete = async (studentId) => {
+    if (!window.confirm('Are you sure you want to delete this student?')) {
+      return;
     }
-  }, [supabase, loadClasses, loadStudents]);
 
-  useEffect(() => {
-    filterStudents();
-  }, [filterStudents]);
-
-  const getNextStudentNumber = async () => {
-    if (!supabase) return 1;
-    
     try {
-      const { data, error } = await supabase
-        .from('students')
-        .select('student_no')
-        .order('student_no', { ascending: false })
-        .limit(1);
-        
-      if (error) return 1;
-      if (data && data.length > 0) return data[0].student_no + 1;
-      return 1;
+      await studentsService.deleteStudent(studentId);
+      await loadStudents();
+      await loadAllStudents();
     } catch (error) {
-      console.error('Error getting next student number:', error);
-      return 1;
+      console.error('Error deleting student:', error);
+      alert('Failed to delete student');
     }
   };
 
-  const openAddModal = async () => {
-    const nextNo = await getNextStudentNumber();
-    setFormData({
-      name: '',
-      class_name: classes.length > 0 ? classes[0].class_name : '',
-      student_no: nextNo,
-      email: '',
-      parent_contact: '',
-      date_of_birth: '',
-      notes: ''
-    });
-    setEditingStudent(null);
-    setShowAddModal(true);
-  };
-
-  const openEditModal = (student) => {
-    setFormData({
-      name: student.name,
-      class_name: student.class_name,
-      student_no: student.student_no,
-      email: student.email || '',
-      parent_contact: student.parent_contact || '',
-      date_of_birth: student.date_of_birth || '',
-      notes: student.notes || ''
-    });
+  const handleEdit = (student) => {
     setEditingStudent(student);
     setShowAddModal(true);
   };
 
-  const handleSubmit = async () => {
-    if (!supabase) {
-      alert('Database connection not ready');
-      return;
-    }
-    
-    if (!formData.name.trim()) {
-      alert('Please enter student name');
-      return;
-    }
-
-    if (!formData.class_name) {
-      alert('Please select a class');
-      return;
-    }
-
-    try {
-      setLocalLoading(true);
-      
-      const studentData = {
-        name: formData.name,
-        class_name: formData.class_name,
-        student_no: formData.student_no,
-        email: formData.email || null,
-        parent_contact: formData.parent_contact || null,
-        date_of_birth: formData.date_of_birth || null,
-        notes: formData.notes || null,
-        school_year: '2025-26',
-        status: 'active'
-      };
-
-      if (editingStudent) {
-        const { error } = await supabase
-          .from('students')
-          .update({ ...studentData, updated_at: new Date().toISOString() })
-          .eq('id', editingStudent.id);
-          
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('students')
-          .insert([studentData]);
-          
-        if (error) throw error;
-      }
-
-      await loadStudents();
-      setShowAddModal(false);
-      setEditingStudent(null);
-    } catch (error) {
-      console.error('Error saving student:', error);
-      alert('Failed to save student. Error: ' + error.message);
-    } finally {
-      setLocalLoading(false);
-    }
+  const handleLinkParent = (student) => {
+    setSelectedStudent(student);
+    setShowLinkParentModal(true);
   };
 
-  const handleDelete = async (studentId, studentName) => {
-    if (!supabase) return;
-    
-    if (!window.confirm(`Are you sure you want to delete ${studentName}?`)) {
-      return;
-    }
+  const downloadCSVTemplate = () => {
+    const csv = `Name,Class,Email
+John Doe,Y7,john.doe@student.com
+Jane Smith,Y5A,jane.smith@student.com`;
 
-    try {
-      setLocalLoading(true);
-      const { error } = await supabase
-        .from('students')
-        .delete()
-        .eq('id', studentId);
-        
-      if (error) throw error;
-      await loadStudents();
-    } catch (error) {
-      console.error('Error deleting student:', error);
-      alert('Failed to delete student. Error: ' + error.message);
-    } finally {
-      setLocalLoading(false);
-    }
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'students_template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
-  const groupStudentsByClass = (students) => {
-    return students.reduce((acc, student) => {
-      if (!acc[student.class_name]) {
-        acc[student.class_name] = [];
-      }
-      acc[student.class_name].push(student);
-      return acc;
-    }, {});
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
-  const getClassStats = () => {
-    const grouped = groupStudentsByClass(students);
-    return classes.map(cls => ({
-      className: cls.class_name,
-      count: grouped[cls.class_name]?.length || 0
-    }));
-  };
-
-  const classStats = getClassStats();
-  const totalStudents = students.length;
+  const statsByClass = students.reduce((acc, s) => {
+    acc[s.class_name] = (acc[s.class_name] || 0) + 1;
+    return acc;
+  }, {});
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="bg-white rounded-2xl shadow-lg p-6 border border-emerald-100">
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-gray-800">Student Management</h2>
-            <p className="text-gray-500 mt-1">Manage all students across classes</p>
+            <h2 className="text-2xl font-bold text-gray-800">Students Management</h2>
+            <p className="text-gray-600 mt-1">Manage student records and parent links</p>
           </div>
-          {canManageStudents() && (
-    <button
-      onClick={openAddModal}
-      disabled={classes.length === 0}
-      className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-3 rounded-xl font-medium hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-    >
-      <UserPlus size={20} />
-      Add Student
-    </button>
-  )}
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        <div className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-2xl p-6 shadow-lg">
-          <Users size={32} className="mb-2 opacity-80" />
-          <p className="text-3xl font-bold">{totalStudents}</p>
-          <p className="text-sm opacity-90">Total Students</p>
-        </div>
-        {classStats.slice(0, 4).map(stat => (
-          <div key={stat.className} className="bg-white rounded-2xl p-6 shadow-lg border border-emerald-100">
-            <p className="text-sm text-gray-500 mb-1">{stat.className}</p>
-            <p className="text-3xl font-bold text-emerald-600">{stat.count}</p>
-            <p className="text-xs text-gray-400">students</p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => {
+                setEditingStudent(null);
+                setShowAddModal(true);
+              }}
+              className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2"
+            >
+              <Plus size={20} />
+              Add Student
+            </button>
+            <button
+              onClick={downloadCSVTemplate}
+              className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2"
+            >
+              <Download size={20} />
+              CSV Template
+            </button>
           </div>
-        ))}
-      </div>
+        </div>
 
-      {classStats.length > 4 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          {classStats.slice(4).map(stat => (
-            <div key={stat.className} className="bg-white rounded-2xl p-6 shadow-lg border border-emerald-100">
-              <p className="text-sm text-gray-500 mb-1">{stat.className}</p>
-              <p className="text-3xl font-bold text-emerald-600">{stat.count}</p>
-              <p className="text-xs text-gray-400">students</p>
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+            <p className="text-2xl font-bold text-blue-700">{students.length}</p>
+            <p className="text-sm text-blue-600">Total Students</p>
+          </div>
+          {Object.entries(statsByClass).slice(0, 4).map(([className, count]) => (
+            <div key={className} className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
+              <p className="text-2xl font-bold text-emerald-700">{count}</p>
+              <p className="text-sm text-emerald-600">Class {className}</p>
             </div>
           ))}
         </div>
-      )}
-
-      {/* Search and Filter */}
-      <div className="bg-white rounded-2xl shadow-lg p-6 border border-emerald-100">
-        <div className="flex gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-            <input
-              type="text"
-              placeholder="Search by name or student number..."
-              className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <select
-            className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
-            value={selectedClass}
-            onChange={(e) => setSelectedClass(e.target.value)}
-          >
-            <option value="all">All Classes</option>
-            {classes.map(cls => (
-              <option key={cls.id} value={cls.class_name}>{cls.class_name}</option>
-            ))}
-          </select>
-        </div>
       </div>
 
+      {/* CSV Upload */}
+      <CSVUploadSection onUploadComplete={loadStudents} />
+
       {/* Students Table */}
-      <div className="bg-white rounded-2xl shadow-lg border border-emerald-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-emerald-50 border-b border-emerald-100">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-700">No.</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-700">Name</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-700">Class</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-700">Email</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-700">Parent Contact</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-700">Date of Birth</th>
-                <th className="px-6 py-4 text-right text-sm font-semibold text-emerald-700">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filteredStudents.length === 0 ? (
+      <div className="bg-white rounded-2xl shadow-lg p-6 border border-emerald-100">
+        <h3 className="text-lg font-bold text-gray-800 mb-4">All Students</h3>
+        
+        {students.length === 0 ? (
+          <div className="text-center py-12 bg-gray-50 rounded-lg">
+            <p className="text-gray-500">No students yet</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-emerald-50 border-b border-emerald-100">
                 <tr>
-                  <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
-                    {students.length === 0 ? 'No students added yet' : 'No students found'}
-                  </td>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-700">Student #</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-700">Name</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-700">Class</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-700">Email</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-700">Parents</th>
+                  <th className="px-4 py-3 text-center text-sm font-semibold text-emerald-700">Actions</th>
                 </tr>
-              ) : (
-                filteredStudents.map((student) => (
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {students.map(student => (
                   <tr key={student.id} className="hover:bg-emerald-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="w-8 h-8 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-full flex items-center justify-center">
-                        <span className="text-xs font-semibold text-emerald-700">
-                          {student.student_no}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="font-semibold text-gray-800">{student.name}</p>
-                      {student.notes && (
-                        <p className="text-xs text-gray-500 mt-1">{student.notes}</p>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium">
+                    <td className="px-4 py-3 font-medium text-gray-900">{student.student_no}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{student.name}</td>
+                    <td className="px-4 py-3">
+                      <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-medium">
                         {student.class_name}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
-                      {student.email ? (
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Mail size={14} />
-                          {student.email}
+                    <td className="px-4 py-3 text-gray-600">{student.email || '-'}</td>
+                    <td className="px-4 py-3">
+                      {student.parents?.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {student.parents.map((link, idx) => (
+                            <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
+                              {link.parents.full_name} ({link.relationship})
+                            </span>
+                          ))}
                         </div>
                       ) : (
-                        <span className="text-gray-400 text-sm">-</span>
+                        <span className="text-gray-400 text-xs">No parents linked</span>
                       )}
                     </td>
-                    <td className="px-6 py-4">
-                      {student.parent_contact ? (
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Phone size={14} />
-                          {student.parent_contact}
-                        </div>
-                      ) : (
-                        <span className="text-gray-400 text-sm">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      {student.date_of_birth ? (
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Calendar size={14} />
-                          {new Date(student.date_of_birth).toLocaleDateString()}
-                        </div>
-                      ) : (
-                        <span className="text-gray-400 text-sm">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex justify-end gap-2">
+                    <td className="px-4 py-3">
+                      <div className="flex justify-center gap-2">
                         <button
-                          onClick={() => openEditModal(student)}
-                          className="p-2 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors"
-                          title="Edit student"
+                          onClick={() => handleLinkParent(student)}
+                          className="p-2 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
+                          title="Link Parent"
                         >
-                          <Edit size={18} />
+                          <LinkIcon size={16} />
                         </button>
                         <button
-                          onClick={() => handleDelete(student.id, student.name)}
-                          className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
-                          title="Delete student"
+                          onClick={() => handleEdit(student)}
+                          className="p-2 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors"
+                          title="Edit"
                         >
-                          <Trash2 size={18} />
+                          <Edit2 size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(student.id)}
+                          className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 size={16} />
                         </button>
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Add/Edit Student Modal */}
+      {showAddModal && (
+        <AddStudentModal
+          student={editingStudent}
+          onClose={() => {
+            setShowAddModal(false);
+            setEditingStudent(null);
+          }}
+          onSave={async () => {
+            await loadStudents();
+            await loadAllStudents();
+            setShowAddModal(false);
+            setEditingStudent(null);
+          }}
+        />
+      )}
+
+      {/* Link Parent Modal */}
+      {showLinkParentModal && (
+        <LinkParentModal
+          student={selectedStudent}
+          onClose={() => {
+            setShowLinkParentModal(false);
+            setSelectedStudent(null);
+          }}
+          onSave={async () => {
+            await loadStudents();
+            setShowLinkParentModal(false);
+            setSelectedStudent(null);
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+// CSV Upload Component
+const CSVUploadSection = ({ onUploadComplete }) => {
+  const { supabase } = useApp();
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploading(true);
+      const text = await file.text();
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      const dataLines = lines.slice(1);
+      
+      // Get the highest student_no to continue incrementing
+      const { data: existingStudents } = await supabase
+        .from('students')
+        .select('student_no')
+        .order('student_no', { ascending: false })
+        .limit(1);
+      
+      let nextStudentNo = 101;
+      if (existingStudents && existingStudents.length > 0) {
+        nextStudentNo = existingStudents[0].student_no + 1;
+      }
+      
+      const students = dataLines.map((line, index) => {
+        const [name, className, email] = line.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+        
+        return {
+          name: name,
+          class_name: className,
+          email: email || null,
+          student_no: nextStudentNo + index // Auto-increment
+        };
+      });
+
+      const { error } = await supabase
+        .from('students')
+        .insert(students);
+
+      if (error) throw error;
+
+      alert(`Successfully imported ${students.length} students!`);
+      onUploadComplete();
+    } catch (error) {
+      console.error('Error uploading CSV:', error);
+      alert('Failed to upload CSV: ' + error.message);
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl shadow-lg p-6 border border-blue-100">
+      <div className="flex items-center gap-3 mb-4">
+        <Upload size={24} className="text-blue-600" />
+        <div>
+          <h3 className="text-lg font-bold text-gray-800">Bulk Import via CSV</h3>
+          <p className="text-sm text-gray-600">Upload a CSV file to import multiple students at once</p>
         </div>
       </div>
 
-      {/* Add/Edit Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <h3 className="text-2xl font-bold mb-6 text-gray-800">
-              {editingStudent ? 'Edit Student' : 'Add New Student'}
-            </h3>
+      <label className="block">
+        <input
+          type="file"
+          accept=".csv"
+          onChange={handleFileUpload}
+          disabled={uploading}
+          className="hidden"
+        />
+        <span className={`inline-block bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-3 rounded-lg font-medium cursor-pointer hover:shadow-lg transition-all ${
+          uploading ? 'opacity-50 cursor-not-allowed' : ''
+        }`}>
+          {uploading ? 'Uploading...' : 'Choose CSV File'}
+        </span>
+      </label>
 
-            <div className="space-y-4">
-              {/* Student Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Student Name *
-                </label>
-                <input
-                  type="text"
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  placeholder="Enter student name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                />
-              </div>
+      <p className="text-xs text-gray-500 mt-3">
+        Format: Name, Class, Email (Student # will be auto-generated)
+      </p>
+    </div>
+  );
+};
 
-              {/* Class and Student No */}
-              <div className="grid grid-cols-2 gap-4">
+// Add/Edit Student Modal - WITH AUTO-INCREMENT
+const AddStudentModal = ({ student, onClose, onSave }) => {
+  const { supabase } = useApp();
+  const [formData, setFormData] = useState({
+    name: student?.name || '',
+    class_name: student?.class_name || 'Y1',
+    email: student?.email || ''
+  });
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!formData.name || !formData.class_name) {
+      alert('Please fill in name and class');
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      if (student) {
+        // UPDATE - keep existing student_no
+        const { error } = await supabase
+          .from('students')
+          .update({
+            name: formData.name,
+            class_name: formData.class_name,
+            email: formData.email || null
+          })
+          .eq('id', student.id);
+
+        if (error) throw error;
+      } else {
+        // CREATE - auto-generate student_no
+        // Get the highest student_no
+        const { data: existingStudents } = await supabase
+          .from('students')
+          .select('student_no')
+          .order('student_no', { ascending: false })
+          .limit(1);
+        
+        let nextStudentNo = 101;
+        if (existingStudents && existingStudents.length > 0) {
+          nextStudentNo = existingStudents[0].student_no + 1;
+        }
+
+        const { error } = await supabase
+          .from('students')
+          .insert([{
+            name: formData.name,
+            class_name: formData.class_name,
+            email: formData.email || null,
+            student_no: nextStudentNo
+          }]);
+
+        if (error) throw error;
+      }
+
+      onSave();
+    } catch (error) {
+      console.error('Error saving student:', error);
+      alert('Failed to save student: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl p-8 max-w-lg w-full">
+        <h3 className="text-2xl font-bold text-gray-800 mb-6">
+          {student ? 'Edit Student' : 'Add New Student'}
+        </h3>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              placeholder="John Doe"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Class *</label>
+            <select
+              value={formData.class_name}
+              onChange={(e) => setFormData({ ...formData, class_name: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+            >
+              <option value="Y1">Y1</option>
+              <option value="Y2">Y2</option>
+              <option value="Y3">Y3</option>
+              <option value="Y4">Y4</option>
+              <option value="Y5A">Y5A</option>
+              <option value="Y5B">Y5B</option>
+              <option value="Y6">Y6</option>
+              <option value="Y7">Y7</option>
+              <option value="Y8">Y8</option>
+              <option value="Y9">Y9</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Email (Optional)</label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              placeholder="john.doe@student.com"
+            />
+          </div>
+
+          {!student && (
+            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+              <p className="text-sm text-blue-900">
+                <strong>Student # will be auto-generated</strong> based on the next available number.
+              </p>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-3 rounded-lg font-medium hover:shadow-lg transition-all disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : student ? 'Update Student' : 'Add Student'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-300 transition-all"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Link Parent Modal (keep existing code - it's working)
+const LinkParentModal = ({ student, onClose, onSave }) => {
+  const { supabase } = useApp();
+  const [parents, setParents] = useState([]);
+  const [linkedParents, setLinkedParents] = useState([]);
+  const [selectedParent, setSelectedParent] = useState('');
+  const [relationship, setRelationship] = useState('mother');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      
+      const { data: allParents } = await supabase
+        .from('parents')
+        .select('*')
+        .order('full_name');
+      
+      setParents(allParents || []);
+      
+      const { data: links } = await supabase
+        .from('student_parents')
+        .select('*, parents(full_name, email)')
+        .eq('student_id', student.id);
+      
+      setLinkedParents(links || []);
+    } catch (error) {
+      console.error('Error loading parents:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddLink = async () => {
+    if (!selectedParent) {
+      alert('Please select a parent');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      
+      const { error } = await supabase
+        .from('student_parents')
+        .insert([{
+          student_id: student.id,
+          parent_id: selectedParent,
+          relationship: relationship,
+          is_primary: linkedParents.length === 0
+        }]);
+
+      if (error) throw error;
+      
+      await loadData();
+      setSelectedParent('');
+    } catch (error) {
+      console.error('Error linking parent:', error);
+      alert('Failed to link parent: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemoveLink = async (linkId) => {
+    if (!window.confirm('Remove this parent link?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('student_parents')
+        .delete()
+        .eq('id', linkId);
+
+      if (error) throw error;
+      await loadData();
+    } catch (error) {
+      console.error('Error removing link:', error);
+      alert('Failed to remove link');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <h3 className="text-2xl font-bold text-gray-800 mb-2">
+          Link Parents to {student.name}
+        </h3>
+        <p className="text-sm text-gray-600 mb-6">Class {student.class_name} • Student #{student.student_no}</p>
+
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        ) : (
+          <>
+            {/* Currently Linked Parents */}
+            <div className="mb-6">
+              <h4 className="font-semibold text-gray-800 mb-3">Linked Parents</h4>
+              {linkedParents.length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No parents linked yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {linkedParents.map(link => (
+                    <div key={link.id} className="flex justify-between items-center p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <div>
+                        <p className="font-medium text-gray-900">{link.parents.full_name}</p>
+                        <p className="text-xs text-gray-600">{link.parents.email} • {link.relationship}</p>
+                        {link.is_primary && (
+                          <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded mt-1 inline-block">
+                            Primary Contact
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleRemoveLink(link.id)}
+                        className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
+                        title="Remove"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Add New Parent Link */}
+            <div className="border-t border-gray-200 pt-6">
+              <h4 className="font-semibold text-gray-800 mb-3">Add Parent Link</h4>
+              
+              <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Class *
+                    Select Parent
                   </label>
                   <select
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
-                    value={formData.class_name}
-                    onChange={(e) => setFormData({ ...formData, class_name: e.target.value })}
+                    value={selectedParent}
+                    onChange={(e) => setSelectedParent(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   >
-                    <option value="">Select class...</option>
-                    {classes.map(cls => (
-                      <option key={cls.id} value={cls.class_name}>{cls.class_name}</option>
-                    ))}
+                    <option value="">Choose a parent...</option>
+                    {parents
+                      .filter(p => !linkedParents.some(l => l.parent_id === p.id))
+                      .map(parent => (
+                        <option key={parent.id} value={parent.id}>
+                          {parent.full_name} ({parent.email})
+                        </option>
+                      ))
+                    }
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Student No. *
+                    Relationship
                   </label>
-                  <input
-                    type="number"
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    value={formData.student_no}
-                    onChange={(e) => setFormData({ ...formData, student_no: parseInt(e.target.value) || 1 })}
-                    min="1"
-                  />
+                  <select
+                    value={relationship}
+                    onChange={(e) => setRelationship(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  >
+                    <option value="mother">Mother</option>
+                    <option value="father">Father</option>
+                    <option value="guardian">Guardian</option>
+                  </select>
                 </div>
               </div>
 
-              {/* Email and Date of Birth */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Student Email (Optional)
-                  </label>
-                  <input
-                    type="email"
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    placeholder="student@email.com"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Date of Birth (Optional)
-                  </label>
-                  <input
-                    type="date"
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    value={formData.date_of_birth}
-                    onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              {/* Parent Contact */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Parent Email/Contact
-                </label>
-                <input
-                  type="text"
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  placeholder="parent@email.com or phone number"
-                  value={formData.parent_contact}
-                  onChange={(e) => setFormData({ ...formData, parent_contact: e.target.value })}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  💡 Parent will be able to view this student's information and grades
-                </p>
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Notes (Optional)
-                </label>
-                <textarea
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  rows={3}
-                  placeholder="Any additional notes about the student..."
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                />
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200">
-                <button
-                  onClick={handleSubmit}
-                  disabled={!formData.name.trim() || !formData.class_name || localLoading}
-                  className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-3 rounded-lg font-medium hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {localLoading ? 'Saving...' : (editingStudent ? 'Update Student' : 'Add Student')}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setEditingStudent(null);
-                  }}
-                  disabled={localLoading}
-                  className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Cancel
-                </button>
-              </div>
+              <button
+                onClick={handleAddLink}
+                disabled={saving || !selectedParent}
+                className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-3 rounded-lg font-medium hover:shadow-lg transition-all disabled:opacity-50"
+              >
+                {saving ? 'Adding...' : 'Add Parent Link'}
+              </button>
             </div>
-          </div>
+          </>
+        )}
+
+        <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200">
+          <button
+            onClick={onSave}
+            className="flex-1 bg-emerald-600 text-white py-3 rounded-lg font-medium hover:bg-emerald-700 transition-all"
+          >
+            Done
+          </button>
+          <button
+            onClick={onClose}
+            className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-300 transition-all"
+          >
+            Cancel
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 };

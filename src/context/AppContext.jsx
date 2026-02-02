@@ -11,10 +11,9 @@ import { supabase } from "../infrastructure/supabaseClient";
 import { AttendanceService } from "../domain/services/attendanceService";
 import { ClassService } from "../domain/services/classService";
 import { StudentsService } from "../domain/services/studentService";
-import GradingService from "../domain/services/gradingService";
+import GradingService from "../domain/services/gradingService"; // ✅ DEFAULT IMPORT
 import { ScheduleService } from "../domain/services/scheduleService";
 import { TodoService } from '../domain/services/todoService';
-
 
 const AppContext = createContext(null);
 
@@ -32,40 +31,32 @@ export const AppProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [studentsDb, setStudentsDb] = useState({});
-  const [services, setServices] = useState(null);
 
+  // ✅ USE REF instead of state to prevent re-renders
+  const servicesRef = useRef(null);
   const studentsFetchInProgress = useRef(false);
+  const hasInitialized = useRef(false);
 
-  // Initialize domain services ONCE
-  useEffect(() => {
+  // ✅ Initialize services ONCE using useRef
+  if (!servicesRef.current) {
     try {
-      const servicesInstance = {
+      servicesRef.current = {
         attendance: new AttendanceService(supabase),
         class: new ClassService(supabase),
         students: new StudentsService(supabase),
-        grading: new GradingService(supabase),
+        grading: new GradingService(), // ✅ No supabase argument
         schedule: new ScheduleService(supabase),
         todo: new TodoService(supabase),
       };
-
-      setServices(servicesInstance);
       console.log("✅ App services initialized");
     } catch (err) {
       console.error("❌ Service initialization failed:", err);
-      setError("Failed to initialize application services");
     }
-  }, []);
-
-  // Load all students once services are ready
-  useEffect(() => {
-    if (!services?.students) return;
-    loadAllStudents();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [services]);
+  }
 
   const loadAllStudents = async () => {
-    if (studentsFetchInProgress.current) {
-      console.log("⏭️ Student fetch already in progress");
+    if (studentsFetchInProgress.current || !servicesRef.current?.students) {
+      console.log("⏭️ Student fetch skipped");
       return;
     }
 
@@ -73,7 +64,7 @@ export const AppProvider = ({ children }) => {
 
     try {
       console.log("📚 Loading all students...");
-      const allStudents = await services.students.getAllStudents();
+      const allStudents = await servicesRef.current.students.getAllStudents();
 
       const grouped = allStudents.reduce((acc, student) => {
         if (!acc[student.class_name]) {
@@ -91,11 +82,8 @@ export const AppProvider = ({ children }) => {
       }, {});
 
       setStudentsDb(grouped);
-      console.log(
-        "✅ Students loaded:",
-        Object.keys(grouped).length,
-        "classes"
-      );
+      setError(null);
+      console.log("✅ Students loaded:", Object.keys(grouped).length, "classes");
     } catch (err) {
       if (err?.name === "AbortError") {
         console.warn("⚠️ Request aborted (safe to ignore)");
@@ -108,6 +96,14 @@ export const AppProvider = ({ children }) => {
       studentsFetchInProgress.current = false;
     }
   };
+
+  // ✅ Load students ONLY ONCE on mount
+  useEffect(() => {
+    if (!hasInitialized.current && servicesRef.current) {
+      loadAllStudents();
+      hasInitialized.current = true;
+    }
+  }, []);
 
   // Date utilities
   const getDateKey = (date) => {
@@ -140,14 +136,7 @@ export const AppProvider = ({ children }) => {
     });
   };
 
-  if (!services) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>Initializing application…</p>
-      </div>
-    );
-  }
-
+  // ✅ Don't render loading screen - services are initialized synchronously
   const value = {
     currentPage,
     setCurrentPage,
@@ -160,12 +149,13 @@ export const AppProvider = ({ children }) => {
     studentsDb,
     supabase,
 
-    attendanceService: services.attendance,
-    classService: services.class,
-    studentsService: services.students,
-    gradingService: services.grading,
-    scheduleService: services.schedule,
-    todoService: services.todo,
+    // ✅ Access services from ref
+    attendanceService: servicesRef.current?.attendance,
+    classService: servicesRef.current?.class,
+    studentsService: servicesRef.current?.students,
+    gradingService: servicesRef.current?.grading,
+    scheduleService: servicesRef.current?.schedule,
+    todoService: servicesRef.current?.todo,
 
     loadAllStudents,
     getDateKey,

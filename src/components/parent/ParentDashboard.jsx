@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { TrendingUp, AlertTriangle, Calendar, ChevronDown } from 'lucide-react';
+import { TrendingUp, AlertTriangle, Calendar, ChevronDown, ArrowRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 const ParentDashboard = () => {
-  const { supabase } = useApp();
+  const { supabase, setCurrentPage } = useApp();
   const [children, setChildren] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
   const [todayClasses, setTodayClasses] = useState([]);
@@ -14,7 +14,6 @@ const ParentDashboard = () => {
     pendingHomework: 0
   });
   const [urgentItems, setUrgentItems] = useState([]);
-  const [recentActivity, setRecentActivity] = useState([]);
   const [upcomingThisWeek, setUpcomingThisWeek] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -73,7 +72,6 @@ const ParentDashboard = () => {
         loadTodayClasses(),
         loadStats(),
         loadUrgentItems(),
-        loadRecentActivity(),
         loadUpcomingWeek()
       ]);
     } catch (error) {
@@ -209,83 +207,6 @@ const ParentDashboard = () => {
     setUrgentItems(urgent.slice(0, 5));
   };
 
-  const loadRecentActivity = async () => {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const dateKey = sevenDaysAgo.toISOString().split('T')[0];
-    
-    const activity = [];
-    
-    const { data: classes } = await supabase
-      .from('classes')
-      .select('*')
-      .eq('class_name', selectedChild.class_name)
-      .gte('date_key', dateKey)
-      .not('parent_visible_note', 'is', null)
-      .order('created_at', { ascending: false });
-    
-    for (const cls of (classes || [])) {
-      activity.push({
-        type: 'class-note',
-        time: new Date(cls.created_at),
-        message: `${cls.subject}: ${cls.parent_visible_note}`,
-        subject: cls.subject
-      });
-    }
-    
-    const { data: attendanceComments } = await supabase
-      .from('attendance')
-      .select('*')
-      .eq('student_id', selectedChild.id)
-      .gte('date_key', dateKey)
-      .not('comment', 'is', null)
-      .order('date_key', { ascending: false });
-    
-    attendanceComments?.forEach(att => {
-      activity.push({
-        type: 'behavior',
-        time: new Date(att.date_key),
-        message: `${att.comment}`,
-        subject: 'Attendance'
-      });
-    });
-    
-    const { data: grades } = await supabase
-      .from('grades')
-      .select('*')
-      .eq('student_id', selectedChild.id)
-      .gte('date', dateKey)
-      .order('date', { ascending: false });
-    
-    grades?.forEach(grade => {
-      activity.push({
-        type: 'grade',
-        time: new Date(grade.date),
-        message: `${grade.subject}: ${grade.assessment_title} - ${grade.grade}/${grade.max_grade}`,
-        subject: grade.subject
-      });
-    });
-    
-    const { data: homework } = await supabase
-      .from('homework')
-      .select('*')
-      .eq('class_name', selectedChild.class_name)
-      .gte('assigned_date', dateKey)
-      .order('assigned_date', { ascending: false });
-    
-    homework?.forEach(hw => {
-      activity.push({
-        type: 'homework',
-        time: new Date(hw.assigned_date),
-        message: `New homework: ${hw.title}`,
-        subject: hw.subject
-      });
-    });
-    
-    activity.sort((a, b) => b.time - a.time);
-    setRecentActivity(activity.slice(0, 10));
-  };
-
   const loadUpcomingWeek = async () => {
     const today = new Date();
     const nextWeek = new Date();
@@ -311,28 +232,6 @@ const ParentDashboard = () => {
     
     upcoming.sort((a, b) => a.date - b.date);
     setUpcomingThisWeek(upcoming.slice(0, 5));
-  };
-
-  const formatRelativeTime = (date) => {
-    const now = new Date();
-    const diff = now - date;
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    
-    if (hours < 1) return 'Just now';
-    if (hours < 24) return `${hours}h ago`;
-    if (days === 1) return 'Yesterday';
-    return `${days} days ago`;
-  };
-
-  const getActivityIcon = (type) => {
-    switch(type) {
-      case 'class-note': return { icon: '📝', color: 'bg-blue-100 text-blue-700' };
-      case 'behavior': return { icon: '💬', color: 'bg-purple-100 text-purple-700' };
-      case 'grade': return { icon: '📊', color: 'bg-emerald-100 text-emerald-700' };
-      case 'homework': return { icon: '✏️', color: 'bg-orange-100 text-orange-700' };
-      default: return { icon: '📌', color: 'bg-gray-100 text-gray-700' };
-    }
   };
 
   if (loading) {
@@ -482,42 +381,39 @@ const ParentDashboard = () => {
         </div>
       </div>
 
-      {/* Recent Activity - COLORFUL ICONS */}
+      {/* Daily View Card - REPLACES Recent Activity */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
-            <TrendingUp size={18} className="text-emerald-600" />
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+              <Calendar size={18} className="text-blue-600" />
+            </div>
+            <h3 className="font-semibold text-gray-900">Today's Classes & Attendance</h3>
           </div>
-          <h3 className="font-semibold text-gray-900">Recent Activity</h3>
+          <button
+            onClick={() => setCurrentPage('parent-daily')}
+            className="text-emerald-600 hover:text-emerald-700 font-medium text-sm flex items-center gap-1"
+          >
+            View Details
+            <ArrowRight size={16} />
+          </button>
         </div>
         
-        {recentActivity.length === 0 ? (
-          <p className="text-sm text-gray-500 py-4 text-center">No recent activity</p>
+        {todayClasses.length === 0 ? (
+          <div className="text-center py-6 bg-gray-50 rounded-lg">
+            <p className="text-sm text-gray-500">No classes today</p>
+          </div>
         ) : (
-          <div className="space-y-3">
-            {recentActivity.map((item, idx) => {
-              const activityStyle = getActivityIcon(item.type);
-              
-              return (
-                <div key={idx} className="flex items-start gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors border border-transparent hover:border-gray-200">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${activityStyle.color}`}>
-                    <span className="text-sm">{activityStyle.icon}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900">{item.message}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-gray-500">{formatRelativeTime(item.time)}</span>
-                      {item.subject && (
-                        <>
-                          <span className="text-xs text-gray-300">•</span>
-                          <span className="text-xs text-emerald-600 font-medium">{item.subject}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="space-y-2">
+            <p className="text-sm text-gray-600 mb-3">
+              {selectedChild.name} has {todayClasses.length} {todayClasses.length === 1 ? 'class' : 'classes'} today
+            </p>
+            <button
+              onClick={() => setCurrentPage('parent-daily')}
+              className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-3 rounded-lg font-medium hover:shadow-lg transition-all"
+            >
+              View Daily Schedule & Attendance
+            </button>
           </div>
         )}
       </div>

@@ -125,37 +125,55 @@ export class AttendanceService {
    * Update behavior comment for a student
    */
   async updateComment(dateKey, classId, studentId, comment) {
-    try {
-      console.log('Updating comment:', { dateKey, classId, studentId });
-      
+  console.log('Updating comment:', { dateKey, classId, studentId });
+  
+  try {
+    // First, check if record exists
+    const { data: existing } = await this.supabase
+      .from('attendance')
+      .select('*')
+      .eq('date_key', dateKey)
+      .eq('class_id', classId)
+      .eq('student_id', studentId)
+      .single();
+
+    if (existing) {
+      // Update existing record - keep the status
       const { data, error } = await this.supabase
         .from('attendance')
-        .upsert({
-          date_key: dateKey,
-          class_id: classId,
-          student_id: studentId,
-          comment: comment,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'date_key,class_id,student_id'
-        })
+        .update({ comment: comment })
+        .eq('date_key', dateKey)
+        .eq('class_id', classId)
+        .eq('student_id', studentId)
         .select()
         .single();
 
       if (error) throw error;
+      console.log('Comment updated:', data);
+      return data;
+    } else {
+      // Create new record with 'present' as default status
+      const { data, error } = await this.supabase
+        .from('attendance')
+        .insert([{
+          date_key: dateKey,
+          class_id: classId,
+          student_id: studentId,
+          status: 'present', // DEFAULT STATUS when creating new record with comment
+          comment: comment
+        }])
+        .select()
+        .single();
 
-      // Update cache
-      const record = new AttendanceRecord(data);
-      const key = this.getCacheKey(dateKey, classId, studentId);
-      this.cache[key] = record;
-
-      console.log('Comment updated successfully');
-      return record;
-    } catch (error) {
-      console.error('Error updating comment:', error);
-      throw error;
+      if (error) throw error;
+      console.log('Comment added with new record:', data);
+      return data;
     }
+  } catch (error) {
+    console.error('Error updating comment:', error);
+    throw error;
   }
+}
 
   /**
    * Get attendance statistics for a class

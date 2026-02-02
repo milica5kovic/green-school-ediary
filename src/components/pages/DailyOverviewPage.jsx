@@ -37,20 +37,25 @@ const DailyOverviewPage = () => {
       
       // Load attendance for all students for THIS DATE ONLY
       const studentIds = classStudents.map(s => s.id);
-      const { data: attendance } = await supabase
-        .from('attendance')
-        .select('*')
-        .eq('date_key', dateKey)
-        .in('student_id', studentIds);
       
-      // Group attendance by student_id and class_id
-      const attendanceMap = {};
-      attendance?.forEach(att => {
-        const key = `${att.student_id}-${att.class_id}`;
-        attendanceMap[key] = att;
-      });
-      
-      setAttendanceData(attendanceMap);
+      if (studentIds.length > 0) {
+        const { data: attendance } = await supabase
+          .from('attendance')
+          .select('*')
+          .eq('date_key', dateKey)
+          .in('student_id', studentIds);
+        
+        // Group attendance by student_id and class_id
+        const attendanceMap = {};
+        attendance?.forEach(att => {
+          const key = `${att.student_id}-${att.class_id}`;
+          attendanceMap[key] = att;
+        });
+        
+        setAttendanceData(attendanceMap);
+      } else {
+        setAttendanceData({});
+      }
       
     } catch (error) {
       console.error('Error loading daily overview:', error);
@@ -104,14 +109,26 @@ const DailyOverviewPage = () => {
     setSelectedDate(new Date());
   };
 
-  // Calculate stats for SELECTED DATE ONLY
+  // Calculate stats ONLY for classes on the selected date
   const calculateDailyStats = () => {
-    const allAttendance = Object.values(attendanceData);
-    const present = allAttendance.filter(a => a.status === 'present').length;
-    const absent = allAttendance.filter(a => a.status === 'absent').length;
-    const late = allAttendance.filter(a => a.status === 'late').length;
-    const sentOut = allAttendance.filter(a => a.status === 'sent_out').length;
-    
+    let present = 0;
+    let absent = 0;
+    let late = 0;
+    let sentOut = 0;
+
+    // For each class today
+    dailyClasses.forEach(cls => {
+      // For each student
+      students.forEach(student => {
+        const status = getAttendanceStatus(student.id, cls.class_id);
+        
+        if (status === 'present') present++;
+        else if (status === 'absent') absent++;
+        else if (status === 'late') late++;
+        else if (status === 'sent_out') sentOut++;
+      });
+    });
+
     return { present, absent, late, sentOut };
   };
 
@@ -170,12 +187,8 @@ const DailyOverviewPage = () => {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <p className="text-2xl font-bold text-gray-900">{students.length}</p>
-          <p className="text-sm text-gray-600">Students</p>
-        </div>
+      {/* Stats - REMOVED Students count, only showing attendance stats */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <p className="text-2xl font-bold text-purple-600">{dailyClasses.length}</p>
           <p className="text-sm text-gray-600">Classes</p>
@@ -203,6 +216,7 @@ const DailyOverviewPage = () => {
         <div className="bg-white rounded-2xl shadow-lg p-12 text-center border border-gray-200">
           <Calendar size={48} className="mx-auto text-gray-300 mb-4" />
           <p className="text-gray-500">No classes scheduled for this date</p>
+          <p className="text-sm text-gray-400 mt-2">Classes are only shown for weekdays when they are scheduled</p>
         </div>
       ) : (
         <div className="space-y-4">
