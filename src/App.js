@@ -7,6 +7,7 @@ import {
   Users,
   BarChart3,
   Settings,
+  CheckSquare
 } from "lucide-react";
 import { AppProvider, useApp } from "./context/AppContext";
 import { useAuth } from "./context/AuthContext";
@@ -20,14 +21,17 @@ import StudentsPage from "./components/students/StudentsPage";
 import AttendanceLogPage from "./components/attendanceLog/AttendanceLogPage";
 import SettingsPage from "./components/settings/SettingsPage";
 import LoginPage from "./components/auth/LoginPage";
-import GradesPage from "./components/pages/GradesPage";
-import UnauthorizedPage from "./components/pages/UnauthorizedPage";
-import ClassOverviewPage from "./components/pages/ClassOverviewPage";
-import ParentDashboard from "./components/pages/ParentDashboard";
-import ParentGradesPage from "./components/pages/ParentGradesPage";
-import ParentAttendancePage from "./components/pages/ParentAttendancePage";
-import ParentHomeworkPage from "./components/pages/ParentHomeworkPage";
-import ParentMyChildPage from "./components/pages/ParentMyChildPage";
+import GradesPage from "./components/grades/GradesPage";
+import UnauthorizedPage from "./components/shared/UnauthorizedPage";
+
+import ParentDashboard from "./components/parent/ParentDashboard";
+import ParentGradesPage from "./components/parent/ParentGradesPage";
+import ParentAttendancePage from "./components/parent/ParentAttendancePage";
+import ParentHomeworkPage from "./components/parent/ParentHomeworkPage";
+import ParentMyChildPage from "./components/parent/ParentMyChildPage";
+import TodoPage from "./components/todo/TodoPage";
+import DailyOverviewPage from "./components/pages/DailyOverviewPage";
+import ParentDailyViewPage from "./components/pages/ParentDailyView";
 
 const ComingSoonPage = ({ title, icon: Icon }) => {
   return (
@@ -95,14 +99,24 @@ const renderPage = () => {
         return <ParentHomeworkPage />; // Parent homework view
       }
       return <HomeworkPage />;
+      case "daily-overview":
+  if (!teacher?.class_teacher_for) {
+    return <UnauthorizedPage />;
+  }
+  return <DailyOverviewPage />;
+
+case "parent-daily":
+  if (!isParent()) {
+    return <UnauthorizedPage />;
+  }
+  return <ParentDailyViewPage />;
     
     case "students":
   // ONLY admins can access Students page
   if (!isAdmin()) {
     return <UnauthorizedPage />;
   }
-  return <StudentsPage />;
-    
+  return <StudentsPage />; 
     case "grading":
       if (isParent()) {
         return <ParentGradesPage />; // Parent grades view
@@ -120,12 +134,14 @@ const renderPage = () => {
         return <UnauthorizedPage />;
       }
       return <ParentAttendancePage />;
+
     
-    case "class-overview":
-      if (!teacher?.class_teacher_for) {
-        return <UnauthorizedPage />;
-      }
-      return <ClassOverviewPage />;
+
+      case "tasks":
+  if (isParent()) {
+    return <UnauthorizedPage />;
+  }
+  return <TodoPage />;
     
     case "attendance":
       if (isParent()) {
@@ -196,19 +212,20 @@ const renderPage = () => {
       {/* Main Layout */}
       <div className="max-w-7xl mx-auto px-6 py-6 flex gap-6">
        
-{/* Sidebar */}
+{/* {/* Sidebar */}
 <aside className="w-64 bg-white rounded-2xl shadow-lg p-6 h-fit sticky top-6 border border-emerald-100">
   <nav className="space-y-2">
     {/* PARENT NAVIGATION */}
     {isParent() ? (
-      <>
-        <NavItem icon={BookOpen} label="Dashboard" page="home" />
-        <NavItem icon={Users} label="My Child" page="my-child" />
-        <NavItem icon={BarChart3} label="Grades" page="grading" />
-        <NavItem icon={Calendar} label="Attendance" page="parent-attendance" />
-        <NavItem icon={FileText} label="Homework" page="homework" />
-        <NavItem icon={Settings} label="Settings" page="settings" />
-      </>
+  <>
+    <NavItem icon={BookOpen} label="Dashboard" page="home" />
+    <NavItem icon={Users} label="My Child" page="my-child" />
+    <NavItem icon={BarChart3} label="Grades" page="grading" />
+    <NavItem icon={Calendar} label="Attendance" page="parent-attendance" />
+    <NavItem icon={Calendar} label="Daily View" page="parent-daily" />
+    <NavItem icon={FileText} label="Homework" page="homework" />
+    <NavItem icon={Settings} label="Settings" page="settings" />
+  </>
     ) : (
       <>
         {/* TEACHER/ADMIN NAVIGATION */}
@@ -235,13 +252,17 @@ const renderPage = () => {
         )}
         
         {/* Class Overview - Class Teachers only */}
-        {teacher?.class_teacher_for && (
-          <NavItem 
-            icon={ClipboardList} 
-            label={`Class ${teacher.class_teacher_for}`} 
-            page="class-overview" 
-          />
-        )}
+{teacher?.class_teacher_for && (
+  <>
+    
+    <NavItem 
+      icon={Calendar} 
+      label="Daily Overview" 
+      page="daily-overview" 
+    />
+  </>
+)}
+
         
         {/* Attendance Log - Teachers & Admins */}
         {(isTeacher() || isAdmin()) && (
@@ -251,15 +272,20 @@ const renderPage = () => {
             page="attendance"
           />
         )}
+        {(isTeacher() || isAdmin()) && (
+  <NavItem icon={CheckSquare} label="My Tasks" page="tasks" />
+)}
+
+
         
         {/* Settings - Everyone */}
         <NavItem icon={Settings} label="Settings" page="settings" />
       </>
     )}
   </nav>
-</aside>
 
-        {/* Main Content */}
+  
+</aside>      {/* Main Content */}
         <main className="flex-1">{renderPage()}</main>
       </div>
     </div>

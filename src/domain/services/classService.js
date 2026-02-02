@@ -11,8 +11,10 @@ export class ClassService {
   /**
    * Add a class session for a specific day
    */
- async addClass(dateKey, className, subject, time, title, parentNote = null) {
-  const classId = `${className}-${subject}-${time}`.replace(/\s+/g, '-');
+async addClass(dateKey, className, subject, time, title, parentNote = null) {
+  // Add timestamp to make class_id unique
+  const timestamp = Date.now();
+  const classId = `${className}-${subject}-${time}-${timestamp}`.replace(/\s+/g, '-');
 
   const { data, error } = await this.supabase
     .from('classes')
@@ -30,12 +32,11 @@ export class ClassService {
     .select();
 
   if (error) {
-    console.error('Error adding class:', error); // Add this for debugging
+    console.error('Error adding class:', error);
     throw error;
   }
   return data[0];
 }
-
   /**
    * Get all classes for a specific date
    */

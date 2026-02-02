@@ -13,6 +13,7 @@ import { ClassService } from "../domain/services/classService";
 import { StudentsService } from "../domain/services/studentService";
 import GradingService from "../domain/services/gradingService";
 import { ScheduleService } from "../domain/services/scheduleService";
+import { TodoService } from '../domain/services/todoService';
 
 
 const AppContext = createContext(null);
@@ -44,6 +45,7 @@ export const AppProvider = ({ children }) => {
         students: new StudentsService(supabase),
         grading: new GradingService(supabase),
         schedule: new ScheduleService(supabase),
+        todo: new TodoService(supabase),
       };
 
       setServices(servicesInstance);
@@ -163,6 +165,7 @@ export const AppProvider = ({ children }) => {
     studentsService: services.students,
     gradingService: services.grading,
     scheduleService: services.schedule,
+    todoService: services.todo,
 
     loadAllStudents,
     getDateKey,

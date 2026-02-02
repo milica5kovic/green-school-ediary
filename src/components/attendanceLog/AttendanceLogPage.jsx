@@ -161,15 +161,15 @@ const AttendanceLogPage = () => {
     const present = records.filter(r => r.status === 'present').length;
     const absent = records.filter(r => r.status === 'absent').length;
     const late = records.filter(r => r.status === 'late').length;
+    const sentOut = records.filter(r => r.status === 'sent_out').length;
     const percentage = total > 0 ? ((present + late * 0.5) / total * 100).toFixed(1) : 0;
     
-    return { total, present, absent, late, percentage: parseFloat(percentage) };
+    return { total, present, absent, late, sentOut, percentage: parseFloat(percentage) };
   };
 
   const getClassStats = () => {
     const stats = {};
     
-    // Use availableClasses instead of CLASSES
     availableClasses.forEach(className => {
       const classStudents = students.filter(s => s.class_name === className);
       const classRecords = attendanceData.filter(r => 
@@ -279,6 +279,7 @@ const AttendanceLogPage = () => {
     present: attendanceData.filter(r => r.status === 'present').length,
     absent: attendanceData.filter(r => r.status === 'absent').length,
     late: attendanceData.filter(r => r.status === 'late').length,
+    sentOut: attendanceData.filter(r => r.status === 'sent_out').length,
     percentage: attendanceData.length > 0 
       ? ((attendanceData.filter(r => r.status === 'present').length / attendanceData.length) * 100).toFixed(1)
       : 0
@@ -363,7 +364,7 @@ const AttendanceLogPage = () => {
       </div>
 
       {/* Overall Stats */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-2xl p-6 shadow-lg">
           <p className="text-3xl font-bold">{overallStats.totalRecords}</p>
           <p className="text-sm opacity-90 mt-1">Total Records</p>
@@ -379,6 +380,10 @@ const AttendanceLogPage = () => {
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-orange-200">
           <p className="text-3xl font-bold text-orange-600">{overallStats.late}</p>
           <p className="text-sm text-gray-600 mt-1">Late</p>
+        </div>
+        <div className="bg-white rounded-2xl p-6 shadow-lg border border-purple-200">
+          <p className="text-3xl font-bold text-purple-600">{overallStats.sentOut}</p>
+          <p className="text-sm text-gray-600 mt-1">Sent Out</p>
         </div>
       </div>
 
@@ -439,6 +444,7 @@ const AttendanceLogPage = () => {
                     <th className="px-6 py-4 text-center text-sm font-semibold text-emerald-700">Present</th>
                     <th className="px-6 py-4 text-center text-sm font-semibold text-emerald-700">Absent</th>
                     <th className="px-6 py-4 text-center text-sm font-semibold text-emerald-700">Late</th>
+                    <th className="px-6 py-4 text-center text-sm font-semibold text-emerald-700">Sent Out</th>
                     <th className="px-6 py-4 text-center text-sm font-semibold text-emerald-700">Attendance %</th>
                   </tr>
                 </thead>
@@ -461,6 +467,7 @@ const AttendanceLogPage = () => {
                         <td className="px-6 py-4 text-center text-green-600">{stats.present}</td>
                         <td className="px-6 py-4 text-center text-red-600">{stats.absent}</td>
                         <td className="px-6 py-4 text-center text-orange-600">{stats.late}</td>
+                        <td className="px-6 py-4 text-center text-purple-600">{stats.sentOut}</td>
                         <td className={`px-6 py-4 text-center ${colorClass}`}>{stats.percentage}%</td>
                       </tr>
                     );

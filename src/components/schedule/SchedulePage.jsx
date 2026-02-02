@@ -24,21 +24,32 @@ const SchedulePage = () => {
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
   // FIXED: Load only teacher's schedule
-  const loadSchedule = useCallback(async () => {
-    if (!scheduleService || !teacher?.id) return;
+const loadSchedule = useCallback(async () => {
+  if (!scheduleService) {
+    console.log('❌ No schedule service');
+    return;
+  }
+  
+  try {
+    setLocalLoading(true);
     
-    try {
-      setLocalLoading(true);
-      // Pass teacher ID to get ONLY their schedule
-      const weekSchedule = await scheduleService.getWeekSchedule(teacher.id);
-      setSchedule(weekSchedule);
-    } catch (error) {
-      console.error('Error loading schedule:', error);
-      alert('Failed to load schedule');
-    } finally {
-      setLocalLoading(false);
-    }
-  }, [scheduleService, teacher]);
+    // If user has teacher record, load their schedule
+    // If admin without teacher record, load all schedules OR show empty
+    const teacherId = teacher?.id || null;
+    
+    console.log('📅 Loading schedule. Teacher ID:', teacherId);
+    
+    const weekSchedule = await scheduleService.getWeekSchedule(teacherId);
+    console.log('✅ Schedule loaded:', weekSchedule);
+    
+    setSchedule(weekSchedule);
+  } catch (error) {
+    console.error('❌ Error loading schedule:', error);
+    alert('Failed to load schedule');
+  } finally {
+    setLocalLoading(false);
+  }
+}, [scheduleService, teacher]);
 
   useEffect(() => {
     loadSchedule();
