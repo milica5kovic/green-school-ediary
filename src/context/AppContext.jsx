@@ -14,6 +14,7 @@ import { StudentsService } from "../domain/services/studentService";
 import GradingService from "../domain/services/gradingService";
 import { ScheduleService } from "../domain/services/scheduleService";
 
+
 const AppContext = createContext(null);
 
 export const useApp = () => {
@@ -155,6 +156,7 @@ export const AppProvider = ({ children }) => {
     error,
     setError,
     studentsDb,
+    supabase,
 
     attendanceService: services.attendance,
     classService: services.class,

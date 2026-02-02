@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Calendar, Users, TrendingUp, AlertCircle, Download, Search } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-
-const CLASSES = ['Y1', 'Y2', 'Y3', 'Y4', 'Y5A', 'Y5B', 'Y6', 'Y7', 'Y8', 'Y9'];
 
 const AttendanceLogPage = () => {
   const { supabase, studentsService } = useApp();
-  const [view, setView] = useState('overview'); // overview, students, classes, alerts
+  const { teacher, canViewAllClasses } = useAuth();
+  
+  const [availableClasses, setAvailableClasses] = useState(['Y1', 'Y2', 'Y3', 'Y4', 'Y5A', 'Y5B', 'Y6', 'Y7', 'Y8', 'Y9']);
+  const [view, setView] = useState('overview');
   const [fromDate, setFromDate] = useState(() => {
     const date = new Date();
     date.setDate(date.getDate() - 30);
@@ -29,17 +31,32 @@ const AttendanceLogPage = () => {
         this.supabase = supabaseClient;
       }
       
-      async getAttendanceByDateRange(fromDate, toDate, className = null) {
+      async getAttendanceByDateRange(fromDate, toDate, classNames = null) {
         let query = this.supabase
           .from('attendance')
           .select('*')
           .gte('date_key', fromDate)
           .lte('date_key', toDate);
         
-        if (className && className !== 'all') {
-          const classStudents = await studentsService.getStudentsByClass(className);
+        // Handle array of class names (for teachers)
+        if (classNames && Array.isArray(classNames) && classNames.length > 0) {
+          const allStudents = await studentsService.getAllStudents();
+          const studentIds = allStudents
+            .filter(s => classNames.includes(s.class_name))
+            .map(s => s.id);
+          
+          if (studentIds.length > 0) {
+            query = query.in('student_id', studentIds);
+          }
+        }
+        // Handle single class name
+        else if (classNames && classNames !== 'all') {
+          const classStudents = await studentsService.getStudentsByClass(classNames);
           const studentIds = classStudents.map(s => s.id);
-          query = query.in('student_id', studentIds);
+          
+          if (studentIds.length > 0) {
+            query = query.in('student_id', studentIds);
+          }
         }
         
         const { data, error } = await query;
@@ -64,25 +81,75 @@ const AttendanceLogPage = () => {
     return new AttendanceLogService(supabase);
   }, [supabase, studentsService]);
 
+  // Load teacher's classes
+  useEffect(() => {
+    const loadTeacherClasses = async () => {
+      if (!canViewAllClasses() && teacher?.id) {
+        const { data } = await supabase
+          .from('teacher_schedule')
+          .select('class_name')
+          .eq('teacher_id', teacher.id);
+        
+        const classes = [...new Set(data?.map(s => s.class_name) || [])];
+        setAvailableClasses(classes.sort());
+      }
+    };
+    
+    loadTeacherClasses();
+  }, [teacher, canViewAllClasses, supabase]);
+
+  // Load data when filters change
   const loadData = useCallback(async () => {
     if (!service || !studentsService) return;
     
     try {
       setLoading(true);
+      
+      // Get teacher's classes from schedule if not admin
+      let teacherClasses = null;
+      if (!canViewAllClasses() && teacher?.id) {
+        const { data: scheduleData } = await supabase
+          .from('teacher_schedule')
+          .select('class_name')
+          .eq('teacher_id', teacher.id);
+        
+        teacherClasses = [...new Set(scheduleData?.map(s => s.class_name) || [])];
+      }
+      
+      // Filter by selected class or teacher's classes
+      let classFilter = selectedClass;
+      if (!canViewAllClasses() && teacherClasses) {
+        if (selectedClass === 'all') {
+          classFilter = teacherClasses;
+        } else if (!teacherClasses.includes(selectedClass)) {
+          // Teacher trying to view a class they don't teach
+          setAttendanceData([]);
+          setStudents([]);
+          setLoading(false);
+          return;
+        }
+      }
+      
       const [attendanceRecords, allStudents] = await Promise.all([
-        service.getAttendanceByDateRange(fromDate, toDate, selectedClass),
+        service.getAttendanceByDateRange(fromDate, toDate, classFilter),
         studentsService.getAllStudents()
       ]);
       
+      // Filter students to only those in teacher's classes
+      let filteredStudents = allStudents;
+      if (!canViewAllClasses() && teacherClasses) {
+        filteredStudents = allStudents.filter(s => teacherClasses.includes(s.class_name));
+      }
+      
       setAttendanceData(attendanceRecords);
-      setStudents(allStudents);
+      setStudents(filteredStudents);
     } catch (error) {
       console.error('Error loading attendance data:', error);
       alert('Failed to load attendance data');
     } finally {
       setLoading(false);
     }
-  }, [service, studentsService, fromDate, toDate, selectedClass]);
+  }, [service, studentsService, fromDate, toDate, selectedClass, teacher, canViewAllClasses, supabase]);
 
   useEffect(() => {
     loadData();
@@ -102,7 +169,8 @@ const AttendanceLogPage = () => {
   const getClassStats = () => {
     const stats = {};
     
-    CLASSES.forEach(className => {
+    // Use availableClasses instead of CLASSES
+    availableClasses.forEach(className => {
       const classStudents = students.filter(s => s.class_name === className);
       const classRecords = attendanceData.filter(r => 
         classStudents.some(s => s.id === r.student_id)
@@ -273,7 +341,7 @@ const AttendanceLogPage = () => {
               onChange={(e) => setSelectedClass(e.target.value)}
             >
               <option value="all">All Classes</option>
-              {CLASSES.map(cls => (
+              {availableClasses.map(cls => (
                 <option key={cls} value={cls}>{cls}</option>
               ))}
             </select>

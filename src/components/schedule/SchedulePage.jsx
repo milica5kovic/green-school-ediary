@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Clock, Download, Calendar, Users, Award } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext'; // ADD THIS
 import ScheduleModal from './ScheduleModal';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+
 const SchedulePage = () => {
   const { scheduleService } = useApp();
+  const { teacher } = useAuth(); // ADD THIS
   const [schedule, setSchedule] = useState({
     Monday: [],
     Tuesday: [],
@@ -14,32 +17,20 @@ const SchedulePage = () => {
     Friday: [],
   });
   const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState('class'); // 'class', 'duty', 'extracurricular'
+  const [modalType, setModalType] = useState('class');
   const [editingEntry, setEditingEntry] = useState(null);
   const [localLoading, setLocalLoading] = useState(false);
 
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-  const timeSlots = [
-    '08:00 - 08:45',
-    '08:45 - 09:30',
-    '09:30 - 10:15',
-    '10:15 - 10:30', // Break
-    '10:30 - 11:15',
-    '11:15 - 12:00',
-    '12:00 - 12:45',
-    '12:45 - 13:30', // Lunch
-    
-    '13:30 - 14:15',
-    '14:15 - 15:00',
-    '15:00 - 15:45'
-  ];
 
+  // FIXED: Load only teacher's schedule
   const loadSchedule = useCallback(async () => {
-    if (!scheduleService) return;
+    if (!scheduleService || !teacher?.id) return;
     
     try {
       setLocalLoading(true);
-      const weekSchedule = await scheduleService.getWeekSchedule();
+      // Pass teacher ID to get ONLY their schedule
+      const weekSchedule = await scheduleService.getWeekSchedule(teacher.id);
       setSchedule(weekSchedule);
     } catch (error) {
       console.error('Error loading schedule:', error);
@@ -47,14 +38,14 @@ const SchedulePage = () => {
     } finally {
       setLocalLoading(false);
     }
-  }, [scheduleService]);
+  }, [scheduleService, teacher]);
 
   useEffect(() => {
     loadSchedule();
   }, [loadSchedule]);
 
   const handleSave = async (entry) => {
-    if (!scheduleService) return;
+    if (!scheduleService || !teacher?.id) return;
     
     try {
       setLocalLoading(true);
@@ -66,7 +57,8 @@ const SchedulePage = () => {
           entry.time,
           entry.class,
           entry.subject,
-          entry.type || 'class'
+          entry.type || 'class',
+          teacher.id // ADD teacher ID
         );
       } else {
         await scheduleService.addScheduleClass(
@@ -74,7 +66,8 @@ const SchedulePage = () => {
           entry.time,
           entry.class,
           entry.subject,
-          entry.type || 'class'
+          entry.type || 'class',
+          teacher.id // ADD teacher ID
         );
       }
 
@@ -126,14 +119,21 @@ const SchedulePage = () => {
     setShowModal(true);
   };
 
-  const getTotalClasses = () => {
-    let total = 0;
+  const getScheduleStats = () => {
+    let classes = 0;
+    let duties = 0;
+    let extras = 0;
+
     Object.values(schedule).forEach((day) => {
       day.forEach((entry) => {
-        if (!entry.type || entry.type === 'class') total++;
+        const type = entry.type || 'class';
+        if (type === 'class') classes++;
+        else if (type === 'duty') duties++;
+        else if (type === 'extracurricular') extras++;
       });
     });
-    return total;
+
+    return { classes, duties, extras };
   };
 
   const getClassesBySubject = () => {
@@ -147,468 +147,250 @@ const SchedulePage = () => {
     });
     return subjects;
   };
-  const getScheduleStats = () => {
-  let classes = 0;
-  let duties = 0;
-  let extras = 0;
 
-  Object.values(schedule).forEach((day) => {
-    day.forEach((entry) => {
-      const type = entry.type || 'class';
-      if (type === 'class') classes++;
-      else if (type === 'duty') duties++;
-      else if (type === 'extracurricular') extras++;
-    });
-  });
+  const scheduleStats = getScheduleStats();
 
-  return { classes, duties, extras };
-};
+  const exportTimetable = async () => {
+    try {
+      setLocalLoading(true);
 
-const scheduleStats = getScheduleStats();
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      });
 
+      const logoImg = new Image();
+      logoImg.src = '/logo.png';
+      
+      logoImg.onload = () => {
+        const pageWidth = pdf.internal.pageSize.width;
 
- const exportTimetable = async () => {
-  try {
-    setLocalLoading(true);
+        const logoAspectRatio = logoImg.width / logoImg.height;
+        const logoHeight = 12;
+        const logoWidth = logoHeight * logoAspectRatio;
 
-    const pdf = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: 'a4'
-    });
+        pdf.addImage(logoImg, 'PNG', 20, 12, logoWidth, logoHeight);
 
-    const logoImg = new Image();
-    logoImg.src = '/logo.png';
-    
-    logoImg.onload = () => {
-      const pageWidth = pdf.internal.pageSize.width;
+        pdf.setFontSize(22);
+        pdf.setTextColor(0, 133, 66);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Weekly Timetable', 20 + logoWidth + 5, 18);
 
-      // Calculate logo dimensions to maintain aspect ratio
-      const logoAspectRatio = logoImg.width / logoImg.height;
-      const logoHeight = 12;
-      const logoWidth = logoHeight * logoAspectRatio;
+        pdf.setFontSize(10);
+        pdf.setTextColor(107, 114, 128);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text('Academic Year 2025-26', 20 + logoWidth + 5, 23);
 
-      // Add logo on the left
-      pdf.addImage(logoImg, 'PNG', 20, 12, logoWidth, logoHeight);
+        const actualTimeSlots = [];
+        Object.values(schedule).forEach(day => {
+          day.forEach(entry => {
+            if (!actualTimeSlots.includes(entry.time)) {
+              actualTimeSlots.push(entry.time);
+            }
+          });
+        });
+        
+        const snackBreak = '10:30 - 10:55';
+        const lunchBreakPart1 = '12:30 - 12:50';
+        const lunchBreakPart2 = '12:50 - 13:25';
 
-      // Add title next to logo
-      pdf.setFontSize(22);
-      pdf.setTextColor(0, 133, 66); // Green School green color
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Weekly Timetable', 20 + logoWidth + 5, 18);
+        if (!actualTimeSlots.includes(snackBreak)) {
+          actualTimeSlots.push(snackBreak);
+        }
+        if (!actualTimeSlots.includes(lunchBreakPart1)) {
+          actualTimeSlots.push(lunchBreakPart1);
+        }
+        if (!actualTimeSlots.includes(lunchBreakPart2)) {
+          actualTimeSlots.push(lunchBreakPart2);
+        }
+        
+        actualTimeSlots.sort();
 
-      // Add academic year below title
-      pdf.setFontSize(10);
-      pdf.setTextColor(107, 114, 128);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text('Academic Year 2025-26', 20 + logoWidth + 5, 23);
+        const tableData = actualTimeSlots.map(time => {
+          const row = [time];
+          
+          if (time === snackBreak) {
+            days.forEach(() => row.push('SNACK BREAK'));
+            return row;
+          }
 
-      // Get only actual time slots
-      const actualTimeSlots = [];
-      Object.values(schedule).forEach(day => {
-        day.forEach(entry => {
-          if (!actualTimeSlots.includes(entry.time)) {
-            actualTimeSlots.push(entry.time);
+          if (time === lunchBreakPart1) {
+            days.forEach(() => row.push('LUNCH'));
+            return row;
+          }
+
+          if (time === lunchBreakPart2) {
+            days.forEach(day => {
+              const entries = schedule[day]?.filter(e => e.time === time) || [];
+              if (entries.length > 0) {
+                const entryTexts = entries.map(entry => {
+                  const type = entry.type || 'class';
+                  if (type === 'duty') {
+                    return `DUTY: ${entry.subject}`;
+                  } else if (type === 'extracurricular') {
+                    return `EXTRA: ${entry.subject}`;
+                  } else {
+                    return `${entry.class}\n${entry.subject}`;
+                  }
+                });
+                row.push(entryTexts.join('\n'));
+              } else {
+                row.push('LUNCH');
+              }
+            });
+            return row;
+          }
+          
+          days.forEach(day => {
+            const entries = schedule[day]?.filter(e => e.time === time) || [];
+            if (entries.length === 0) {
+              row.push('');
+            } else {
+              const entryTexts = entries.map(entry => {
+                const type = entry.type || 'class';
+                if (type === 'duty') {
+                  return `DUTY: ${entry.subject}`;
+                } else if (type === 'extracurricular') {
+                  return `EXTRA: ${entry.subject}`;
+                } else {
+                  return `${entry.class}\n${entry.subject}`;
+                }
+              });
+              row.push(entryTexts.join('\n'));
+            }
+          });
+          return row;
+        });
+
+        const rowCount = tableData.length;
+        let fontSize = 9;
+        let cellPadding = 3.5;
+        
+        if (rowCount > 10) {
+          fontSize = 8;
+          cellPadding = 3;
+        }
+        if (rowCount > 12) {
+          fontSize = 7.5;
+          cellPadding = 2.5;
+        }
+
+        const tableWidth = 257;
+        const marginLeft = (pageWidth - tableWidth) / 2;
+
+        autoTable(pdf, {
+          startY: 30,
+          head: [['Time', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']],
+          body: tableData,
+          theme: 'grid',
+          styles: {
+            fontSize: fontSize,
+            cellPadding: cellPadding,
+            lineColor: [200, 200, 200],
+            lineWidth: 0.15,
+            overflow: 'linebreak',
+            cellWidth: 'wrap',
+            halign: 'center',
+            valign: 'middle',
+            minCellHeight: 10,
+          },
+          headStyles: {
+            fillColor: [0, 133, 66],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            fontSize: 10,
+            halign: 'center',
+            cellPadding: 4,
+          },
+          columnStyles: {
+            0: { 
+              cellWidth: 27,
+              fillColor: [249, 250, 251],
+              fontStyle: 'bold',
+              fontSize: fontSize,
+            },
+            1: { cellWidth: 46 },
+            2: { cellWidth: 46 },
+            3: { cellWidth: 46 },
+            4: { cellWidth: 46 },
+            5: { cellWidth: 46 },
+          },
+          margin: { left: marginLeft, right: marginLeft, top: 30, bottom: 15 },
+          tableWidth: tableWidth,
+          didParseCell: function(data) {
+            if (data.section === 'body' && data.column.index > 0) {
+              const cellText = data.cell.text.join(' ');
+              
+              if (cellText === 'SNACK BREAK') {
+                data.cell.styles.fillColor = [255, 237, 213];
+                data.cell.styles.textColor = [194, 65, 12];
+                data.cell.styles.fontStyle = 'bold';
+                data.cell.styles.fontSize = fontSize + 1;
+              } else if (cellText === 'LUNCH') {
+                data.cell.styles.fillColor = [254, 226, 226];
+                data.cell.styles.textColor = [185, 28, 28];
+                data.cell.styles.fontStyle = 'bold';
+                data.cell.styles.fontSize = fontSize + 1;
+              } else if (cellText.includes('DUTY:')) {
+                data.cell.styles.fillColor = [254, 243, 199];
+                data.cell.styles.textColor = [146, 64, 14];
+                data.cell.styles.fontStyle = 'normal';
+              } else if (cellText.includes('EXTRA:')) {
+                data.cell.styles.fillColor = [237, 233, 254];
+                data.cell.styles.textColor = [107, 33, 168];
+                data.cell.styles.fontStyle = 'normal';
+              } else if (cellText.length > 0) {
+                data.cell.styles.fillColor = [209, 250, 229];
+                data.cell.styles.textColor = [0, 133, 66];
+                data.cell.styles.fontStyle = 'bold';
+              }
+            }
+          },
+          didDrawCell: function(data) {
+            if (data.section === 'body' && data.column.index > 0 && data.cell.text.length > 0) {
+              const cellText = data.cell.text.join(' ');
+              
+              if (cellText === 'SNACK BREAK' || cellText === 'LUNCH') {
+                return;
+              }
+              
+              if (cellText.includes('DUTY:')) {
+                pdf.setDrawColor(245, 158, 11);
+                pdf.setLineWidth(1.5);
+                pdf.line(data.cell.x, data.cell.y, data.cell.x, data.cell.y + data.cell.height);
+              } else if (cellText.includes('EXTRA:')) {
+                pdf.setDrawColor(168, 85, 247);
+                pdf.setLineWidth(1.5);
+                pdf.line(data.cell.x, data.cell.y, data.cell.x, data.cell.y + data.cell.height);
+              } else if (cellText.length > 0) {
+                pdf.setDrawColor(0, 133, 66);
+                pdf.setLineWidth(1.5);
+                pdf.line(data.cell.x, data.cell.y, data.cell.x, data.cell.y + data.cell.height);
+              }
+            }
           }
         });
-      });
-      
-      // Add breaks to time slots if they don't exist
-const snackBreak = '10:30 - 10:55';
-const lunchBreakPart1 = '12:30 - 12:50';
-const lunchBreakPart2 = '12:50 - 13:25';
 
-if (!actualTimeSlots.includes(snackBreak)) {
-  actualTimeSlots.push(snackBreak);
-}
-if (!actualTimeSlots.includes(lunchBreakPart1)) {
-  actualTimeSlots.push(lunchBreakPart1);
-}
-if (!actualTimeSlots.includes(lunchBreakPart2)) {
-  actualTimeSlots.push(lunchBreakPart2);
-}
-      
-      actualTimeSlots.sort();
-
-      // Prepare table data
-      const tableData = actualTimeSlots.map(time => {
-        const row = [time];
+        const filename = `Green_School_Timetable_${new Date().toISOString().split('T')[0]}.pdf`;
+        pdf.save(filename);
         
-       // Check if this is a break time
-if (time === snackBreak) {
-  // Snack break for all days
-  days.forEach(() => row.push('SNACK BREAK'));
-  return row;
-}
+        setLocalLoading(false);
+      };
 
-if (time === lunchBreakPart1) {
-  // First part of lunch (12:30-12:50) - everyone has lunch
-  days.forEach(() => row.push('LUNCH'));
-  return row;
-}
+      logoImg.onerror = () => {
+        console.warn('Logo not found, generating PDF without logo');
+        alert('Generating PDF without logo...');
+        setLocalLoading(false);
+      };
 
-if (time === lunchBreakPart2) {
-  // Second part of lunch (12:50-13:25) - check for duties
-  days.forEach(day => {
-    const entries = schedule[day]?.filter(e => e.time === time) || [];
-    if (entries.length > 0) {
-      // If there's a duty during this time, show that
-      const entryTexts = entries.map(entry => {
-        const type = entry.type || 'class';
-        if (type === 'duty') {
-          return `DUTY: ${entry.subject}`;
-        } else if (type === 'extracurricular') {
-          return `EXTRA: ${entry.subject}`;
-        } else {
-          return `${entry.class}\n${entry.subject}`;
-        }
-      });
-      row.push(entryTexts.join('\n'));
-    } else {
-      // Otherwise, it's still lunch
-      row.push('LUNCH');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF: ' + error.message);
+      setLocalLoading(false);
     }
-  });
-  return row;
-}
-        
-        
-        
-        // Regular classes
-        days.forEach(day => {
-          const entries = schedule[day]?.filter(e => e.time === time) || [];
-          if (entries.length === 0) {
-            row.push('');
-          } else {
-            const entryTexts = entries.map(entry => {
-              const type = entry.type || 'class';
-              if (type === 'duty') {
-                return `DUTY: ${entry.subject}`;
-              } else if (type === 'extracurricular') {
-                return `EXTRA: ${entry.subject}`;
-              } else {
-                return `${entry.class}\n${entry.subject}`;
-              }
-            });
-            row.push(entryTexts.join('\n'));
-          }
-        });
-        return row;
-      });
+  };
 
-      // Dynamic sizing based on content
-      const rowCount = tableData.length;
-      let fontSize = 9;
-      let cellPadding = 3.5;
-      
-      if (rowCount > 10) {
-        fontSize = 8;
-        cellPadding = 3;
-      }
-      if (rowCount > 12) {
-        fontSize = 7.5;
-        cellPadding = 2.5;
-      }
-
-      // Create centered table
-      const tableWidth = 257;
-      const marginLeft = (pageWidth - tableWidth) / 2;
-
-      autoTable(pdf, {
-        startY: 30,
-        head: [['Time', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']],
-        body: tableData,
-        theme: 'grid',
-        styles: {
-          fontSize: fontSize,
-          cellPadding: cellPadding,
-          lineColor: [200, 200, 200],
-          lineWidth: 0.15,
-          overflow: 'linebreak',
-          cellWidth: 'wrap',
-          halign: 'center',
-          valign: 'middle',
-          minCellHeight: 10,
-        },
-        headStyles: {
-          fillColor: [0, 133, 66], // Green School green
-          textColor: [255, 255, 255],
-          fontStyle: 'bold',
-          fontSize: 10,
-          halign: 'center',
-          cellPadding: 4,
-        },
-        columnStyles: {
-          0: { 
-            cellWidth: 27,
-            fillColor: [249, 250, 251],
-            fontStyle: 'bold',
-            fontSize: fontSize,
-          },
-          1: { cellWidth: 46 },
-          2: { cellWidth: 46 },
-          3: { cellWidth: 46 },
-          4: { cellWidth: 46 },
-          5: { cellWidth: 46 },
-        },
-        margin: { left: marginLeft, right: marginLeft, top: 30, bottom: 15 },
-        tableWidth: tableWidth,
-        didParseCell: function(data) {
-          if (data.section === 'body' && data.column.index > 0) {
-            const cellText = data.cell.text.join(' ');
-            
-            // Breaks styling
-            if (cellText === 'SNACK BREAK') {
-              data.cell.styles.fillColor = [255, 237, 213]; // Light orange
-              data.cell.styles.textColor = [194, 65, 12]; // Dark orange
-              data.cell.styles.fontStyle = 'bold';
-              data.cell.styles.fontSize = fontSize + 1;
-            } else if (cellText === 'LUNCH') {
-              data.cell.styles.fillColor = [254, 226, 226]; // Light red
-              data.cell.styles.textColor = [185, 28, 28]; // Dark red
-              data.cell.styles.fontStyle = 'bold';
-              data.cell.styles.fontSize = fontSize + 1;
-            }
-            // Duties and activities
-            else if (cellText.includes('DUTY:')) {
-              data.cell.styles.fillColor = [254, 243, 199];
-              data.cell.styles.textColor = [146, 64, 14];
-              data.cell.styles.fontStyle = 'normal';
-            } else if (cellText.includes('EXTRA:')) {
-              data.cell.styles.fillColor = [237, 233, 254];
-              data.cell.styles.textColor = [107, 33, 168];
-              data.cell.styles.fontStyle = 'normal';
-            }
-            // Regular classes
-            else if (cellText.length > 0) {
-              data.cell.styles.fillColor = [209, 250, 229]; // Light green (matching logo)
-              data.cell.styles.textColor = [0, 133, 66]; // Green School green
-              data.cell.styles.fontStyle = 'bold';
-            }
-          }
-        },
-        didDrawCell: function(data) {
-          if (data.section === 'body' && data.column.index > 0 && data.cell.text.length > 0) {
-            const cellText = data.cell.text.join(' ');
-            
-            // No border for breaks
-            if (cellText === 'SNACK BREAK' || cellText === 'LUNCH') {
-              return;
-            }
-            
-            if (cellText.includes('DUTY:')) {
-              pdf.setDrawColor(245, 158, 11);
-              pdf.setLineWidth(1.5);
-              pdf.line(data.cell.x, data.cell.y, data.cell.x, data.cell.y + data.cell.height);
-            } else if (cellText.includes('EXTRA:')) {
-              pdf.setDrawColor(168, 85, 247);
-              pdf.setLineWidth(1.5);
-              pdf.line(data.cell.x, data.cell.y, data.cell.x, data.cell.y + data.cell.height);
-            } else if (cellText.length > 0) {
-              pdf.setDrawColor(0, 133, 66); // Green School green
-              pdf.setLineWidth(1.5);
-              pdf.line(data.cell.x, data.cell.y, data.cell.x, data.cell.y + data.cell.height);
-            }
-          }
-        }
-      });
-
-      // Save PDF
-      const filename = `Green_School_Timetable_${new Date().toISOString().split('T')[0]}.pdf`;
-      pdf.save(filename);
-      
-      setLocalLoading(false);
-    };
-
-    logoImg.onerror = () => {
-      console.warn('Logo not found');
-      
-      const pageWidth = pdf.internal.pageSize.width;
-
-      pdf.setFontSize(22);
-      pdf.setTextColor(0, 133, 66);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Green School - Weekly Timetable', 20, 18);
-
-      pdf.setFontSize(10);
-      pdf.setTextColor(107, 114, 128);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text('Academic Year 2025-26', 20, 23);
-
-      const actualTimeSlots = [];
-      Object.values(schedule).forEach(day => {
-        day.forEach(entry => {
-          if (!actualTimeSlots.includes(entry.time)) {
-            actualTimeSlots.push(entry.time);
-          }
-        });
-      });
-      
-      const snackBreak = '10:30 - 10:55';
-      const lunchBreak = '12:50 - 13:25';
-      
-      if (!actualTimeSlots.includes(snackBreak)) {
-        actualTimeSlots.push(snackBreak);
-      }
-      if (!actualTimeSlots.includes(lunchBreak)) {
-        actualTimeSlots.push(lunchBreak);
-      }
-      
-      actualTimeSlots.sort();
-
-      const tableData = actualTimeSlots.map(time => {
-        const row = [time];
-        
-        if (time === snackBreak) {
-          days.forEach(() => row.push('SNACK BREAK'));
-          return row;
-        }
-        
-        if (time === lunchBreak) {
-          days.forEach(() => row.push('LUNCH'));
-          return row;
-        }
-        
-        days.forEach(day => {
-          const entries = schedule[day]?.filter(e => e.time === time) || [];
-          if (entries.length === 0) {
-            row.push('');
-          } else {
-            const entryTexts = entries.map(entry => {
-              const type = entry.type || 'class';
-              if (type === 'duty') {
-                return `DUTY: ${entry.subject}`;
-              } else if (type === 'extracurricular') {
-                return `EXTRA: ${entry.subject}`;
-              } else {
-                return `${entry.class}\n${entry.subject}`;
-              }
-            });
-            row.push(entryTexts.join('\n'));
-          }
-        });
-        return row;
-      });
-
-      const rowCount = tableData.length;
-      let fontSize = 9;
-      let cellPadding = 3.5;
-      
-      if (rowCount > 10) {
-        fontSize = 8;
-        cellPadding = 3;
-      }
-      if (rowCount > 12) {
-        fontSize = 7.5;
-        cellPadding = 2.5;
-      }
-
-      const tableWidth = 257;
-      const marginLeft = (pageWidth - tableWidth) / 2;
-
-      autoTable(pdf, {
-        startY: 30,
-        head: [['Time', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']],
-        body: tableData,
-        theme: 'grid',
-        styles: {
-          fontSize: fontSize,
-          cellPadding: cellPadding,
-          lineColor: [200, 200, 200],
-          lineWidth: 0.15,
-          overflow: 'linebreak',
-          cellWidth: 'wrap',
-          halign: 'center',
-          valign: 'middle',
-          minCellHeight: 10,
-        },
-        headStyles: {
-          fillColor: [0, 133, 66],
-          textColor: [255, 255, 255],
-          fontStyle: 'bold',
-          fontSize: 10,
-          halign: 'center',
-          cellPadding: 4,
-        },
-        columnStyles: {
-          0: { 
-            cellWidth: 27,
-            fillColor: [249, 250, 251],
-            fontStyle: 'bold',
-            fontSize: fontSize,
-          },
-          1: { cellWidth: 46 },
-          2: { cellWidth: 46 },
-          3: { cellWidth: 46 },
-          4: { cellWidth: 46 },
-          5: { cellWidth: 46 },
-        },
-        margin: { left: marginLeft, right: marginLeft, top: 30, bottom: 15 },
-        tableWidth: tableWidth,
-        didParseCell: function(data) {
-          if (data.section === 'body' && data.column.index > 0) {
-            const cellText = data.cell.text.join(' ');
-            
-            if (cellText === 'SNACK BREAK') {
-              data.cell.styles.fillColor = [255, 237, 213];
-              data.cell.styles.textColor = [194, 65, 12];
-              data.cell.styles.fontStyle = 'bold';
-              data.cell.styles.fontSize = fontSize + 1;
-            } else if (cellText === 'LUNCH') {
-              data.cell.styles.fillColor = [254, 226, 226];
-              data.cell.styles.textColor = [185, 28, 28];
-              data.cell.styles.fontStyle = 'bold';
-              data.cell.styles.fontSize = fontSize + 1;
-            } else if (cellText.includes('DUTY:')) {
-              data.cell.styles.fillColor = [254, 243, 199];
-              data.cell.styles.textColor = [146, 64, 14];
-              data.cell.styles.fontStyle = 'normal';
-            } else if (cellText.includes('EXTRA:')) {
-              data.cell.styles.fillColor = [237, 233, 254];
-              data.cell.styles.textColor = [107, 33, 168];
-              data.cell.styles.fontStyle = 'normal';
-            } else if (cellText.length > 0) {
-              data.cell.styles.fillColor = [209, 250, 229];
-              data.cell.styles.textColor = [0, 133, 66];
-              data.cell.styles.fontStyle = 'bold';
-            }
-          }
-        },
-        didDrawCell: function(data) {
-          if (data.section === 'body' && data.column.index > 0 && data.cell.text.length > 0) {
-            const cellText = data.cell.text.join(' ');
-            
-            if (cellText === 'SNACK BREAK' || cellText === 'LUNCH') {
-              return;
-            }
-            
-            if (cellText.includes('DUTY:')) {
-              pdf.setDrawColor(245, 158, 11);
-              pdf.setLineWidth(1.5);
-              pdf.line(data.cell.x, data.cell.y, data.cell.x, data.cell.y + data.cell.height);
-            } else if (cellText.includes('EXTRA:')) {
-              pdf.setDrawColor(168, 85, 247);
-              pdf.setLineWidth(1.5);
-              pdf.line(data.cell.x, data.cell.y, data.cell.x, data.cell.y + data.cell.height);
-            } else if (cellText.length > 0) {
-              pdf.setDrawColor(0, 133, 66);
-              pdf.setLineWidth(1.5);
-              pdf.line(data.cell.x, data.cell.y, data.cell.x, data.cell.y + data.cell.height);
-            }
-          }
-        }
-      });
-
-      pdf.save(`Green_School_Timetable_${new Date().toISOString().split('T')[0]}.pdf`);
-      setLocalLoading(false);
-    };
-
-  } catch (error) {
-    console.error('Error generating PDF:', error);
-    alert('Failed to generate PDF: ' + error.message);
-    setLocalLoading(false);
-  }
-};
   const getEntryStyle = (entry) => {
     const type = entry.type || 'class';
     if (type === 'duty') {
@@ -663,38 +445,37 @@ if (time === lunchBreakPart2) {
               Add Extra
             </button>
             <button
-  onClick={exportTimetable}
-  disabled={localLoading}
-  className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
->
-  <Download size={20} />
-  {localLoading ? 'Generating...' : 'Export PDF'}
-</button>
+              onClick={exportTimetable}
+              disabled={localLoading}
+              className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download size={20} />
+              {localLoading ? 'Generating...' : 'Export PDF'}
+            </button>
           </div>
         </div>
 
         {/* Stats */}
-      
-<div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-  <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
-    <p className="text-3xl font-bold text-emerald-700">{scheduleStats.classes}</p>
-    <p className="text-sm text-emerald-600 mt-1">📚 Classes</p>
-  </div>
-  <div className="bg-orange-50 rounded-xl p-4 border border-orange-200">
-    <p className="text-3xl font-bold text-orange-700">{scheduleStats.duties}</p>
-    <p className="text-sm text-orange-600 mt-1">🔔 Duties</p>
-  </div>
-  <div className="bg-purple-50 rounded-xl p-4 border border-purple-200">
-    <p className="text-3xl font-bold text-purple-700">{scheduleStats.extras}</p>
-    <p className="text-sm text-purple-600 mt-1">⭐ Extras</p>
-  </div>
-  {Object.entries(subjectStats).slice(0, 2).map(([subject, count]) => (
-    <div key={subject} className="bg-blue-50 rounded-xl p-4 border border-blue-200">
-      <p className="text-3xl font-bold text-blue-700">{count}</p>
-      <p className="text-sm text-blue-600 mt-1">{subject}</p>
-    </div>
-  ))}
-</div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
+            <p className="text-3xl font-bold text-emerald-700">{scheduleStats.classes}</p>
+            <p className="text-sm text-emerald-600 mt-1">📚 Classes</p>
+          </div>
+          <div className="bg-orange-50 rounded-xl p-4 border border-orange-200">
+            <p className="text-3xl font-bold text-orange-700">{scheduleStats.duties}</p>
+            <p className="text-sm text-orange-600 mt-1">🔔 Duties</p>
+          </div>
+          <div className="bg-purple-50 rounded-xl p-4 border border-purple-200">
+            <p className="text-3xl font-bold text-purple-700">{scheduleStats.extras}</p>
+            <p className="text-sm text-purple-600 mt-1">⭐ Extras</p>
+          </div>
+          {Object.entries(subjectStats).slice(0, 2).map(([subject, count]) => (
+            <div key={subject} className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+              <p className="text-3xl font-bold text-blue-700">{count}</p>
+              <p className="text-sm text-blue-600 mt-1">{subject}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Schedule Grid */}

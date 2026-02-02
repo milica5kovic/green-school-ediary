@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Edit, Trash2, UserPlus, Users, Mail, Phone, Calendar } from 'lucide-react';
 import { supabase } from '../../infrastructure/supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 
 const StudentsPage = () => {
 
@@ -12,6 +13,7 @@ const StudentsPage = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [localLoading, setLocalLoading] = useState(false);
+  
   const [formData, setFormData] = useState({
     name: '',
     class_name: '',
@@ -21,6 +23,7 @@ const StudentsPage = () => {
     date_of_birth: '',
     notes: ''
   });
+  const { teacher, canManageStudents, canViewAllClasses } = useAuth();
 
   // Load classes from database
   const loadClasses = useCallback(async () => {
@@ -40,24 +43,40 @@ const StudentsPage = () => {
     }
   }, [supabase]);
 
-  const loadStudents = useCallback(async () => {
+ const loadStudents = useCallback(async () => {
     if (!supabase) return;
     
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('students')
         .select('*')
         .or('status.is.null,status.neq.archived')
         .order('class_name', { ascending: true })
         .order('student_no', { ascending: true });
+      
+      // If not admin, filter by teacher's classes
+      if (!canViewAllClasses() && teacher?.id) {
+        const { data: scheduleData } = await supabase
+          .from('teacher_schedule')
+          .select('class_name')
+          .eq('teacher_id', teacher.id);
         
+        const teacherClasses = [...new Set(scheduleData?.map(s => s.class_name) || [])];
+        
+        if (teacherClasses.length > 0) {
+          query = query.in('class_name', teacherClasses);
+        }
+      }
+        
+      const { data, error } = await query;
+      
       if (error) throw error;
       setStudents(data || []);
     } catch (error) {
       console.error('Error loading students:', error);
       alert('Failed to load students. Error: ' + error.message);
     }
-  }, [supabase]);
+  }, [supabase, teacher, canViewAllClasses]);
 
   const filterStudents = useCallback(() => {
     let filtered = students;
@@ -246,15 +265,16 @@ const StudentsPage = () => {
             <h2 className="text-2xl font-bold text-gray-800">Student Management</h2>
             <p className="text-gray-500 mt-1">Manage all students across classes</p>
           </div>
-          <button
-            onClick={openAddModal}
-            disabled={classes.length === 0}
-            className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-3 rounded-xl font-medium hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            title={classes.length === 0 ? 'Please add classes first in Settings' : 'Add new student'}
-          >
-            <UserPlus size={20} />
-            Add Student
-          </button>
+          {canManageStudents() && (
+    <button
+      onClick={openAddModal}
+      disabled={classes.length === 0}
+      className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-3 rounded-xl font-medium hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      <UserPlus size={20} />
+      Add Student
+    </button>
+  )}
         </div>
       </div>
 

@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import DateNavigator from '../shared/DateNavigator';
 import ClassCard from './ClassCard';
 import AddClassModal from './AddClassModal';
+import { useAuth } from '../../context/AuthContext';
 
 const HomePage = () => {
   const { getDateKey, getDayName, selectedDate, classService, scheduleService } = useApp();
@@ -11,6 +12,7 @@ const HomePage = () => {
   const [showAddClass, setShowAddClass] = useState(false);
   const [todaySchedule, setTodaySchedule] = useState([]);
   const [localLoading, setLocalLoading] = useState(false);
+  const { teacher, canViewAllClasses } = useAuth();
 
   // Load schedule for selected date
   const loadSchedule = useCallback(async () => {
@@ -18,13 +20,17 @@ const HomePage = () => {
     
     try {
       const dayName = getDayName(selectedDate);
-      const schedule = await scheduleService.getScheduleByDay(dayName);
+      
+      // If not admin, filter by teacher's schedule
+      const teacherId = canViewAllClasses() ? null : teacher?.id;
+      const schedule = await scheduleService.getScheduleByDay(dayName, teacherId);
+      
       setTodaySchedule(schedule);
     } catch (error) {
       console.error('Error loading schedule:', error);
       setTodaySchedule([]);
     }
-  }, [scheduleService, selectedDate, getDayName]);
+  }, [scheduleService, selectedDate, getDayName, teacher, canViewAllClasses]);
 
   // Load classes from database when date changes
   const loadClasses = useCallback(async () => {
@@ -54,32 +60,34 @@ const HomePage = () => {
     loadSchedule();
     loadClasses();
   }, [selectedDate, loadSchedule, loadClasses]);
+const addClass = async (scheduleClass, title, comment) => {
+  if (!classService) return;
+  
+  try {
+    setLocalLoading(true);
+    const dateKey = getDateKey(selectedDate);
 
-  const addClass = async (scheduleClass, title) => {
-    if (!classService) return;
-    
-    try {
-      setLocalLoading(true);
-      const dateKey = getDateKey(selectedDate);
+    console.log('Adding class:', { dateKey, scheduleClass, title, comment }); // Debug log
 
-      await classService.addClass(
-        dateKey,
-        scheduleClass.class,
-        scheduleClass.subject,
-        scheduleClass.time,
-        title
-      );
+    await classService.addClass(
+      dateKey,
+      scheduleClass.class,
+      scheduleClass.subject,
+      scheduleClass.time,
+      title,
+      comment || null // Make sure it's null if empty
+    );
 
-      await loadClasses();
-      setShowAddClass(false);
-    } catch (error) {
-      console.error('Error adding class:', error);
-      alert('Failed to add class. Please try again.');
-    } finally {
-      setLocalLoading(false);
-    }
-  };
-
+    await loadClasses();
+    setShowAddClass(false);
+  } catch (error) {
+    console.error('Error adding class:', error);
+    console.error('Error details:', error.message); // More detailed error
+    alert('Failed to add class: ' + error.message); // Show actual error
+  } finally {
+    setLocalLoading(false);
+  }
+};
   const removeClass = async (classId) => {
     if (!classService) return;
     

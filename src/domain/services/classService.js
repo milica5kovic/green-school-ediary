@@ -11,39 +11,30 @@ export class ClassService {
   /**
    * Add a class session for a specific day
    */
-  async addClass(dateKey, className, subject, time, title) {
-    try {
-      const classId = `${className}-${time}-${dateKey}`;
-      console.log('Adding class:', { classId, dateKey, className, subject, time, title });
+ async addClass(dateKey, className, subject, time, title, parentNote = null) {
+  const classId = `${className}-${subject}-${time}`.replace(/\s+/g, '-');
 
-      const { data, error } = await this.supabase
-        .from('classes')
-        .upsert({
-          class_id: classId,
-          date_key: dateKey,
-          class_name: className,
-          subject,
-          time,
-          title,
-          created_at: new Date().toISOString()
-        }, {
-          onConflict: 'class_id'
-        })
-        .select()
-        .single();
+  const { data, error } = await this.supabase
+    .from('classes')
+    .insert([
+      {
+        class_id: classId,
+        date_key: dateKey,
+        class_name: className,
+        subject: subject,
+        time: time,
+        title: title,
+        parent_visible_note: parentNote,
+      },
+    ])
+    .select();
 
-      if (error) {
-        console.error('Supabase error adding class:', error);
-        throw error;
-      }
-      
-      console.log('Class added successfully:', data);
-      return data;
-    } catch (error) {
-      console.error('Error in addClass:', error);
-      throw error;
-    }
+  if (error) {
+    console.error('Error adding class:', error); // Add this for debugging
+    throw error;
   }
+  return data[0];
+}
 
   /**
    * Get all classes for a specific date

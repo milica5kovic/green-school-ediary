@@ -198,21 +198,81 @@ export const AuthProvider = ({ children, supabase }) => {
   };
 
   const isAdmin = () => {
-    return profile?.role === 'admin';
-  };
+  return profile?.role === 'admin';
+};
+
+const isTeacher = () => {
+  return profile?.role === 'teacher' || profile?.role === 'admin';
+};
+
+const isParent = () => {
+  return profile?.role === 'parent';
+};
+
+const isClassTeacher = () => {
+  return teacher?.class_teacher_for !== null && teacher?.class_teacher_for !== undefined;
+};
+
+const getClassTeacherFor = () => {
+  return teacher?.class_teacher_for || null;
+};
+
+// Permission checks
+const canManageStudents = () => {
+  return profile?.role === 'admin';
+};
+
+const canManageSettings = () => {
+  return profile?.role === 'admin';
+};
+
+const canAddGrades = () => {
+  return profile?.role === 'teacher' || profile?.role === 'admin';
+};
+
+const canMarkAttendance = () => {
+  return profile?.role === 'teacher' || profile?.role === 'admin';
+};
+
+const canCreateHomework = () => {
+  return profile?.role === 'teacher' || profile?.role === 'admin';
+};
+
+const canViewAllClasses = () => {
+  return profile?.role === 'admin';
+};
+
+const getTeacherSubjects = () => {
+  return teacher?.subjects || [];
+};
+
+const getTeacherId = () => {
+  return teacher?.id || null;
+};
 
   const value = {
-    user,
-    profile,
-    teacher,
-    loading,
-    error,
-    signIn,
-    signOut,
-    updatePassword,
-    isAdmin,
-  };
-
+  user,
+  profile,
+  teacher,
+  loading,
+  error,
+  signIn,
+  signOut,
+  updatePassword,
+  isAdmin,
+  isTeacher,
+  isParent,
+  isClassTeacher,
+  getClassTeacherFor,
+  canManageStudents,
+  canManageSettings,
+  canAddGrades,
+  canMarkAttendance,
+  canCreateHomework,
+  canViewAllClasses,
+  getTeacherSubjects,
+  getTeacherId,
+};
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
