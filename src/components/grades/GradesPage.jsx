@@ -35,7 +35,7 @@ const GradesPage = () => {
       loadStudents();
       loadGrades();
     }
-  }, [selectedClass]);
+  }, []);
 
   const loadClasses = async () => {
     const { data } = await supabase

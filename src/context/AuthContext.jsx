@@ -130,34 +130,41 @@ export const AuthProvider = ({ children, supabase }) => {
     };
   }, [supabase, loadProfile, loadTeacher]);
 
-  const signIn = async (email, password) => {
-    setError(null);
-    setLoading(true);
+const signIn = async (email, password) => {
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
 
-    try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+    if (error) throw error;
 
-      if (signInError) throw signInError;
+    // Load profile
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', data.user.id)
+      .single();
 
-      setUser(data.user);
-      const profileData = await loadProfile(data.user.id);
-      
-      if (profileData?.role === 'teacher' || profileData?.role === 'admin') {
-        await loadTeacher(data.user.id);
-      }
+    setProfile(profileData);
 
-      return { success: true };
-    } catch (err) {
-      console.error('Sign in error:', err);
-      setError(err.message);
-      return { success: false, error: err.message };
-    } finally {
-      setLoading(false);
+    // Load teacher data if exists
+    const { data: teacherData } = await supabase
+      .from('teachers')
+      .select('*')
+      .eq('user_id', data.user.id)
+      .single();
+
+    if (teacherData) {
+      setTeacher(teacherData);
     }
-  };
+
+    return { success: true };
+  } catch (error) {
+    console.error('Sign in error:', error);
+    return { success: false, error: error.message };
+  }
+};
 
   const signOut = async () => {
     setError(null);
