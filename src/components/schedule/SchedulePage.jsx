@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Clock, Download, Calendar, Users, Award } from 'lucide-react';
+import { Plus, Trash2, Clock, Download, Calendar, Award } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext'; // ADD THIS
 import ScheduleModal from './ScheduleModal';
