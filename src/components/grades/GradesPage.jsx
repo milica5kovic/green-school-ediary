@@ -22,64 +22,110 @@ const GradesPage = () => {
   });
   const [studentScores, setStudentScores] = useState({});
 
-  // Get teacher's subjects (only ICT and Maths for you)
+  // Get teacher's subjects
   const mySubjects = teacher?.subjects || [];
 
+  // ✅ FIX: Load classes and subjects on mount
   useEffect(() => {
     loadClasses();
     loadSubjects();
-  }, []);
+  }, []); // This one is OK - only runs once
 
+  // ✅ FIX: Load students and grades when selectedClass changes
   useEffect(() => {
     if (selectedClass) {
+      console.log('🔄 Selected class changed to:', selectedClass);
       loadStudents();
       loadGrades();
+    } else {
+      // Clear data when no class selected
+      setStudents([]);
+      setGrades([]);
     }
-  }, []);
+  }, [selectedClass]); // ✅ NOW IT WILL RE-RUN WHEN selectedClass CHANGES!
 
   const loadClasses = async () => {
-    const { data } = await supabase
-      .from('custom_classes')
-      .select('*')
-      .eq('is_active', true)
-      .order('class_name');
-    setClasses(data || []);
+    try {
+      const { data, error } = await supabase
+        .from('custom_classes')
+        .select('*')
+        .eq('is_active', true)
+        .order('class_name');
+      
+      if (error) throw error;
+      
+      console.log('📚 Classes loaded:', data?.length || 0);
+      setClasses(data || []);
+    } catch (error) {
+      console.error('Error loading classes:', error);
+      setClasses([]);
+    }
   };
 
   const loadSubjects = async () => {
-    const { data } = await supabase
-      .from('custom_subjects')
-      .select('*')
-      .eq('is_active', true)
-      .order('subject_name');
-    
-    // Filter to only show teacher's subjects
-    const filtered = (data || []).filter(s => 
-      mySubjects.includes(s.subject_name)
-    );
-    setSubjects(filtered);
+    try {
+      const { data, error } = await supabase
+        .from('custom_subjects')
+        .select('*')
+        .eq('is_active', true)
+        .order('subject_name');
+      
+      if (error) throw error;
+      
+      // Filter to only show teacher's subjects
+      const filtered = (data || []).filter(s => 
+        mySubjects.includes(s.subject_name)
+      );
+      
+      console.log('📖 Subjects loaded:', filtered.length, '(filtered to your subjects)');
+      setSubjects(filtered);
+    } catch (error) {
+      console.error('Error loading subjects:', error);
+      setSubjects([]);
+    }
   };
 
   const loadStudents = async () => {
-    const { data } = await supabase
-      .from('students')
-      .select('*')
-      .eq('class_name', selectedClass)
-      .eq('school_year', '2025-26')
-      .eq('status', 'active')
-      .order('student_no');
-    setStudents(data || []);
+    try {
+      console.log('👥 Loading students for class:', selectedClass);
+      
+      const { data, error } = await supabase
+        .from('students')
+        .select('*')
+        .eq('class_name', selectedClass)
+        .eq('status', 'active') // ✅ Don't filter by school_year - it might be null!
+        .order('student_no');
+      
+      if (error) throw error;
+      
+      console.log('✅ Students loaded:', data?.length || 0);
+      console.log('Students:', data);
+      
+      setStudents(data || []);
+    } catch (error) {
+      console.error('❌ Error loading students:', error);
+      setStudents([]);
+    }
   };
 
   const loadGrades = async () => {
-    if (!gradingService) return;
+    if (!gradingService) {
+      console.log('⚠️ No grading service available');
+      return;
+    }
+    
     try {
+      console.log('📊 Loading grades for class:', selectedClass);
+      
       const classGrades = await gradingService.getClassGrades(selectedClass);
+      
       // Filter to only show grades for teacher's subjects
       const filtered = classGrades.filter(g => mySubjects.includes(g.subject));
+      
+      console.log('✅ Grades loaded:', filtered.length, '(filtered to your subjects)');
       setGrades(filtered);
     } catch (error) {
-      console.error('Error loading grades:', error);
+      console.error('❌ Error loading grades:', error);
       setGrades([]);
     }
   };
@@ -140,7 +186,10 @@ const GradesPage = () => {
             </label>
             <select
               value={selectedClass}
-              onChange={(e) => setSelectedClass(e.target.value)}
+              onChange={(e) => {
+                console.log('📝 Class selection changed to:', e.target.value);
+                setSelectedClass(e.target.value);
+              }}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
             >
               <option value="">Choose a class...</option>
@@ -311,51 +360,58 @@ const GradesPage = () => {
             </div>
             
             <div className="border-t border-gray-200 pt-6 mb-6">
-  <h4 className="font-semibold text-gray-800 mb-4">Enter Student Grades</h4>
-  <div className="space-y-2 max-h-96 overflow-y-auto">
-    {students.length === 0 ? (
-      <p className="text-center text-gray-500 py-8">
-        No students found in {selectedClass}. Please add students first.
-      </p>
-    ) : (
-      students.map(student => (
-        <div key={student.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-          <div className="w-10 h-10 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-full flex items-center justify-center flex-shrink-0">
-            <span className="text-sm font-semibold text-emerald-700">
-              {student.student_no}
-            </span>
-          </div>
-          <span className="flex-1 font-medium text-gray-800">{student.name}</span>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              placeholder="0"
-              value={studentScores[student.id] || ''}
-              onChange={(e) => setStudentScores({...studentScores, [student.id]: e.target.value})}
-              className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-center font-semibold"
-              max={formData.maxGrade}
-              step="0.5"
-            />
-            <span className="text-gray-400 font-medium">/ {formData.maxGrade}</span>
-          </div>
-        </div>
-      ))
-    )}
-  </div>
-</div>
-{students.length > 0 && (
-  <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-    <p className="text-sm text-blue-800">
-      <strong>Students in {selectedClass}:</strong> {students.length} • 
-      <strong> Grades entered:</strong> {Object.keys(studentScores).filter(id => studentScores[id]).length}
-    </p>
-  </div>
-)}
+              <h4 className="font-semibold text-gray-800 mb-4">Enter Student Grades</h4>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {students.length === 0 ? (
+                  <div className="text-center text-gray-500 py-8 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="font-semibold">No students found in {selectedClass}</p>
+                    <p className="text-sm mt-2">
+                      Students loaded: {students.length}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-2">
+                      Check console for debugging info
+                    </p>
+                  </div>
+                ) : (
+                  students.map(student => (
+                    <div key={student.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                      <div className="w-10 h-10 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span className="text-sm font-semibold text-emerald-700">
+                          {student.student_no}
+                        </span>
+                      </div>
+                      <span className="flex-1 font-medium text-gray-800">{student.name}</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          placeholder="0"
+                          value={studentScores[student.id] || ''}
+                          onChange={(e) => setStudentScores({...studentScores, [student.id]: e.target.value})}
+                          className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-center font-semibold"
+                          max={formData.maxGrade}
+                          step="0.5"
+                        />
+                        <span className="text-gray-400 font-medium">/ {formData.maxGrade}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            
+            {students.length > 0 && (
+              <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-sm text-blue-800">
+                  <strong>Students in {selectedClass}:</strong> {students.length} • 
+                  <strong> Grades entered:</strong> {Object.keys(studentScores).filter(id => studentScores[id]).length}
+                </p>
+              </div>
+            )}
             
             <div className="flex gap-3 border-t border-gray-200 pt-6">
               <button
                 onClick={handleAddGrades}
-                disabled={!formData.assessmentTitle || !formData.subject}
+                disabled={!formData.assessmentTitle || !formData.subject || students.length === 0}
                 className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-3 rounded-lg font-medium hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Save Grades

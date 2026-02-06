@@ -10,21 +10,32 @@ export class ScheduleService {
 
   /**
    * Get schedule for a specific day
+   * SECURITY: Returns only the teacher's schedule
    */
   async getScheduleByDay(dayOfWeek, teacherId = null) {
     try {
-      console.log('Fetching schedule for:', dayOfWeek);
+      console.log('🔐 Fetching schedule for:', dayOfWeek, '| teacherId:', teacherId);
       
       let query = this.supabase
         .from('teacher_schedule')
-        .select('*')
+        .select(`
+          *,
+          teacher:teachers!teacher_schedule_teacher_id_fkey(
+            full_name,
+            email,
+            user_id
+          )
+        `)
         .eq('day_of_week', dayOfWeek)
         .order('time_slot', { ascending: true });
 
+      // SECURITY: ALWAYS filter by teacher if provided
       if (teacherId) {
         query = query.eq('teacher_id', teacherId);
       } else {
-        query = query.is('teacher_id', null);
+        // If no teacherId, return empty (no admin view)
+        console.log('⚠️ No teacherId provided, returning empty');
+        return [];
       }
 
       const { data, error } = await query;
@@ -34,15 +45,17 @@ export class ScheduleService {
         throw error;
       }
       
-      console.log('Schedule fetched:', data?.length || 0, 'entries');
+      console.log('✅ Schedule fetched:', data?.length || 0, 'entries');
       
-      // Format for compatibility
       return (data || []).map(item => ({
         id: item.id,
         time: item.time_slot,
         class: item.class_name,
         subject: item.subject,
-        type: item.schedule_type || 'class'
+        type: item.schedule_type || 'class',
+        teacherId: item.teacher_id,
+        teacherName: item.teacher?.full_name || 'Unknown',
+        teacherEmail: item.teacher?.email || ''
       }));
     } catch (error) {
       console.error('Error fetching schedule:', error);
@@ -52,27 +65,43 @@ export class ScheduleService {
 
   /**
    * Get full week schedule
+   * SECURITY: Returns only the teacher's schedule
    */
   async getWeekSchedule(teacherId = null) {
     try {
-      console.log('Fetching full week schedule');
+      console.log('🔐 Fetching full week schedule | teacherId:', teacherId);
       
       let query = this.supabase
         .from('teacher_schedule')
-        .select('*')
+        .select(`
+          *,
+          teacher:teachers!teacher_schedule_teacher_id_fkey(
+            full_name,
+            email,
+            user_id
+          )
+        `)
         .order('time_slot', { ascending: true });
 
+      // SECURITY: ALWAYS filter by teacher
       if (teacherId) {
         query = query.eq('teacher_id', teacherId);
       } else {
-        query = query.is('teacher_id', null);
+        // No teacherId = no schedule
+        console.log('⚠️ No teacherId provided, returning empty');
+        return {
+          Monday: [],
+          Tuesday: [],
+          Wednesday: [],
+          Thursday: [],
+          Friday: []
+        };
       }
 
       const { data, error } = await query;
 
       if (error) throw error;
       
-      // Group by day
       const schedule = {
         Monday: [],
         Tuesday: [],
@@ -88,12 +117,15 @@ export class ScheduleService {
             time: item.time_slot,
             class: item.class_name,
             subject: item.subject,
-            type: item.schedule_type || 'class'
+            type: item.schedule_type || 'class',
+            teacherId: item.teacher_id,
+            teacherName: item.teacher?.full_name || 'Unknown',
+            teacherEmail: item.teacher?.email || ''
           });
         }
       });
 
-      console.log('Week schedule fetched');
+      console.log('✅ Week schedule fetched');
       return schedule;
     } catch (error) {
       console.error('Error fetching week schedule:', error);
@@ -106,6 +138,12 @@ export class ScheduleService {
    */
   async addScheduleClass(dayOfWeek, timeSlot, className, subject, type = 'class', teacherId = null) {
     try {
+      if (!teacherId) {
+        throw new Error('🔒 SECURITY: teacher_id is required');
+      }
+
+      console.log('🔐 Adding schedule entry for teacher:', teacherId);
+
       const { data, error } = await this.supabase
         .from('teacher_schedule')
         .insert([{
@@ -122,10 +160,10 @@ export class ScheduleService {
 
       if (error) throw error;
 
-      console.log(`Added ${type} to schedule:`, data);
+      console.log(`✅ Added ${type} to schedule:`, data);
       return data;
     } catch (error) {
-      console.error('Error adding schedule entry:', error);
+      console.error('❌ Error adding schedule entry:', error);
       throw error;
     }
   }
@@ -135,6 +173,8 @@ export class ScheduleService {
    */
   async updateScheduleClass(scheduleId, dayOfWeek, timeSlot, className, subject, type = 'class') {
     try {
+      console.log('🔐 Updating schedule entry:', scheduleId);
+
       const { data, error } = await this.supabase
         .from('teacher_schedule')
         .update({
@@ -150,10 +190,10 @@ export class ScheduleService {
 
       if (error) throw error;
 
-      console.log('Updated schedule entry:', data);
+      console.log('✅ Updated schedule entry:', data);
       return data;
     } catch (error) {
-      console.error('Error updating schedule entry:', error);
+      console.error('❌ Error updating schedule entry:', error);
       throw error;
     }
   }
@@ -163,6 +203,8 @@ export class ScheduleService {
    */
   async deleteScheduleClass(scheduleId) {
     try {
+      console.log('🔐 Deleting schedule entry:', scheduleId);
+
       const { error } = await this.supabase
         .from('teacher_schedule')
         .delete()
@@ -170,10 +212,10 @@ export class ScheduleService {
 
       if (error) throw error;
 
-      console.log('Deleted schedule entry:', scheduleId);
+      console.log('✅ Deleted schedule entry:', scheduleId);
       return true;
     } catch (error) {
-      console.error('Error deleting schedule entry:', error);
+      console.error('❌ Error deleting schedule entry:', error);
       throw error;
     }
   }
@@ -183,15 +225,21 @@ export class ScheduleService {
    */
   async getScheduleStats(teacherId = null) {
     try {
+      console.log('🔐 Getting schedule stats | teacherId:', teacherId);
+
+      if (!teacherId) {
+        return {
+          total: 0,
+          classes: 0,
+          duties: 0,
+          extracurriculars: 0
+        };
+      }
+
       let query = this.supabase
         .from('teacher_schedule')
-        .select('schedule_type');
-
-      if (teacherId) {
-        query = query.eq('teacher_id', teacherId);
-      } else {
-        query = query.is('teacher_id', null);
-      }
+        .select('schedule_type')
+        .eq('teacher_id', teacherId);
 
       const { data, error } = await query;
 
@@ -211,9 +259,10 @@ export class ScheduleService {
         else if (type === 'extracurricular') stats.extracurriculars++;
       });
 
+      console.log('✅ Schedule stats:', stats);
       return stats;
     } catch (error) {
-      console.error('Error getting schedule stats:', error);
+      console.error('❌ Error getting schedule stats:', error);
       throw error;
     }
   }

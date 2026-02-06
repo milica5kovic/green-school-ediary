@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Settings, 
+  Settings as SettingsIcon, 
   Lock, 
   Mail, 
   User, 
@@ -24,6 +24,14 @@ const SettingsPage = () => {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // ✅ FIX: Force re-render when auth data changes
+  useEffect(() => {
+    console.log('🔄 SettingsPage - Auth data updated');
+    console.log('  User:', user?.email);
+    console.log('  Profile:', profile?.role);
+    console.log('  Teacher:', teacher?.full_name);
+  }, [user, profile, teacher]); // ✅ Re-render when auth changes
 
   const handlePasswordUpdate = async (e) => {
     e.preventDefault();
@@ -73,7 +81,7 @@ const SettingsPage = () => {
       <div className="bg-white rounded-2xl shadow-lg p-6 border border-emerald-100">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-lg flex items-center justify-center">
-            <Settings size={24} className="text-emerald-600" />
+            <SettingsIcon size={24} className="text-emerald-600" />
           </div>
           <h2 className="text-2xl font-bold text-gray-800">Settings</h2>
         </div>
@@ -258,7 +266,7 @@ const SettingsPage = () => {
       {isAdmin() && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <p className="text-sm text-blue-800">
-            <strong>💡 Admin Access:</strong> For school management features (Students, Classes, Subjects, Analytics, etc.), please navigate to <strong>Management</strong> from the sidebar.
+            <strong>💡 Admin Access:</strong> For school management features (Students, Classes, Subjects, Analytics, Parents, etc.), please navigate to <strong>Management</strong> from the sidebar.
           </p>
         </div>
       )}

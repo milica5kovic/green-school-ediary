@@ -21,6 +21,8 @@ const StudentsPage = () => {
   const loadStudents = useCallback(async () => {
     try {
       setLoading(true);
+      console.log('📚 Loading all students...');
+      
       const allStudents = await studentsService.getAllStudents();
 
       // Load parent links for each student
@@ -38,9 +40,10 @@ const StudentsPage = () => {
         }),
       );
 
+      console.log('✅ Students loaded:', studentsWithParents.length);
       setStudents(studentsWithParents);
     } catch (error) {
-      console.error("Error loading students:", error);
+      console.error("❌ Error loading students:", error);
     } finally {
       setLoading(false);
     }
@@ -192,6 +195,9 @@ Jane Smith,Y5A,jane.smith@student.com`;
                     Email
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-700">
+                    School Year
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-700">
                     Parents
                   </th>
                   <th className="px-4 py-3 text-center text-sm font-semibold text-emerald-700">
@@ -218,6 +224,15 @@ Jane Smith,Y5A,jane.smith@student.com`;
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {student.email || "-"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        student.school_year === '2025-26' 
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-red-100 text-red-700'
+                      }`}>
+                        {student.school_year || 'NOT SET'}
+                      </span>
                     </td>
                     <td className="px-4 py-3">
                       {student.parents?.length > 0 ? (
@@ -306,9 +321,9 @@ Jane Smith,Y5A,jane.smith@student.com`;
   );
 };
 
-// CSV Upload Component
+// ✅ FIXED: CSV Upload Component - Uses studentsService
 const CSVUploadSection = ({ onUploadComplete }) => {
-  const { supabase } = useApp();
+  const { studentsService } = useApp();
   const [uploading, setUploading] = useState(false);
 
   const handleFileUpload = async (e) => {
@@ -319,42 +334,35 @@ const CSVUploadSection = ({ onUploadComplete }) => {
       setUploading(true);
       const text = await file.text();
       const lines = text.split("\n").filter((line) => line.trim());
-
       const dataLines = lines.slice(1);
 
-      // Get the highest student_no to continue incrementing
-      const { data: existingStudents } = await supabase
-        .from("students")
-        .select("student_no")
-        .order("student_no", { ascending: false })
-        .limit(1);
+      // Get next student number
+      const nextStudentNo = await studentsService.getNextStudentNumber('');
 
-      let nextStudentNo = 101;
-      if (existingStudents && existingStudents.length > 0) {
-        nextStudentNo = existingStudents[0].student_no + 1;
-      }
-
-      const students = dataLines.map((line, index) => {
+      let currentNo = nextStudentNo;
+      
+      // ✅ CRITICAL: Use studentsService.addStudent() for each student
+      for (const line of dataLines) {
         const [name, className, email] = line
           .split(",")
           .map((s) => s.trim().replace(/^"|"$/g, ""));
 
-        return {
+        await studentsService.addStudent({
           name: name,
           class_name: className,
           email: email || null,
-          student_no: nextStudentNo + index, // Auto-increment
-        };
-      });
+          student_no: currentNo,
+          school_year: '2025-26', // ✅ Explicit
+          status: 'active' // ✅ Explicit
+        });
+        
+        currentNo++;
+      }
 
-      const { error } = await supabase.from("students").insert(students);
-
-      if (error) throw error;
-
-      alert(`Successfully imported ${students.length} students!`);
+      alert(`Successfully imported ${dataLines.length} students!`);
       onUploadComplete();
     } catch (error) {
-      console.error("Error uploading CSV:", error);
+      console.error("❌ Error uploading CSV:", error);
       alert("Failed to upload CSV: " + error.message);
     } finally {
       setUploading(false);
@@ -394,19 +402,20 @@ const CSVUploadSection = ({ onUploadComplete }) => {
       </label>
 
       <p className="text-xs text-gray-500 mt-3">
-        Format: Name, Class, Email (Student # will be auto-generated)
+        Format: Name, Class, Email (School year 2025-26 will be auto-assigned)
       </p>
     </div>
   );
 };
 
-// Add/Edit Student Modal - WITH AUTO-INCREMENT
+// ✅ FIXED: Add/Edit Student Modal - Uses studentsService
 const AddStudentModal = ({ student, onClose, onSave }) => {
-  const { supabase } = useApp();
+  const { studentsService } = useApp();
   const [formData, setFormData] = useState({
     name: student?.name || "",
     class_name: student?.class_name || "Y1",
     email: student?.email || "",
+    school_year: student?.school_year || "2025-26", // ✅ Default
   });
   const [saving, setSaving] = useState(false);
 
@@ -420,48 +429,36 @@ const AddStudentModal = ({ student, onClose, onSave }) => {
 
     try {
       setSaving(true);
+      console.log('💾 Saving student:', formData);
 
       if (student) {
-        // UPDATE - keep existing student_no
-        const { error } = await supabase
-          .from("students")
-          .update({
-            name: formData.name,
-            class_name: formData.class_name,
-            email: formData.email || null,
-          })
-          .eq("id", student.id);
-
-        if (error) throw error;
+        // ✅ UPDATE - use studentsService
+        await studentsService.updateStudent(student.id, {
+          name: formData.name,
+          class_name: formData.class_name,
+          email: formData.email || null,
+          student_no: student.student_no, // Keep existing
+          school_year: formData.school_year,
+          status: student.status || 'active'
+        });
       } else {
-        // CREATE - auto-generate student_no
-        // Get the highest student_no
-        const { data: existingStudents } = await supabase
-          .from("students")
-          .select("student_no")
-          .order("student_no", { ascending: false })
-          .limit(1);
-
-        let nextStudentNo = 101;
-        if (existingStudents && existingStudents.length > 0) {
-          nextStudentNo = existingStudents[0].student_no + 1;
-        }
-
-        const { error } = await supabase.from("students").insert([
-          {
-            name: formData.name,
-            class_name: formData.class_name,
-            email: formData.email || null,
-            student_no: nextStudentNo,
-          },
-        ]);
-
-        if (error) throw error;
+        // ✅ CREATE - use studentsService
+        const nextStudentNo = await studentsService.getNextStudentNumber(formData.class_name);
+        
+        await studentsService.addStudent({
+          name: formData.name,
+          class_name: formData.class_name,
+          email: formData.email || null,
+          student_no: nextStudentNo,
+          school_year: formData.school_year, // ✅ Explicit
+          status: 'active' // ✅ Explicit
+        });
       }
 
+      console.log('✅ Student saved successfully');
       onSave();
     } catch (error) {
-      console.error("Error saving student:", error);
+      console.error("❌ Error saving student:", error);
       alert("Failed to save student: " + error.message);
     } finally {
       setSaving(false);
@@ -517,6 +514,23 @@ const AddStudentModal = ({ student, onClose, onSave }) => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
+              School Year
+            </label>
+            <input
+              type="text"
+              value={formData.school_year}
+              onChange={(e) =>
+                setFormData({ ...formData, school_year: e.target.value })
+              }
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-gray-50"
+              placeholder="2025-26"
+              readOnly
+            />
+            <p className="text-xs text-gray-500 mt-1">Current academic year</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Email (Optional)
             </label>
             <input
@@ -533,9 +547,13 @@ const AddStudentModal = ({ student, onClose, onSave }) => {
           {!student && (
             <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
               <p className="text-sm text-blue-900">
-                <strong>Student # will be auto-generated</strong> based on the
-                next available number.
+                <strong>✅ Auto-generated:</strong>
               </p>
+              <ul className="text-xs text-blue-700 mt-2 space-y-1">
+                <li>• Student # (next available)</li>
+                <li>• School Year: 2025-26</li>
+                <li>• Status: Active</li>
+              </ul>
             </div>
           )}
 
@@ -565,7 +583,7 @@ const AddStudentModal = ({ student, onClose, onSave }) => {
   );
 };
 
-// Link Parent Modal (keep existing code - it's working)
+// Link Parent Modal (unchanged - already good)
 const LinkParentModal = ({ student, onClose, onSave }) => {
   const { supabase } = useApp();
   const [parents, setParents] = useState([]);

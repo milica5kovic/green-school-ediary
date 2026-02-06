@@ -11,9 +11,10 @@ import { supabase } from "../infrastructure/supabaseClient";
 import { AttendanceService } from "../domain/services/attendanceService";
 import { ClassService } from "../domain/services/classService";
 import { StudentsService } from "../domain/services/studentService";
-import GradingService from "../domain/services/gradingService"; // ✅ DEFAULT IMPORT
+import GradingService from "../domain/services/gradingService";
 import { ScheduleService } from "../domain/services/scheduleService";
 import { TodoService } from '../domain/services/todoService';
+import { ParentService } from '../domain/services/parentService'; // ✅ NEW
 
 const AppContext = createContext(null);
 
@@ -44,11 +45,12 @@ export const AppProvider = ({ children }) => {
         attendance: new AttendanceService(supabase),
         class: new ClassService(supabase),
         students: new StudentsService(supabase),
-        grading: new GradingService(), // ✅ No supabase argument
+        grading: new GradingService(),
         schedule: new ScheduleService(supabase),
         todo: new TodoService(supabase),
+        parent: new ParentService(supabase), // ✅ NEW SERVICE
       };
-      console.log("✅ App services initialized");
+      console.log("✅ App services initialized (including ParentService)");
     } catch (err) {
       console.error("❌ Service initialization failed:", err);
     }
@@ -156,6 +158,7 @@ export const AppProvider = ({ children }) => {
     gradingService: servicesRef.current?.grading,
     scheduleService: servicesRef.current?.schedule,
     todoService: servicesRef.current?.todo,
+    parentService: servicesRef.current?.parent, // ✅ NEW SERVICE
 
     loadAllStudents,
     getDateKey,

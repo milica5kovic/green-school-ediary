@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { MessageSquare, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { supabase } from '../../infrastructure/supabaseClient';
@@ -14,24 +14,34 @@ const ClassCard = ({ cls, onRemove }) => {
 
   const dateKey = getDateKey(selectedDate);
 
-  // Load students and attendance once
-// Load students and attendance once
-useEffect(() => {
-  const loadData = async () => {
+  // ✅ FIX: Load students with proper dependencies and NO school_year filter
+  const loadData = useCallback(async () => {
     try {
-      // Load students from database with proper filters
+      console.log('📚 ClassCard - Loading students for class:', cls.class);
+      console.log('  Class ID:', cls.id);
+      console.log('  Date Key:', dateKey);
+      
+      // ✅ FIX: Don't filter by school_year - it might be null!
       const { data: classStudents, error } = await supabase
         .from('students')
         .select('*')
         .eq('class_name', cls.class)
-        .eq('school_year', '2025-26')  // CRITICAL: Only current year
-        .eq('status', 'active')          // CRITICAL: Only active students
+        .eq('status', 'active')  // Only active students
         .order('student_no', { ascending: true });
 
       if (error) {
-        console.error('Error loading students:', error);
+        console.error('❌ Error loading students:', error);
         setStudents([]);
         return;
+      }
+
+      console.log('✅ ClassCard - Students loaded:', classStudents?.length || 0);
+      
+      if (classStudents && classStudents.length > 0) {
+        console.log('  Students:');
+        classStudents.forEach(s => {
+          console.log(`    ${s.student_no}. ${s.name} (${s.class_name})`);
+        });
       }
 
       setStudents(classStudents || []);
@@ -49,13 +59,16 @@ useEffect(() => {
       // Calculate stats
       updateStats(classStudents || [], attendance);
     } catch (error) {
-      console.error('Error loading attendance:', error);
+      console.error('❌ Error loading attendance:', error);
       setStudents([]);
     }
-  };
+  }, [cls.id, cls.class, dateKey, attendanceService]); // ✅ All dependencies
 
-  loadData();
-}, [cls.id, cls.class, dateKey, attendanceService]);
+  // ✅ FIX: Re-run when dependencies change
+  useEffect(() => {
+    console.log('🔄 ClassCard - useEffect triggered');
+    loadData();
+  }, [loadData]); // ✅ Include callback
 
   const updateStats = (studentList, attendanceData) => {
     const newStats = {
@@ -77,6 +90,8 @@ useEffect(() => {
 
   const handleMarkAttendance = async (studentId, status) => {
     try {
+      console.log(`✏️ Marking attendance: ${status} for student ${studentId}`);
+      
       // Optimistic update - update UI immediately
       const updatedRecord = await attendanceService.markAttendance(dateKey, cls.id, studentId, status);
       
@@ -93,8 +108,9 @@ useEffect(() => {
       };
       updateStats(students, newAttendance);
 
+      console.log('✅ Attendance marked successfully');
     } catch (error) {
-      console.error('Error marking attendance:', error);
+      console.error('❌ Error marking attendance:', error);
       alert('Failed to mark attendance. Please try again.');
       
       // Reload from database on error
@@ -115,6 +131,8 @@ useEffect(() => {
 
   const saveBehaviorComment = async () => {
     try {
+      console.log('💬 Saving behavior comment for student:', selectedStudent);
+      
       await attendanceService.updateComment(dateKey, cls.id, selectedStudent, behaviorComment);
       
       // Update local state
@@ -127,8 +145,10 @@ useEffect(() => {
       setShowBehaviorModal(false);
       setBehaviorComment('');
       setSelectedStudent(null);
+      
+      console.log('✅ Comment saved successfully');
     } catch (error) {
-      console.error('Error saving comment:', error);
+      console.error('❌ Error saving comment:', error);
       alert('Failed to save comment. Please try again.');
     }
   };
@@ -178,75 +198,87 @@ useEffect(() => {
           </div>
         </div>
 
+        {/* Debug Info
+        <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+          <p><strong>Debug:</strong> Class={cls.class}, Students={students.length}, DateKey={dateKey}</p>
+        </div> */}
+
         {/* Student List */}
-        <div className="space-y-2">
-          {students.map((student) => {
-            const attendanceData = localAttendance[student.id];
+        {students.length === 0 ? (
+          <div className="text-center py-8 bg-gray-50 rounded-lg">
+            <p className="text-gray-500">No students found in {cls.class}</p>
+            <p className="text-xs text-gray-400 mt-2">Check console for details</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {students.map((student) => {
+              const attendanceData = localAttendance[student.id];
 
-            return (
-              <div
-                key={student.id}
-                className="flex items-center justify-between p-3 rounded-xl border border-gray-100 hover:bg-emerald-50 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-full flex items-center justify-center">
-                    <span className="text-sm font-semibold text-emerald-700">
-                      {student.student_no}
-                    </span>
+              return (
+                <div
+                  key={student.id}
+                  className="flex items-center justify-between p-3 rounded-xl border border-gray-100 hover:bg-emerald-50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-full flex items-center justify-center">
+                      <span className="text-sm font-semibold text-emerald-700">
+                        {student.student_no}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-800">{student.name}</p>
+                      {attendanceData?.comment && (
+                        <p className="text-xs text-gray-500 italic">
+                          💬 {attendanceData.comment}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-semibold text-gray-800">{student.name}</p>
-                    {attendanceData?.comment && (
-                      <p className="text-xs text-gray-500 italic">
-                        💬 {attendanceData.comment}
-                      </p>
-                    )}
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleMarkAttendance(student.id, 'present')}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                        attendanceData?.status === 'present'
+                          ? 'bg-green-500 text-white shadow-md'
+                          : 'bg-gray-100 text-gray-600 hover:bg-green-100'
+                      }`}
+                    >
+                      Present
+                    </button>
+                    <button
+                      onClick={() => handleMarkAttendance(student.id, 'late')}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                        attendanceData?.status === 'late'
+                          ? 'bg-orange-500 text-white shadow-md'
+                          : 'bg-gray-100 text-gray-600 hover:bg-orange-100'
+                      }`}
+                    >
+                      Late
+                    </button>
+                    <button
+                      onClick={() => handleMarkAttendance(student.id, 'absent')}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                        attendanceData?.status === 'absent'
+                          ? 'bg-red-500 text-white shadow-md'
+                          : 'bg-gray-100 text-gray-600 hover:bg-red-100'
+                      }`}
+                    >
+                      Absent
+                    </button>
+                    <button
+                      onClick={() => openBehaviorModal(student.id)}
+                      className="p-2 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors"
+                      title="Add behavior comment"
+                    >
+                      <MessageSquare size={18} />
+                    </button>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleMarkAttendance(student.id, 'present')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      attendanceData?.status === 'present'
-                        ? 'bg-green-500 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-600 hover:bg-green-100'
-                    }`}
-                  >
-                    Present
-                  </button>
-                  <button
-                    onClick={() => handleMarkAttendance(student.id, 'late')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      attendanceData?.status === 'late'
-                        ? 'bg-orange-500 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-600 hover:bg-orange-100'
-                    }`}
-                  >
-                    Late
-                  </button>
-                  <button
-                    onClick={() => handleMarkAttendance(student.id, 'absent')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      attendanceData?.status === 'absent'
-                        ? 'bg-red-500 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-600 hover:bg-red-100'
-                    }`}
-                  >
-                    Absent
-                  </button>
-                  <button
-                    onClick={() => openBehaviorModal(student.id)}
-                    className="p-2 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors"
-                    title="Add behavior comment"
-                  >
-                    <MessageSquare size={18} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Behavior Comment Modal */}

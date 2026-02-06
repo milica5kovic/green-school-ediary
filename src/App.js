@@ -53,10 +53,11 @@ const AppContent = () => {
   }
 
   // Show login page if not authenticated
-  if (!user) {
+  if (!user || !profile) {
     return <LoginPage />;
   }
 
+  // Render page based on role and route
   const renderPage = () => {
     if (loading) {
       return <LoadingSpinner message="Loading..." />;
@@ -66,83 +67,67 @@ const AppContent = () => {
       return <ErrorMessage message={error} onRetry={loadAllStudents} />;
     }
 
+    // Parent routing
+    if (isParent()) {
+      switch (currentPage) {
+        case "home":
+          return <ParentDashboard />;
+        case "homework":
+          return <ParentHomeworkPage />;
+        case "grading":
+          return <ParentGradesPage />;
+        case "parent-attendance":
+          return <ParentAttendancePage />;
+        case "parent-daily":
+          return <ParentDailyViewPage />;
+        case "my-child":
+          return <ParentMyChildPage />;
+        case "settings":
+          return <SettingsPage />;
+        default:
+          return <ParentDashboard />;
+      }
+    }
+
+    // Teacher/Admin routing
     switch (currentPage) {
       case "home":
-        if (isParent()) {
-          return <ParentDashboard />;
-        }
         return <HomePage />;
-
+      
       case "schedule":
-        if (isParent()) {
-          return <UnauthorizedPage />;
-        }
         return <SchedulePage />;
-
+      
       case "homework":
-        if (isParent()) {
-          return <ParentHomeworkPage />;
-        }
         return <HomeworkPage />;
-
+      
+      case "grading":
+        return <GradesPage />;
+      
+      case "tasks":
+        return <TodoPage />;
+      
+      case "test-maker":
+        return <TestMakerPage />;
+      
       case "daily-overview":
         if (!teacher?.class_teacher_for) {
           return <UnauthorizedPage />;
         }
         return <DailyOverviewPage />;
-
-      case "parent-daily":
-        if (!isParent()) {
-          return <UnauthorizedPage />;
-        }
-        return <ParentDailyViewPage />;
-
-      case "grading":
-        if (isParent()) {
-          return <ParentGradesPage />;
-        }
-        return <GradesPage />;
-
-      case "my-child":
-        if (!isParent()) {
-          return <UnauthorizedPage />;
-        }
-        return <ParentMyChildPage />;
-
-      case "parent-attendance":
-        if (!isParent()) {
-          return <UnauthorizedPage />;
-        }
-        return <ParentAttendancePage />;
-
-      case "test-maker":
-        if (isParent()) {
-          return <UnauthorizedPage />;
-        }
-        return <TestMakerPage />;
-
-      case "tasks":
-        if (isParent()) {
-          return <UnauthorizedPage />;
-        }
-        return <TodoPage />;
-
+      
       case "management":
         if (!isAdmin()) {
           return <UnauthorizedPage />;
         }
         return <ManagementPage />;
-
+      
       case "settings":
         return <SettingsPage />;
-
+      
       case "unauthorized":
         return <UnauthorizedPage />;
-
+      
       default:
-        if (isParent()) {
-          return <ParentDashboard />;
-        }
         return <HomePage />;
     }
   };
@@ -172,15 +157,10 @@ const AppContent = () => {
           <div className="flex items-center gap-4">
             <div className="text-right">
               <p className="text-sm font-semibold text-gray-700">
-                {teacher?.full_name ||
-                  profile?.full_name ||
-                  profile?.email ||
-                  "User"}
+                {teacher?.full_name || profile?.full_name || profile?.email || "User"}
               </p>
               <p className="text-xs text-emerald-600">
-                {teacher?.subjects?.join(", ") ||
-                  profile?.role?.toUpperCase() ||
-                  "User"}
+                {teacher?.subjects?.join(", ") || profile?.role?.toUpperCase() || "User"}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -207,82 +187,36 @@ const AppContent = () => {
         {/* Sidebar */}
         <aside className="w-64 bg-white rounded-2xl shadow-lg p-6 h-fit sticky top-6 border border-emerald-100">
           <nav className="space-y-2">
-            {/* PARENT NAVIGATION */}
             {isParent() ? (
+              // PARENT NAVIGATION
               <>
                 <NavItem icon={BookOpen} label="Dashboard" page="home" />
                 <NavItem icon={FileText} label="My Child" page="my-child" />
                 <NavItem icon={BarChart3} label="Grades" page="grading" />
-                <NavItem
-                  icon={Calendar}
-                  label="Attendance"
-                  page="parent-attendance"
-                />
-                <NavItem
-                  icon={Calendar}
-                  label="Daily View"
-                  page="parent-daily"
-                />
+                <NavItem icon={Calendar} label="Attendance" page="parent-attendance" />
+                <NavItem icon={Calendar} label="Daily View" page="parent-daily" />
                 <NavItem icon={FileText} label="Homework" page="homework" />
                 <NavItem icon={Settings} label="Settings" page="settings" />
               </>
             ) : (
+              // TEACHER/ADMIN NAVIGATION
               <>
-                {/* TEACHER/ADMIN NAVIGATION */}
                 <NavItem icon={BookOpen} label="Home" page="home" />
-
-                {/* Schedule - Teachers & Admins */}
-                {(isTeacher() || isAdmin()) && (
-                  <NavItem
-                    icon={Calendar}
-                    label="My Schedule"
-                    page="schedule"
-                  />
-                )}
-
-                {/* My Tasks - Teachers & Admins */}
-                {(isTeacher() || isAdmin()) && (
-                  <NavItem icon={CheckSquare} label="My Tasks" page="tasks" />
-                )}
-
-                {/* Homework - Teachers & Admins */}
-                {(isTeacher() || isAdmin()) && (
-                  <NavItem icon={FileText} label="Homework" page="homework" />
-                )}
-
-                {/* Grading - Teachers & Admins */}
-                {(isTeacher() || isAdmin()) && (
-                  <NavItem icon={BarChart3} label="Grading" page="grading" />
-                )}
-
-                {/* Daily Overview - Class Teachers only */}
+                <NavItem icon={Calendar} label="My Schedule" page="schedule" />
+                <NavItem icon={CheckSquare} label="My Tasks" page="tasks" />
+                <NavItem icon={FileText} label="Homework" page="homework" />
+                <NavItem icon={BarChart3} label="Grading" page="grading" />
+                
                 {teacher?.class_teacher_for && (
-                  <NavItem
-                    icon={Calendar}
-                    label="Daily Overview"
-                    page="daily-overview"
-                  />
+                  <NavItem icon={Calendar} label="Daily Overview" page="daily-overview" />
                 )}
-
-                {/* Test Maker - Teachers & Admins */}
-                {(isTeacher() || isAdmin()) && (
-                  <NavItem
-                    icon={FileText}
-                    label="Test Maker"
-                    page="test-maker"
-                  />
-                )}
-
-                {/* Management - ONLY ADMINS */}
+                
+                <NavItem icon={FileText} label="Test Maker" page="test-maker" />
+                
                 {isAdmin() && (
-                  <NavItem
-                    icon={Settings}
-                    label="Management"
-                    page="management"
-                  />
+                  <NavItem icon={Settings} label="Management" page="management" />
                 )}
-
-                {/* Settings - Teachers (Account only) */}
+                
                 {isTeacher() && !isAdmin() && (
                   <NavItem icon={Settings} label="Settings" page="settings" />
                 )}

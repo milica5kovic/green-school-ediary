@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 
 const AuthContext = createContext(null);
 
@@ -16,10 +16,14 @@ export const AuthProvider = ({ children, supabase }) => {
   const [teacher, setTeacher] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // Track if we're in the middle of signing out
+  const isSigningOut = useRef(false);
+  const isMounted = useRef(true);
 
   // Load user profile from profiles table
   const loadProfile = useCallback(async (userId) => {
-    if (!supabase || !userId) return null;
+    if (!supabase || !userId || isSigningOut.current) return null;
     
     try {
       const { data, error: profileError } = await supabase
@@ -29,22 +33,21 @@ export const AuthProvider = ({ children, supabase }) => {
         .single();
 
       if (profileError) {
-        console.error('Profile load error:', profileError);
+        console.error('❌ Profile load error:', profileError);
         return null;
       }
 
-      setProfile(data);
-      console.log('Profile loaded:', data);
+      console.log('✅ Profile loaded:', data?.role);
       return data;
     } catch (err) {
-      console.error('Error loading profile:', err);
+      console.error('❌ Error loading profile:', err);
       return null;
     }
   }, [supabase]);
 
   // Load teacher info from teachers table
   const loadTeacher = useCallback(async (userId) => {
-    if (!supabase || !userId) return null;
+    if (!supabase || !userId || isSigningOut.current) return null;
     
     try {
       const { data, error: teacherError } = await supabase
@@ -54,135 +57,166 @@ export const AuthProvider = ({ children, supabase }) => {
         .single();
 
       if (teacherError) {
-        console.error('Teacher load error:', teacherError);
+        console.log('ℹ️ No teacher profile for user');
         return null;
       }
 
-      setTeacher(data);
-      console.log('Teacher loaded:', data);
+      console.log('✅ Teacher loaded');
       return data;
     } catch (err) {
-      console.error('Error loading teacher:', err);
+      console.error('❌ Error loading teacher:', err);
       return null;
     }
   }, [supabase]);
+
+  // Centralized state clearing function
+  const clearAuthState = useCallback(() => {
+    console.log('🔒 Clearing auth state');
+    if (!isMounted.current) return;
+    
+    setUser(null);
+    setProfile(null);
+    setTeacher(null);
+    setError(null);
+  }, []);
 
   // Initialize auth on mount
   useEffect(() => {
     if (!supabase) return;
 
     let mounted = true;
+    isMounted.current = true;
 
     const initAuth = async () => {
       try {
+        setLoading(true);
+        console.log('🔐 Initializing auth...');
+        
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) throw sessionError;
 
-        if (session?.user && mounted) {
+        if (session?.user && mounted && !isSigningOut.current) {
+          console.log('✅ Session found');
           setUser(session.user);
+          
           const profileData = await loadProfile(session.user.id);
+          if (mounted) setProfile(profileData);
           
           // Only load teacher if user is teacher or admin
           if (profileData?.role === 'teacher' || profileData?.role === 'admin') {
-            await loadTeacher(session.user.id);
+            const teacherData = await loadTeacher(session.user.id);
+            if (mounted) setTeacher(teacherData);
           }
+        } else {
+          console.log('ℹ️ No session');
+          if (mounted) clearAuthState();
         }
       } catch (err) {
-        console.error('Auth init error:', err);
+        console.error('❌ Auth init error:', err);
         if (mounted) {
           setError(err.message);
+          clearAuthState();
         }
       } finally {
-        if (mounted) {
-          setLoading(false);
-        }
+        if (mounted) setLoading(false);
       }
     };
 
     initAuth();
 
-    // Listen for auth state changes
+    // Handle auth state changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth event:', event);
+      console.log('🔔 Auth event:', event);
       
-      if (session?.user && mounted) {
-        setUser(session.user);
-        const profileData = await loadProfile(session.user.id);
-        
-        if (profileData?.role === 'teacher' || profileData?.role === 'admin') {
-          await loadTeacher(session.user.id);
-        }
-      } else if (mounted) {
-        setUser(null);
-        setProfile(null);
-        setTeacher(null);
-      }
-      
-      if (mounted) {
+      if (!mounted) return;
+
+      // If signing out, only clear state
+      if (isSigningOut.current || event === 'SIGNED_OUT') {
+        console.log('👋 Signed out');
+        clearAuthState();
         setLoading(false);
+        isSigningOut.current = false;
+        return;
       }
+
+      // Handle sign in and token refresh (keeps user logged in)
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (session?.user) {
+          console.log('🔐 Loading user data after', event);
+          setUser(session.user);
+          
+          const profileData = await loadProfile(session.user.id);
+          if (mounted) setProfile(profileData);
+          
+          if (profileData?.role === 'teacher' || profileData?.role === 'admin') {
+            const teacherData = await loadTeacher(session.user.id);
+            if (mounted) setTeacher(teacherData);
+          }
+        }
+      }
+      
+      if (mounted) setLoading(false);
     });
 
     return () => {
+      console.log('🧹 Cleanup auth subscription');
       mounted = false;
+      isMounted.current = false;
       subscription?.unsubscribe();
     };
-  }, [supabase, loadProfile, loadTeacher]);
+  }, [supabase, loadProfile, loadTeacher, clearAuthState]);
 
-const signIn = async (email, password) => {
-  try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
+  const signIn = async (email, password) => {
+    try {
+      setLoading(true);
+      setError(null);
+      isSigningOut.current = false;
 
-    if (error) throw error;
+      console.log('🔐 Signing in...');
 
-    // Load profile
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', data.user.id)
-      .single();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
 
-    setProfile(profileData);
+      if (error) throw error;
 
-    // Load teacher data if exists
-    const { data: teacherData } = await supabase
-      .from('teachers')
-      .select('*')
-      .eq('user_id', data.user.id)
-      .single();
-
-    if (teacherData) {
-      setTeacher(teacherData);
+      console.log('✅ Sign in successful');
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Sign in error:', error);
+      setError(error.message);
+      setLoading(false);
+      return { success: false, error: error.message };
     }
-
-    return { success: true };
-  } catch (error) {
-    console.error('Sign in error:', error);
-    return { success: false, error: error.message };
-  }
-};
+  };
 
   const signOut = async () => {
-    setError(null);
-    
     try {
-      const { error: signOutError } = await supabase.auth.signOut();
+      console.log('🚪 Signing out...');
       
-      if (signOutError) throw signOutError;
-
-      setUser(null);
-      setProfile(null);
-      setTeacher(null);
+      // Set flag to prevent reloading during sign out
+      isSigningOut.current = true;
       
-      return { success: true };
-    } catch (err) {
-      console.error('Sign out error:', err);
-      setError(err.message);
-      return { success: false, error: err.message };
+      // Clear state immediately
+      clearAuthState();
+      
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('⚠️ Supabase sign out error:', error);
+      }
+      
+      console.log('✅ Signed out');
+      
+      // Force redirect to login
+      window.location.href = '/';
+    } catch (error) {
+      console.error('❌ Sign out error:', error);
+      // Even on error, redirect to login
+      window.location.href = '/';
     }
   };
 
@@ -198,88 +232,51 @@ const signIn = async (email, password) => {
 
       return { success: true };
     } catch (err) {
-      console.error('Password update error:', err);
+      console.error('❌ Password update error:', err);
       setError(err.message);
       return { success: false, error: err.message };
     }
   };
 
-  const isAdmin = () => {
-  return profile?.role === 'admin';
-};
-
-const isTeacher = () => {
-  return profile?.role === 'teacher' || profile?.role === 'admin';
-};
-
-const isParent = () => {
-  return profile?.role === 'parent';
-};
-
-const isClassTeacher = () => {
-  return teacher?.class_teacher_for !== null && teacher?.class_teacher_for !== undefined;
-};
-
-const getClassTeacherFor = () => {
-  return teacher?.class_teacher_for || null;
-};
-
-// Permission checks
-const canManageStudents = () => {
-  return profile?.role === 'admin';
-};
-
-const canManageSettings = () => {
-  return profile?.role === 'admin';
-};
-
-const canAddGrades = () => {
-  return profile?.role === 'teacher' || profile?.role === 'admin';
-};
-
-const canMarkAttendance = () => {
-  return profile?.role === 'teacher' || profile?.role === 'admin';
-};
-
-const canCreateHomework = () => {
-  return profile?.role === 'teacher' || profile?.role === 'admin';
-};
-
-const canViewAllClasses = () => {
-  return profile?.role === 'admin';
-};
-
-const getTeacherSubjects = () => {
-  return teacher?.subjects || [];
-};
-
-const getTeacherId = () => {
-  return teacher?.id || null;
-};
+  // Permission helpers
+  const isAdmin = () => profile?.role === 'admin';
+  const isTeacher = () => profile?.role === 'teacher' || profile?.role === 'admin';
+  const isParent = () => profile?.role === 'parent';
+  const isClassTeacher = () => !!teacher?.class_teacher_for;
+  const getClassTeacherFor = () => teacher?.class_teacher_for || null;
+  const canManageStudents = () => profile?.role === 'admin';
+  const canManageSettings = () => profile?.role === 'admin';
+  const canAddGrades = () => profile?.role === 'teacher' || profile?.role === 'admin';
+  const canMarkAttendance = () => profile?.role === 'teacher' || profile?.role === 'admin';
+  const canCreateHomework = () => profile?.role === 'teacher' || profile?.role === 'admin';
+  const canViewAllClasses = () => profile?.role === 'admin';
+  const getTeacherSubjects = () => teacher?.subjects || [];
+  const getTeacherId = () => teacher?.id || null;
 
   const value = {
-  user,
-  profile,
-  teacher,
-  loading,
-  error,
-  signIn,
-  signOut,
-  updatePassword,
-  isAdmin,
-  isTeacher,
-  isParent,
-  isClassTeacher,
-  getClassTeacherFor,
-  canManageStudents,
-  canManageSettings,
-  canAddGrades,
-  canMarkAttendance,
-  canCreateHomework,
-  canViewAllClasses,
-  getTeacherSubjects,
-  getTeacherId,
-};
+    user,
+    profile,
+    teacher,
+    loading,
+    error,
+    signIn,
+    signOut,
+    updatePassword,
+    isAdmin,
+    isTeacher,
+    isParent,
+    isClassTeacher,
+    getClassTeacherFor,
+    canManageStudents,
+    canManageSettings,
+    canAddGrades,
+    canMarkAttendance,
+    canCreateHomework,
+    canViewAllClasses,
+    getTeacherSubjects,
+    getTeacherId,
+  };
+
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
