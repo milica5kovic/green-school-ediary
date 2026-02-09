@@ -1,29 +1,29 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { FileText, Plus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { FileText, Plus, Search, Filter, Calendar, Clock, CheckCircle2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { useAuth } from '../../context/AuthContext';
 import HomeworkCard from './HomeworkCard';
 import HomeworkModal from './HomeworkModal';
 
 const HomeworkPage = () => {
   const { supabase } = useApp();
-  const { teacher, profile } = useAuth();
   
   const [homework, setHomework] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingHomework, setEditingHomework] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterClass, setFilterClass] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
 
-  // ✅ FIX: Load homework with proper dependencies
-  const loadHomework = useCallback(async () => {
-    if (!supabase) {
-      console.log('⚠️ No supabase client available');
-      return;
-    }
+  useEffect(() => {
+    loadHomework();
+  }, []);
+
+  const loadHomework = async () => {
+    if (!supabase) return;
     
     try {
       setLoading(true);
-      console.log('📚 HomeworkPage - Loading homework...');
       
       const { data, error } = await supabase
         .from('homework')
@@ -32,53 +32,35 @@ const HomeworkPage = () => {
       
       if (error) throw error;
       
-      console.log('✅ HomeworkPage - Homework loaded:', data?.length || 0);
       setHomework(data || []);
     } catch (error) {
       console.error('❌ Error loading homework:', error);
-      setHomework([]);
     } finally {
       setLoading(false);
     }
-  }, [supabase]); // ✅ Include supabase as dependency
-
-  // ✅ FIX: Re-run when component mounts or supabase changes
-  useEffect(() => {
-    console.log('🔄 HomeworkPage - Mounting/Updating');
-    loadHomework();
-  }, [loadHomework]); // ✅ Include callback as dependency
+  };
 
   const handleAdd = async (homeworkData) => {
     if (!supabase) return;
     
-    // ✅ FIX: Validate class_name
-    if (!homeworkData.class_name) {
-      alert('Please select a class');
-      return;
-    }
-    
     try {
       setLoading(true);
-      console.log('➕ Adding homework:', homeworkData);
       
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('homework')
         .insert([{
-          homework_id: `hw_${Date.now()}`,
-          class_name: homeworkData.class_name, // ✅ CRITICAL: Include class_name
+          homework_id: 'hw_' + Date.now(),
+          class_name: homeworkData.class_name,
           subject: homeworkData.subject,
           title: homeworkData.title,
           description: homeworkData.description || null,
           due_date: homeworkData.due_date,
           assigned_date: new Date().toISOString().split('T')[0],
-          status: 'pending'
-        }])
-        .select()
-        .single();
+          status: 'pending',
+          attachments: homeworkData.attachments || []
+        }]);
       
       if (error) throw error;
-      
-      console.log('✅ Homework added successfully:', data);
       
       await loadHomework();
       setShowModal(false);
@@ -95,7 +77,6 @@ const HomeworkPage = () => {
     
     try {
       setLoading(true);
-      console.log('✏️ Updating homework:', editingHomework.id);
       
       const { error } = await supabase
         .from('homework')
@@ -105,12 +86,11 @@ const HomeworkPage = () => {
           title: homeworkData.title,
           description: homeworkData.description || null,
           due_date: homeworkData.due_date,
+          attachments: homeworkData.attachments || []
         })
         .eq('id', editingHomework.id);
       
       if (error) throw error;
-      
-      console.log('✅ Homework updated successfully');
       
       await loadHomework();
       setShowModal(false);
@@ -124,15 +104,10 @@ const HomeworkPage = () => {
   };
 
   const handleDelete = async (homeworkId) => {
-    if (!supabase) return;
-    
-    if (!window.confirm('Are you sure you want to delete this homework?')) {
-      return;
-    }
+    if (!window.confirm('Delete this homework? This cannot be undone.')) return;
     
     try {
       setLoading(true);
-      console.log('🗑️ Deleting homework:', homeworkId);
       
       const { error } = await supabase
         .from('homework')
@@ -140,8 +115,6 @@ const HomeworkPage = () => {
         .eq('id', homeworkId);
       
       if (error) throw error;
-      
-      console.log('✅ Homework deleted successfully');
       
       await loadHomework();
     } catch (error) {
@@ -152,80 +125,164 @@ const HomeworkPage = () => {
     }
   };
 
-  const openEditModal = (hw) => {
-    setEditingHomework(hw);
-    setShowModal(true);
-  };
+  // Filter homework
+  const filteredHomework = homework.filter(hw => {
+    const matchesSearch = hw.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         hw.subject.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesClass = filterClass === 'all' || hw.class_name === filterClass;
+    const matchesStatus = filterStatus === 'all' || hw.status === filterStatus;
+    return matchesSearch && matchesClass && matchesStatus;
+  });
 
-  const closeModal = () => {
-    setShowModal(false);
-    setEditingHomework(null);
-  };
+  // Categorize
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const overdue = filteredHomework.filter(hw => 
+    hw.status === 'pending' && new Date(hw.due_date) < today
+  );
+  
+  const upcoming = filteredHomework.filter(hw => {
+    const dueDate = new Date(hw.due_date);
+    const daysUntil = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+    return hw.status === 'pending' && daysUntil >= 0 && daysUntil <= 7;
+  });
+  
+  const pending = filteredHomework.filter(hw => hw.status === 'pending');
+  const completed = filteredHomework.filter(hw => hw.status === 'completed');
 
-  // Group homework by status
-  const pendingHomework = homework.filter(hw => hw.status === 'pending');
-  const completedHomework = homework.filter(hw => hw.status === 'completed');
+  // Get unique classes
+  const classes = [...new Set(homework.map(hw => hw.class_name))].sort();
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white rounded-2xl shadow-lg p-6 border border-emerald-100">
-        <div className="flex justify-between items-center">
+      <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-xl p-8 text-white">
+        <div className="flex justify-between items-start">
           <div>
-            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-              <FileText size={24} className="text-emerald-600" />
-              Homework Management
-            </h2>
-            <p className="text-gray-600 mt-1">Assign and track homework</p>
+            <h2 className="text-3xl font-bold mb-2">Homework Management</h2>
+            <p className="text-emerald-100">Assign, track, and manage assignments</p>
           </div>
-          
           <button
             onClick={() => setShowModal(true)}
-            disabled={loading}
-            className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-white text-emerald-600 px-6 py-3 rounded-xl flex items-center gap-2 hover:shadow-lg transition-all font-semibold"
           >
             <Plus size={20} />
-            Add Homework
+            New Assignment
           </button>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-4 mt-6">
-          <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
-            <p className="text-3xl font-bold text-orange-600">{pendingHomework.length}</p>
-            <p className="text-sm text-orange-700">Pending</p>
+        {/* Quick Stats */}
+        <div className="grid grid-cols-4 gap-4 mt-8">
+          <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 border border-white/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-emerald-100 text-sm mb-1">Total</p>
+                <p className="text-3xl font-bold">{homework.length}</p>
+              </div>
+              <FileText size={32} className="opacity-50" />
+            </div>
           </div>
-          <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
-            <p className="text-3xl font-bold text-emerald-600">{completedHomework.length}</p>
-            <p className="text-sm text-emerald-700">Completed</p>
+          
+          <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 border border-white/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-emerald-100 text-sm mb-1">Due Soon</p>
+                <p className="text-3xl font-bold">{upcoming.length}</p>
+              </div>
+              <Clock size={32} className="opacity-50" />
+            </div>
+          </div>
+          
+          <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 border border-white/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-red-100 text-sm mb-1">Overdue</p>
+                <p className="text-3xl font-bold">{overdue.length}</p>
+              </div>
+              <Calendar size={32} className="opacity-50" />
+            </div>
+          </div>
+          
+          <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 border border-white/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-emerald-100 text-sm mb-1">Completed</p>
+                <p className="text-3xl font-bold">{completed.length}</p>
+              </div>
+              <CheckCircle2 size={32} className="opacity-50" />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Homework List */}
-      {loading && homework.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-500">Loading homework...</p>
+      {/* Filters */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <div className="flex gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+            <input
+              type="text"
+              placeholder="Search homework..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
+            />
+          </div>
+          
+          <select
+            value={filterClass}
+            onChange={(e) => setFilterClass(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+          >
+            <option value="all">All Classes</option>
+            {classes.map(cls => (
+              <option key={cls} value={cls}>{cls}</option>
+            ))}
+          </select>
+          
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+          >
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="completed">Completed</option>
+          </select>
         </div>
-      ) : homework.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow-lg p-12 text-center border border-emerald-100">
-          <FileText size={48} className="mx-auto text-emerald-300 mb-4" />
-          <p className="text-gray-500">No homework assigned yet</p>
-          <p className="text-sm text-gray-400 mt-2">Click "Add Homework" to get started</p>
+      </div>
+
+      {/* Homework List */}
+      {loading ? (
+        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      ) : filteredHomework.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+          <FileText size={64} className="mx-auto text-gray-300 mb-4" />
+          <p className="text-gray-500 text-lg">No homework found</p>
+          <p className="text-gray-400 text-sm mt-2">Try adjusting your filters or create a new assignment</p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {/* Pending Homework */}
-          {pendingHomework.length > 0 && (
+        <div className="space-y-4">
+          {/* Overdue Section */}
+          {overdue.length > 0 && (
             <div>
-              <h3 className="text-lg font-bold text-gray-800 mb-4">📝 Pending Homework</h3>
-              <div className="space-y-4">
-                {pendingHomework.map(hw => (
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-1 h-6 bg-red-500 rounded"></div>
+                <h3 className="text-lg font-bold text-gray-800">Overdue ({overdue.length})</h3>
+              </div>
+              <div className="grid gap-3">
+                {overdue.map(hw => (
                   <HomeworkCard
                     key={hw.id}
                     homework={hw}
-                    onEdit={openEditModal}
+                    onEdit={(hw) => {
+                      setEditingHomework(hw);
+                      setShowModal(true);
+                    }}
                     onDelete={handleDelete}
                   />
                 ))}
@@ -233,16 +290,68 @@ const HomeworkPage = () => {
             </div>
           )}
 
-          {/* Completed Homework */}
-          {completedHomework.length > 0 && (
+          {/* Upcoming Section */}
+          {upcoming.length > 0 && (
             <div>
-              <h3 className="text-lg font-bold text-gray-800 mb-4">✅ Completed Homework</h3>
-              <div className="space-y-4">
-                {completedHomework.map(hw => (
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-1 h-6 bg-orange-500 rounded"></div>
+                <h3 className="text-lg font-bold text-gray-800">Due This Week ({upcoming.length})</h3>
+              </div>
+              <div className="grid gap-3">
+                {upcoming.map(hw => (
                   <HomeworkCard
                     key={hw.id}
                     homework={hw}
-                    onEdit={openEditModal}
+                    onEdit={(hw) => {
+                      setEditingHomework(hw);
+                      setShowModal(true);
+                    }}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Other Pending */}
+          {pending.filter(hw => !overdue.includes(hw) && !upcoming.includes(hw)).length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-1 h-6 bg-blue-500 rounded"></div>
+                <h3 className="text-lg font-bold text-gray-800">Other Pending</h3>
+              </div>
+              <div className="grid gap-3">
+                {pending.filter(hw => !overdue.includes(hw) && !upcoming.includes(hw)).map(hw => (
+                  <HomeworkCard
+                    key={hw.id}
+                    homework={hw}
+                    onEdit={(hw) => {
+                      setEditingHomework(hw);
+                      setShowModal(true);
+                    }}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Completed */}
+          {completed.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-1 h-6 bg-green-500 rounded"></div>
+                <h3 className="text-lg font-bold text-gray-800">Completed ({completed.length})</h3>
+              </div>
+              <div className="grid gap-3">
+                {completed.map(hw => (
+                  <HomeworkCard
+                    key={hw.id}
+                    homework={hw}
+                    onEdit={(hw) => {
+                      setEditingHomework(hw);
+                      setShowModal(true);
+                    }}
                     onDelete={handleDelete}
                   />
                 ))}
@@ -255,7 +364,10 @@ const HomeworkPage = () => {
       {/* Modal */}
       {showModal && (
         <HomeworkModal
-          onClose={closeModal}
+          onClose={() => {
+            setShowModal(false);
+            setEditingHomework(null);
+          }}
           onSave={editingHomework ? handleEdit : handleAdd}
           existingHomework={editingHomework}
         />

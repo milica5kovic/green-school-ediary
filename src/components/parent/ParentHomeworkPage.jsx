@@ -48,13 +48,7 @@ const ParentHomeworkPage = () => {
     loadData();
   }, [loadData]);
 
-  useEffect(() => {
-    if (selectedChild) {
-      loadHomework();
-    }
-  }, [selectedChild]);
-
-  const loadHomework = async () => {
+  const loadHomework = useCallback(async () => {
     if (!selectedChild) return;
     
     try {
@@ -68,7 +62,13 @@ const ParentHomeworkPage = () => {
     } catch (error) {
       console.error('Error loading homework:', error);
     }
-  };
+  }, [selectedChild, supabase]);
+
+  useEffect(() => {
+    if (selectedChild) {
+      loadHomework();
+    }
+  }, [selectedChild, loadHomework]);
 
   const categorizeHomework = () => {
     const today = new Date();
@@ -97,11 +97,11 @@ const ParentHomeworkPage = () => {
     
     const diff = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
     
-    if (diff < 0) return { text: `${Math.abs(diff)} days overdue`, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' };
+    if (diff < 0) return { text: Math.abs(diff) + ' days overdue', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' };
     if (diff === 0) return { text: 'Due today', color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200' };
     if (diff === 1) return { text: 'Due tomorrow', color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200' };
-    if (diff <= 7) return { text: `Due in ${diff} days`, color: 'text-gray-700', bg: 'bg-gray-50', border: 'border-gray-200' };
-    return { text: `Due in ${diff} days`, color: 'text-gray-600', bg: 'bg-white', border: 'border-gray-200' };
+    if (diff <= 7) return { text: 'Due in ' + diff + ' days', color: 'text-gray-700', bg: 'bg-gray-50', border: 'border-gray-200' };
+    return { text: 'Due in ' + diff + ' days', color: 'text-gray-600', bg: 'bg-white', border: 'border-gray-200' };
   };
 
   if (loading) {
@@ -120,17 +120,16 @@ const ParentHomeworkPage = () => {
     );
   }
 
-  const { overdue, dueSoon, completed } = categorizeHomework();
+  const stats = categorizeHomework();
   
   const filteredHomework = 
     filter === 'all' ? homework :
-    filter === 'overdue' ? overdue :
-    filter === 'pending' ? dueSoon :
-    completed;
+    filter === 'overdue' ? stats.overdue :
+    filter === 'pending' ? stats.dueSoon :
+    stats.completed;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between">
           <div>
@@ -157,7 +156,6 @@ const ParentHomeworkPage = () => {
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <p className="text-sm text-gray-600 mb-1">Total</p>
@@ -165,42 +163,46 @@ const ParentHomeworkPage = () => {
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <p className="text-sm text-gray-600 mb-1">Overdue</p>
-          <p className="text-2xl font-semibold text-red-600">{overdue.length}</p>
+          <p className="text-2xl font-semibold text-red-600">{stats.overdue.length}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <p className="text-sm text-gray-600 mb-1">Due This Week</p>
-          <p className="text-2xl font-semibold text-orange-600">{dueSoon.length}</p>
+          <p className="text-2xl font-semibold text-orange-600">{stats.dueSoon.length}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <p className="text-sm text-gray-600 mb-1">Completed</p>
-          <p className="text-2xl font-semibold text-emerald-600">{completed.length}</p>
+          <p className="text-2xl font-semibold text-emerald-600">{stats.completed.length}</p>
         </div>
       </div>
 
-      {/* Filter Tabs */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          {[
-            { id: 'all', label: 'All', count: homework.length },
-            { id: 'overdue', label: 'Overdue', count: overdue.length },
-            { id: 'pending', label: 'Due This Week', count: dueSoon.length },
-            { id: 'completed', label: 'Completed', count: completed.length }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setFilter(tab.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                filter === tab.id
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {tab.label} ({tab.count})
-            </button>
-          ))}
+          <button
+            onClick={() => setFilter('all')}
+            className={filter === 'all' ? 'px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors bg-emerald-600 text-white' : 'px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200'}
+          >
+            All ({homework.length})
+          </button>
+          <button
+            onClick={() => setFilter('overdue')}
+            className={filter === 'overdue' ? 'px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors bg-emerald-600 text-white' : 'px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200'}
+          >
+            Overdue ({stats.overdue.length})
+          </button>
+          <button
+            onClick={() => setFilter('pending')}
+            className={filter === 'pending' ? 'px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors bg-emerald-600 text-white' : 'px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200'}
+          >
+            Due This Week ({stats.dueSoon.length})
+          </button>
+          <button
+            onClick={() => setFilter('completed')}
+            className={filter === 'completed' ? 'px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors bg-emerald-600 text-white' : 'px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200'}
+          >
+            Completed ({stats.completed.length})
+          </button>
         </div>
 
-        {/* Homework List */}
         {filteredHomework.length === 0 ? (
           <div className="text-center py-12 bg-gray-50 rounded-lg">
             <Clock size={48} className="mx-auto text-gray-300 mb-4" />
@@ -217,17 +219,13 @@ const ParentHomeworkPage = () => {
               const dueInfo = getDaysUntilDue(hw.due_date);
               
               return (
-                <div key={hw.id} className={`p-4 rounded-lg border ${dueInfo.border} ${dueInfo.bg} hover:shadow-sm transition-shadow`}>
+                <div key={hw.id} className={'p-4 rounded-lg border hover:shadow-sm transition-shadow ' + dueInfo.border + ' ' + dueInfo.bg}>
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex-1">
                       <h4 className="font-semibold text-gray-900">{hw.title}</h4>
                       <p className="text-sm text-gray-600 mt-1">{hw.subject}</p>
                     </div>
-                    <span className={`text-xs font-medium px-2 py-1 rounded ${
-                      hw.status === 'completed' 
-                        ? 'bg-emerald-100 text-emerald-700' 
-                        : 'bg-gray-100 text-gray-700'
-                    }`}>
+                    <span className={hw.status === 'completed' ? 'text-xs font-medium px-2 py-1 rounded bg-emerald-100 text-emerald-700' : 'text-xs font-medium px-2 py-1 rounded bg-gray-100 text-gray-700'}>
                       {hw.status}
                     </span>
                   </div>
@@ -240,7 +238,7 @@ const ParentHomeworkPage = () => {
                     <span className="text-gray-500">
                       Assigned: {new Date(hw.assigned_date).toLocaleDateString()}
                     </span>
-                    <span className={`font-medium ${dueInfo.color}`}>
+                    <span className={'font-medium ' + dueInfo.color}>
                       {dueInfo.text}
                     </span>
                   </div>

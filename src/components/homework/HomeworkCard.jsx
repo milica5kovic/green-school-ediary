@@ -1,113 +1,76 @@
-import React from "react";
-import { Calendar, FileText, Trash2 } from "lucide-react";
+import React from 'react';
+import { Calendar, FileText, Edit2, Trash2, Paperclip } from 'lucide-react';
 
-const HomeworkCard = ({ classId, homework, onEdit, onDelete }) => {
-  if (!homework || !classId) return null;
+const HomeworkCard = ({ homework, onEdit, onDelete }) => {
+  const getDaysUntilDue = (dueDate) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(dueDate);
+    due.setHours(0, 0, 0, 0);
+    
+    const diff = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
+    
+    if (diff < 0) return { text: Math.abs(diff) + 'd overdue', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' };
+    if (diff === 0) return { text: 'Due today', color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200' };
+    if (diff === 1) return { text: 'Due tomorrow', color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200' };
+    if (diff <= 7) return { text: diff + ' days left', color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' };
+    return { text: diff + ' days left', color: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-200' };
+  };
 
-  const dueDate = new Date(homework.dueDate);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  dueDate.setHours(0, 0, 0, 0);
-
-  const isOverdue = homework.isOverdue();
-  const isDueToday = homework.isDueToday();
-
-  const [className = "Unknown", classTime = ""] = classId.split("-");
+  const dueInfo = getDaysUntilDue(homework.due_date);
 
   return (
-    <div
-      className={`bg-white rounded-2xl shadow-lg p-6 border-l-4 transition-all hover:shadow-xl ${
-        isOverdue
-          ? "border-l-red-500 bg-red-50"
-          : isDueToday
-          ? "border-l-orange-500 bg-orange-50"
-          : "border-l-emerald-500"
-      }`}
-    >
-      <div className="flex justify-between items-start">
-        <div className="flex-1">
-          {/* Class Info */}
-          <div className="flex items-center gap-3 mb-3">
-            <h3 className="text-xl font-bold text-gray-800">{className}</h3>
-            <span className="text-sm bg-gray-100 text-gray-700 px-3 py-1 rounded-full font-medium">
-              {classTime}
+    <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-all">
+      <div className="flex items-start justify-between gap-4">
+        {/* Left: Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs font-medium">
+              {homework.class_name}
             </span>
+            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+              {homework.subject}
+            </span>
+            {homework.attachments && homework.attachments.length > 0 && (
+              <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium flex items-center gap-1">
+                <Paperclip size={12} />
+                {homework.attachments.length}
+              </span>
+            )}
           </div>
-
-          {/* Assignment Description */}
-          <div className="bg-white rounded-lg p-4 mb-4 border border-gray-200">
-            <p className="text-gray-800 leading-relaxed">{homework.description}</p>
-          </div>
-
-          {/* Attachments */}
-          {homework.hasAttachments() && (
-            <div className="mb-4">
-              <p className="text-sm font-semibold text-gray-700 mb-2">
-                📎 Attachments ({homework.getAttachmentCount()})
-              </p>
-              <div className="space-y-1">
-                {homework.attachments.map((att) => (
-                  <div
-                    key={att.id}
-                    className="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg"
-                  >
-                    {att.name}
-                  </div>
-                ))}
-              </div>
-            </div>
+          
+          <h4 className="font-semibold text-gray-900 mb-1 truncate">{homework.title}</h4>
+          
+          {homework.description && (
+            <p className="text-sm text-gray-600 line-clamp-2 mb-2">{homework.description}</p>
           )}
-
-          {/* Due Date Info */}
-          <div className="flex items-center gap-4">
-            <div
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
-                isOverdue
-                  ? "bg-red-100 text-red-700"
-                  : isDueToday
-                  ? "bg-orange-100 text-orange-700"
-                  : "bg-emerald-100 text-emerald-700"
-              }`}
-            >
-              <Calendar size={16} />
-              <span className="font-semibold">
-                Due: {homework.getFormattedDueDate()}
-              </span>
-            </div>
-
-            {!isOverdue && (
-              <span
-                className={`text-sm font-medium ${
-                  isDueToday ? "text-orange-600" : "text-gray-600"
-                }`}
-              >
-                {homework.getStatusText()}
-              </span>
-            )}
-
-            {isOverdue && (
-              <span className="text-sm font-medium text-red-600">
-                ⚠️ {homework.getStatusText()}
-              </span>
-            )}
+          
+          <div className="flex items-center gap-4 text-xs text-gray-500">
+            <span className="flex items-center gap-1">
+              <Calendar size={12} />
+              Assigned {new Date(homework.assigned_date).toLocaleDateString()}
+            </span>
+            <span className={'font-medium ' + dueInfo.color}>
+              {dueInfo.text}
+            </span>
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex gap-2 ml-4">
+        {/* Right: Actions */}
+        <div className="flex gap-2">
           <button
-            onClick={() => onEdit(classId)}
-            className="p-2 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors"
-            title="Edit homework"
+            onClick={() => onEdit(homework)}
+            className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+            title="Edit"
           >
-            <FileText size={20} />
+            <Edit2 size={16} />
           </button>
           <button
-            onClick={() => onDelete(classId)}
-            className="p-2 hover:bg-red-100 text-red-500 rounded-lg transition-colors"
-            title="Delete homework"
+            onClick={() => onDelete(homework.id)}
+            className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+            title="Delete"
           >
-            <Trash2 size={18} />
+            <Trash2 size={16} />
           </button>
         </div>
       </div>

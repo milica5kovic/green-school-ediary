@@ -1,96 +1,227 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, X, FileText } from 'lucide-react';
+import { X, Upload, File, Trash2, Loader } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
 
-const HomeworkModal = ({ onClose, onSave, existingHomework, classId }) => {
-  const [description, setDescription] = useState('');
-  const [dueDate, setDueDate] = useState('');
-  const [attachments, setAttachments] = useState([]);
-  const [selectedClass, setSelectedClass] = useState(classId || '');
+const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
+  const { supabase, studentsDb } = useApp();
+  
+  const [formData, setFormData] = useState({
+    class_name: existingHomework?.class_name || '',
+    subject: existingHomework?.subject || '',
+    title: existingHomework?.title || '',
+    description: existingHomework?.description || '',
+    due_date: existingHomework?.due_date || '',
+  });
 
-  // All classes Y1-Y9 with Y5A and Y5B
-  const classes = [
-    'Y1', 'Y2', 'Y3', 'Y4', 
-    'Y5A', 'Y5B', 
-    'Y6', 'Y7', 'Y8', 'Y9'
+  const [files, setFiles] = useState([]);
+  const [existingAttachments, setExistingAttachments] = useState(
+    existingHomework?.attachments || []
+  );
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  const availableClasses = Object.keys(studentsDb || {}).sort();
+  const availableSubjects = [
+    'Mathematics',
+    'ICT',
+    'English',
+    'Science',
+    'History',
+    'Geography',
+    'Art',
+    'Music',
+    'PE',
+    'Serbian'
   ];
 
-  useEffect(() => {
-    if (existingHomework) {
-      setDescription(existingHomework.description);
-      const date = new Date(existingHomework.dueDate);
-      setDueDate(date.toISOString().split('T')[0]);
-      setAttachments(existingHomework.attachments || []);
+  const handleFileSelect = (e) => {
+    const selectedFiles = Array.from(e.target.files);
+    
+    // Validate file size (10MB max)
+    const invalidFiles = selectedFiles.filter(file => file.size > 10 * 1024 * 1024);
+    if (invalidFiles.length > 0) {
+      alert('Some files exceed 10MB limit');
+      return;
     }
-    if (classId) {
-      setSelectedClass(classId);
-    }
-  }, [existingHomework, classId]);
 
-  const handleFileUpload = (e) => {
-    const files = Array.from(e.target.files);
-    const newAttachments = files.map((file) => ({
-      id: Date.now() + Math.random(),
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      url: URL.createObjectURL(file),
-    }));
-    setAttachments([...attachments, ...newAttachments]);
+    setFiles(prev => [...prev, ...selectedFiles]);
   };
 
-  const removeAttachment = (attachmentId) => {
-    setAttachments(attachments.filter((att) => att.id !== attachmentId));
+  const removeFile = (index) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleSave = () => {
-    if (description && dueDate && selectedClass) {
-      // Create a fake class ID for homework not tied to today's classes
-      const hwClassId = existingHomework 
-        ? classId 
-        : `${selectedClass}-homework-${Date.now()}`;
-      onSave(hwClassId, description, dueDate, attachments);
+  const removeExistingAttachment = async (attachment) => {
+    if (!window.confirm('Delete this file?')) return;
+
+    try {
+      const { error } = await supabase.storage
+        .from('homework-files')
+        .remove([attachment.path]);
+
+      if (error) throw error;
+
+      setExistingAttachments(prev => 
+        prev.filter(att => att.path !== attachment.path)
+      );
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      alert('Failed to delete file');
     }
+  };
+
+  const uploadFiles = async () => {
+    if (files.length === 0) return [];
+
+    setUploading(true);
+    const uploadedAttachments = [];
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileExt = file.name.split('.').pop();
+        const fileName = Date.now() + '_' + Math.random().toString(36).substring(7) + '.' + fileExt;
+        const filePath = formData.class_name + '/' + fileName;
+
+        setUploadProgress(Math.round(((i + 1) / files.length) * 100));
+
+        const { error: uploadError } = await supabase.storage
+          .from('homework-files')
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage
+          .from('homework-files')
+          .getPublicUrl(filePath);
+
+        uploadedAttachments.push({
+          name: file.name,
+          path: filePath,
+          url: urlData.publicUrl,
+          size: file.size,
+          type: file.type
+        });
+      }
+
+      return uploadedAttachments;
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('Failed to upload files: ' + error.message);
+      return [];
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!formData.class_name || !formData.subject || !formData.title || !formData.due_date) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      const newAttachments = await uploadFiles();
+      const allAttachments = [...existingAttachments, ...newAttachments];
+
+      await onSave({
+        ...formData,
+        attachments: allAttachments
+      });
+    } catch (error) {
+      console.error('Error saving:', error);
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <h3 className="text-2xl font-bold mb-6">
-          {existingHomework ? 'Edit Homework' : 'Assign Homework'}
-        </h3>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4 flex items-center justify-between">
+          <h3 className="text-xl font-bold text-white">
+            {existingHomework ? 'Edit Assignment' : 'New Assignment'}
+          </h3>
+          <button 
+            onClick={onClose} 
+            className="p-2 hover:bg-white/20 rounded-lg transition-colors text-white"
+          >
+            <X size={20} />
+          </button>
+        </div>
 
-        <div className="space-y-4">
-          {/* Class Selection */}
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
+          {/* Class */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Class/Year Group *
+              Class *
             </label>
             <select
-              className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              value={selectedClass}
-              onChange={(e) => setSelectedClass(e.target.value)}
-              disabled={!!existingHomework} // Can't change class when editing
+              value={formData.class_name}
+              onChange={(e) => setFormData({ ...formData, class_name: e.target.value })}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
+              required
             >
-              <option value="">Select class...</option>
-              {classes.map((cls) => (
-                <option key={cls} value={cls}>
-                  {cls}
-                </option>
+              <option value="">Select Class</option>
+              {availableClasses.map(className => (
+                <option key={className} value={className}>{className}</option>
               ))}
             </select>
+          </div>
+
+          {/* Subject */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Subject *
+            </label>
+            <select
+              value={formData.subject}
+              onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
+              required
+            >
+              <option value="">Select Subject</option>
+              {availableSubjects.map(subject => (
+                <option key={subject} value={subject}>{subject}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Title */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Title *
+            </label>
+            <input
+              type="text"
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
+              placeholder="e.g., Chapter 5 Exercises"
+              required
+            />
           </div>
 
           {/* Description */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Assignment Description *
+              Description
             </label>
             <textarea
-              className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              rows={4}
-              placeholder="Describe the homework assignment..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none resize-none"
+              rows="3"
+              placeholder="Assignment details..."
             />
           </div>
 
@@ -101,76 +232,139 @@ const HomeworkModal = ({ onClose, onSave, existingHomework, classId }) => {
             </label>
             <input
               type="date"
-              className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
+              value={formData.due_date}
+              onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
               min={new Date().toISOString().split('T')[0]}
+              required
             />
           </div>
 
           {/* File Upload */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Attachments (Optional)
+              Attachments
             </label>
-            <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-emerald-500 hover:bg-emerald-50 transition-colors">
-              <Upload size={24} className="text-gray-400" />
-              <span className="text-gray-600">Click to upload files</span>
+            
+            <label className="border-2 border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center cursor-pointer hover:border-emerald-500 hover:bg-emerald-50 transition-colors">
+              <Upload size={32} className="text-gray-400 mb-2" />
+              <span className="text-sm text-gray-600 font-medium">Click to upload files</span>
+              <span className="text-xs text-gray-400 mt-1">
+                PDF, DOC, DOCX, JPG, PNG (Max 10MB)
+              </span>
               <input
                 type="file"
                 multiple
+                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                onChange={handleFileSelect}
                 className="hidden"
-                onChange={handleFileUpload}
-                accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
               />
             </label>
 
-            {/* Attachment List */}
-            {attachments.length > 0 && (
-              <div className="mt-4 space-y-2">
-                {attachments.map((att) => (
+            {/* Existing Attachments */}
+            {existingAttachments.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs font-medium text-gray-600">Current files:</p>
+                {existingAttachments.map((attachment, idx) => (
                   <div
-                    key={att.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                    key={idx}
+                    className="flex items-center justify-between p-2.5 bg-blue-50 border border-blue-200 rounded-lg"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
-                        <FileText size={20} className="text-emerald-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-800">
-                          {att.name}
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <File size={16} className="text-blue-600 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {attachment.name}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {(att.size / 1024).toFixed(1)} KB
+                          {formatFileSize(attachment.size)}
                         </p>
                       </div>
                     </div>
                     <button
-                      onClick={() => removeAttachment(att.id)}
-                      className="p-1 hover:bg-red-100 text-red-500 rounded transition-colors"
+                      type="button"
+                      onClick={() => removeExistingAttachment(attachment)}
+                      className="p-1.5 hover:bg-red-100 text-red-600 rounded"
                     >
-                      <X size={16} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 ))}
               </div>
             )}
-          </div>
-        </div>
 
-        {/* Actions */}
-        <div className="flex gap-3 mt-6">
+            {/* New Files */}
+            {files.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs font-medium text-gray-600">New files:</p>
+                {files.map((file, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between p-2.5 bg-green-50 border border-green-200 rounded-lg"
+                  >
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <File size={16} className="text-green-600 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {file.name}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {formatFileSize(file.size)}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeFile(idx)}
+                      className="p-1.5 hover:bg-red-100 text-red-600 rounded"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Upload Progress */}
+            {uploading && (
+              <div className="mt-3 bg-emerald-50 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-emerald-700">Uploading files...</span>
+                  <span className="text-sm font-bold text-emerald-600">{uploadProgress}%</span>
+                </div>
+                <div className="w-full bg-emerald-200 rounded-full h-2">
+                  <div
+                    className="bg-emerald-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: uploadProgress + '%' }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </form>
+
+        {/* Footer */}
+        <div className="border-t px-6 py-4 bg-gray-50 flex gap-3">
           <button
-            onClick={handleSave}
-            disabled={!description || !dueDate || !selectedClass}
-            className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-3 rounded-lg font-medium hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            type="submit"
+            onClick={handleSubmit}
+            disabled={uploading}
+            className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-3 rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center gap-2"
           >
-            {existingHomework ? 'Update' : 'Assign'} Homework
+            {uploading ? (
+              <>
+                <Loader size={20} className="animate-spin" />
+                Uploading...
+              </>
+            ) : (
+              existingHomework ? 'Update Assignment' : 'Create Assignment'
+            )}
           </button>
           <button
+            type="button"
             onClick={onClose}
-            className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-300 transition-all"
+            disabled={uploading}
+            className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300 transition-all font-semibold"
           >
             Cancel
           </button>
