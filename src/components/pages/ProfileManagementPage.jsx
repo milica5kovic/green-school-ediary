@@ -1,61 +1,78 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { Plus, Trash2, Edit2, Upload, Download } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Plus, Trash2, Edit2, Upload, Download, Users, Mail } from "lucide-react";
 import {
   supabase,
   createUserWithAdmin,
   hasAdminAccess,
 } from "../../infrastructure/supabaseClient";
 
+// ✅ Import all modals
+import AddParentModal from '../modals/parents/AddParentModal';
+import EditParentModal from '../modals/parents/EditParentModal';
+import ManageChildrenModal from '../modals/parents/ManageChildrenModal';
+import DeleteParentModal from '../modals/parents/DeleteParentModal';
+import ExportEmailsModal from '../modals/parents/ExportEmailsModal';
+
 const ProfileManagementPage = () => {
   const [teachers, setTeachers] = useState([]);
   const [parents, setParents] = useState([]);
   const [students, setStudents] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
-  
   const [showAddParentModal, setShowAddParentModal] = useState(false);
+  const [showEditParentModal, setShowEditParentModal] = useState(false);
+  const [showManageChildrenModal, setShowManageChildrenModal] = useState(false);
+  const [showDeleteParentModal, setShowDeleteParentModal] = useState(false);
+  const [showExportEmailsModal, setShowExportEmailsModal] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState(null);
+  const [selectedParent, setSelectedParent] = useState(null);
   const [activeTab, setActiveTab] = useState("teachers");
   const [loading, setLoading] = useState(false);
+  
+  // ✅ NEW: Parent filters
+  const [parentFilters, setParentFilters] = useState({
+    status: 'all',
+    search: ''
+  });
 
-  // ✅ FIX: Proper useCallback for data loading
-const loadTeachers = async () => {
-  try {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('teachers')
-      .select('*')
-      .order('full_name');
-    
-    if (error) throw error;
-    
-    console.log('✅ Teachers loaded:', data?.length || 0);
-    setTeachers(data || []);
-  } catch (error) {
-    console.error('Error loading teachers:', error);
-  } finally {
-    setLoading(false);
-  }
-};
+  const loadTeachers = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('teachers')
+        .select('*')
+        .order('full_name');
+      
+      if (error) throw error;
+      
+      console.log('✅ Teachers loaded:', data?.length || 0);
+      setTeachers(data || []);
+    } catch (error) {
+      console.error('Error loading teachers:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // ✅ FIX: Load parents from BOTH parents AND profiles tables
   const loadParents = async () => {
     try {
+      setLoading(true);
+      
       // Load parents
       const { data: parentsData, error: parentsError } = await supabase
         .from("parents")
         .select("*")
         .order("full_name");
-
+      
       if (parentsError) throw parentsError;
 
       // Load student-parent links
-      const { data: linksData, error: linksError } = await supabase.from(
-        "student_parents",
-      ).select(`
-        parent_id,
-        student:students(id, name, class_name, email)
-      `);
-
+      const { data: linksData, error: linksError } = await supabase
+        .from("student_parents")
+        .select(`
+          parent_id,
+          student:students(id, name, class_name, email)
+        `);
+      
       if (linksError) throw linksError;
 
       // Attach linked students to each parent
@@ -70,22 +87,22 @@ const loadTeachers = async () => {
       setParents(parentsWithStudents);
     } catch (error) {
       console.error("Error loading parents:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // ✅ FIX: Load students with proper error handling
   const loadStudents = async () => {
     try {
       console.log("👨‍🎓 Loading students...");
-
       const { data, error } = await supabase
         .from("students")
         .select("*")
         .eq("status", "active")
         .order("name");
-
+      
       if (error) throw error;
-
+      
       console.log("✅ Students loaded:", data?.length || 0);
       setStudents(data || []);
     } catch (error) {
@@ -94,33 +111,30 @@ const loadTeachers = async () => {
     }
   };
 
+  const loadAllData = async () => {
+    console.log("🔄 Loading all management data...");
+    await Promise.all([loadTeachers(), loadParents(), loadStudents()]);
+  };
 
-const loadAllData = async () => {
-  console.log("🔄 Loading all management data...");
-  await Promise.all([loadTeachers(), loadParents(), loadStudents()]);
-};
-  // ✅ FIX: Load on mount with proper dependencies
-useEffect(() => {
-  // Only load if we don't have data yet
-  if (teachers.length === 0 && parents.length === 0) {
-    loadAllData();
-  }
-}, [activeTab]); // Reload when tab changes
+  useEffect(() => {
+    if (teachers.length === 0 && parents.length === 0) {
+      loadAllData();
+    }
+  }, [activeTab]);
 
   // ✅ DELETE TEACHER
   const handleDeleteTeacher = async (teacherId) => {
     if (!window.confirm("Are you sure you want to delete this teacher?")) {
       return;
     }
-
     try {
       const { error } = await supabase
         .from("teachers")
         .delete()
         .eq("id", teacherId);
-
+      
       if (error) throw error;
-
+      
       alert("Teacher deleted successfully!");
       await loadTeachers();
     } catch (error) {
@@ -129,17 +143,42 @@ useEffect(() => {
     }
   };
 
-  // ============================================
-  // CSV UPLOAD FUNCTIONS
-  // ============================================
+  // ✅ FILTER PARENTS
+  const getFilteredParents = () => {
+    return parents.filter(parent => {
+      // Status filter
+      if (parentFilters.status !== 'all' && parent.status !== parentFilters.status) {
+        return false;
+      }
 
-  // Download Teacher Template
+      // Search filter
+      if (parentFilters.search) {
+        const search = parentFilters.search.toLowerCase();
+        const matchesName = parent.full_name?.toLowerCase().includes(search);
+        const matchesEmail = parent.email?.toLowerCase().includes(search);
+        const matchesStudent = parent.linkedStudents?.some(s => 
+          s.name.toLowerCase().includes(search)
+        );
+        
+        if (!matchesName && !matchesEmail && !matchesStudent) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  };
+
+  const filteredParents = getFilteredParents();
+
+  // ============================================
+  // CSV UPLOAD FUNCTIONS (Teachers - unchanged)
+  // ============================================
   const downloadTeacherTemplate = () => {
     const csv = `full_name,email,subjects,role,class_teacher_for
 John Doe,john.doe@school.com,"Mathematics;Physics",teacher,Y7
 Jane Smith,jane.smith@school.com,"English;Literature",teacher,Y5A
 Admin User,admin@school.com,,admin,`;
-
     const blob = new Blob([csv], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -149,7 +188,6 @@ Admin User,admin@school.com,,admin,`;
     window.URL.revokeObjectURL(url);
   };
 
-  // Upload Teachers CSV
   const handleTeacherCSVUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -162,8 +200,6 @@ Admin User,admin@school.com,,admin,`;
     try {
       const text = await file.text();
       const lines = text.split("\n").filter((line) => line.trim());
-      // const headers = lines[0].split(',').map(h => h.trim());
-
       const teachers = [];
       const errors = [];
 
@@ -171,7 +207,7 @@ Admin User,admin@school.com,,admin,`;
         const values = lines[i]
           .split(",")
           .map((v) => v.trim().replace(/"/g, ""));
-
+        
         if (values.length < 2) continue;
 
         const teacher = {
@@ -197,14 +233,14 @@ Admin User,admin@school.com,,admin,`;
 
       if (errors.length > 0) {
         alert(
-          `⚠️ CSV Errors:\n${errors.join("\n")}\n\nPlease fix and try again.`,
+          `⚠️ CSV Errors:\n${errors.join("\n")}\n\nPlease fix and try again.`
         );
         return;
       }
 
       if (
         !window.confirm(
-          `Upload ${teachers.length} teachers?\n\nThis will create user accounts with passwords.`,
+          `Upload ${teachers.length} teachers?\n\nThis will create user accounts with passwords.`
         )
       ) {
         return;
@@ -217,7 +253,6 @@ Admin User,admin@school.com,,admin,`;
         try {
           const tempPassword = `Green${Math.floor(1000 + Math.random() * 9000)}!`;
 
-          // Create auth user
           const authData = await createUserWithAdmin(
             teacher.email,
             tempPassword,
@@ -225,10 +260,9 @@ Admin User,admin@school.com,,admin,`;
               full_name: teacher.full_name,
               role: teacher.role,
               subjects: teacher.subjects,
-            },
+            }
           );
 
-          // Create profile
           await supabase.from("profiles").insert([
             {
               id: authData.id,
@@ -237,7 +271,6 @@ Admin User,admin@school.com,,admin,`;
             },
           ]);
 
-          // Create teacher record
           await supabase.from("teachers").insert([
             {
               user_id: authData.id,
@@ -262,14 +295,13 @@ Admin User,admin@school.com,,admin,`;
 
       await loadTeachers();
 
-      // Show results
       if (results.length > 0) {
         const credentialsList = results
           .map(
-            (r) => `${r.name}\n  Email: ${r.email}\n  Password: ${r.password}`,
+            (r) => `${r.name}\n  Email: ${r.email}\n  Password: ${r.password}`
           )
           .join("\n\n");
-
+        
         const message =
           `✅ Created ${results.length} teachers!\n\n` +
           `CREDENTIALS:\n` +
@@ -298,13 +330,14 @@ Admin User,admin@school.com,,admin,`;
     e.target.value = "";
   };
 
-  // Download Parent Template
+  // ============================================
+  // CSV UPLOAD FUNCTIONS (Parents - unchanged)
+  // ============================================
   const downloadParentTemplate = () => {
-    const csv = `full_name,email,student_names
-Jane Doe,jane.doe@email.com,"John Doe;Mary Doe"
-Mike Smith,mike.smith@email.com,"Sarah Smith"
-Anna Johnson,anna.j@email.com,`;
-
+    const csv = `full_name,email,phone,student_names
+Jane Doe,jane.doe@email.com,+381601234567,"John Doe;Mary Doe"
+Mike Smith,mike.smith@email.com,+381609876543,"Sarah Smith"
+Anna Johnson,anna.j@email.com,,`;
     const blob = new Blob([csv], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -314,7 +347,6 @@ Anna Johnson,anna.j@email.com,`;
     window.URL.revokeObjectURL(url);
   };
 
-  // Upload Parents CSV
   const handleParentCSVUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -325,7 +357,6 @@ Anna Johnson,anna.j@email.com,`;
     }
 
     try {
-      // Load all students first
       const { data: allStudents } = await supabase
         .from("students")
         .select("*")
@@ -333,7 +364,6 @@ Anna Johnson,anna.j@email.com,`;
 
       const text = await file.text();
       const lines = text.split("\n").filter((line) => line.trim());
-
       const parents = [];
       const errors = [];
 
@@ -341,14 +371,15 @@ Anna Johnson,anna.j@email.com,`;
         const values = lines[i]
           .split(",")
           .map((v) => v.trim().replace(/"/g, ""));
-
+        
         if (values.length < 2) continue;
 
         const parent = {
           full_name: values[0],
           email: values[1],
-          student_names: values[2]
-            ? values[2]
+          phone: values[2] || null,
+          student_names: values[3]
+            ? values[3]
                 .split(";")
                 .map((s) => s.trim())
                 .filter(Boolean)
@@ -379,46 +410,44 @@ Anna Johnson,anna.j@email.com,`;
         try {
           const tempPassword = `Green${Math.floor(1000 + Math.random() * 9000)}!`;
 
-          // Create auth user
           const authData = await createUserWithAdmin(
             parent.email,
             tempPassword,
-            { full_name: parent.full_name, role: "parent" },
+            { full_name: parent.full_name, role: "parent" }
           );
 
-          // Create profile
-          await supabase.from("profiles").insert([
-            {
-              id: authData.id,
-              role: "parent",
-              full_name: parent.full_name,
-            },
-          ]);
+          await new Promise(resolve => setTimeout(resolve, 500));
 
-          // Create parent record
-          await supabase.from("parents").insert([
-            {
+          const { data: parentData } = await supabase
+            .from("parents")
+            .insert([{
               user_id: authData.id,
               email: parent.email,
               full_name: parent.full_name,
-            },
-          ]);
+              phone: parent.phone,
+              status: 'active'
+            }])
+            .select()
+            .single();
 
-          // Link students
           const linkedStudents = [];
           for (const studentName of parent.student_names) {
             if (!studentName) continue;
 
             const student = allStudents.find(
-              (s) => s.name.toLowerCase() === studentName.toLowerCase(),
+              (s) => s.name.toLowerCase() === studentName.toLowerCase()
             );
 
             if (student) {
               await supabase
-                .from("students")
-                .update({ parent_contact: parent.email })
-                .eq("id", student.id);
-
+                .from("student_parents")
+                .insert([{
+                  student_id: student.id,
+                  parent_id: parentData.id,
+                  relationship: 'parent',
+                  is_primary: linkedStudents.length === 0
+                }]);
+              
               linkedStudents.push(student.name);
             } else {
               console.warn(`Student not found: ${studentName}`);
@@ -439,12 +468,11 @@ Anna Johnson,anna.j@email.com,`;
 
       await loadParents();
 
-      // Show results
       if (results.length > 0) {
         const credentialsList = results
           .map(
             (r) =>
-              `${r.name}\n  Email: ${r.email}\n  Password: ${r.password}\n  Students: ${r.students.join(", ") || "None"}`,
+              `${r.name}\n  Email: ${r.email}\n  Password: ${r.password}\n  Students: ${r.students.join(", ") || "None"}`
           )
           .join("\n\n");
 
@@ -499,7 +527,6 @@ Anna Johnson,anna.j@email.com,`;
                 <Plus size={20} />
                 Add Teacher
               </button>
-
               <label className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer">
                 <Upload size={20} />
                 Upload CSV
@@ -510,7 +537,6 @@ Anna Johnson,anna.j@email.com,`;
                   className="hidden"
                 />
               </label>
-
               <button
                 onClick={downloadTeacherTemplate}
                 className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-300 transition-all flex items-center gap-2"
@@ -531,8 +557,14 @@ Anna Johnson,anna.j@email.com,`;
                 <Plus size={20} />
                 Add Parent
               </button>
-
-              <label className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer">
+              <button
+                onClick={() => setShowExportEmailsModal(true)}
+                className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2"
+              >
+                <Mail size={20} />
+                Export Emails
+              </button>
+              <label className="bg-gradient-to-r from-purple-500 to-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer">
                 <Upload size={20} />
                 Upload CSV
                 <input
@@ -542,7 +574,6 @@ Anna Johnson,anna.j@email.com,`;
                   className="hidden"
                 />
               </label>
-
               <button
                 onClick={downloadParentTemplate}
                 className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-300 transition-all flex items-center gap-2"
@@ -587,7 +618,6 @@ Anna Johnson,anna.j@email.com,`;
               <h3 className="text-lg font-semibold text-gray-800 mb-4">
                 All Teachers & Admins
               </h3>
-
               {loading ? (
                 <div className="flex justify-center py-8">
                   <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
@@ -695,19 +725,40 @@ Anna Johnson,anna.j@email.com,`;
           {/* PARENTS TAB */}
           {activeTab === "parents" && (
             <div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                All Parents
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">
+                  All Parents ({filteredParents.length})
+                </h3>
+              </div>
 
-              {/* Debug Info
-              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs">
-                <p><strong>Debug:</strong> Parents loaded: {parents.length}</p>
-              </div> */}
+              {/* ✅ FILTERS */}
+              <div className="mb-4 flex gap-3">
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    placeholder="Search by name, email, or student..."
+                    value={parentFilters.search}
+                    onChange={(e) => setParentFilters({ ...parentFilters, search: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                  />
+                </div>
+                <select
+                  value={parentFilters.status}
+                  onChange={(e) => setParentFilters({ ...parentFilters, status: e.target.value })}
+                  className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                >
+                  <option value="all">All Status</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
 
-              {parents.length === 0 ? (
+              {filteredParents.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
                   <p className="text-gray-500 font-medium">
-                    No parents registered yet
+                    {parentFilters.search || parentFilters.status !== 'all'
+                      ? 'No parents match your filters'
+                      : 'No parents registered yet'}
                   </p>
                   <p className="text-xs text-gray-400 mt-2">
                     Click "Add Parent" to get started
@@ -725,37 +776,94 @@ Anna Johnson,anna.j@email.com,`;
                           Email
                         </th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-purple-700">
+                          Phone
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-purple-700">
+                          Status
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-purple-700">
                           Linked Students
+                        </th>
+                        <th className="px-4 py-3 text-center text-sm font-semibold text-purple-700">
+                          Actions
                         </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                    {parents.map((parent) => (
-  <tr key={parent.id}>
-    <td className="px-4 py-3 font-medium text-gray-800">
-      {parent.full_name || 'N/A'}
-    </td>
-    <td className="px-4 py-3 text-gray-600">
-      {parent.email}
-    </td>
-    <td className="px-4 py-3">
-      {parent.linkedStudents && parent.linkedStudents.length > 0 ? (
-        <div className="flex flex-wrap gap-1">
-          {parent.linkedStudents.map(student => (
-            <span 
-              key={student.id} 
-              className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs"
-            >
-              {student.name} ({student.class_name})
-            </span>
-          ))}
-        </div>
-      ) : (
-        <span className="text-gray-400 text-sm">No linked students</span>
-      )}
-    </td>
-  </tr>
-))}
+                      {filteredParents.map((parent) => (
+                        <tr key={parent.id} className="hover:bg-purple-50 transition-colors">
+                          <td className="px-4 py-3 font-medium text-gray-800">
+                            {parent.full_name || 'N/A'}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {parent.email}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {parent.phone || '-'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                parent.status === 'active'
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-gray-100 text-gray-700"
+                              }`}
+                            >
+                              {parent.status || 'active'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {parent.linkedStudents && parent.linkedStudents.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {parent.linkedStudents.map(student => (
+                                  <span 
+                                    key={student.id} 
+                                    className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs"
+                                  >
+                                    {student.name} ({student.class_name})
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 text-sm">No linked students</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setSelectedParent(parent);
+                                  setShowEditParentModal(true);
+                                }}
+                                className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200"
+                                title="Edit"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedParent(parent);
+                                  setShowManageChildrenModal(true);
+                                }}
+                                className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200"
+                                title="Manage Children"
+                              >
+                                <Users size={16} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedParent(parent);
+                                  setShowDeleteParentModal(true);
+                                }}
+                                className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200"
+                                title="Delete"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -765,37 +873,88 @@ Anna Johnson,anna.j@email.com,`;
         </div>
       </div>
 
-      {/* MODALS */}
+      {/* ✅ MODALS */}
       {showAddModal && (
-  <AddTeacherModal
-    teacher={editingTeacher}
-    onClose={() => {
-      setShowAddModal(false);
-      setEditingTeacher(null);
-    }}
-    onSave={async () => {
-      await loadAllData(); // ✅ Explicitly reload
-      setShowAddModal(false);
-      setEditingTeacher(null);
-    }}
-  />
-)}
+        <AddTeacherModal
+          teacher={editingTeacher}
+          onClose={() => {
+            setShowAddModal(false);
+            setEditingTeacher(null);
+          }}
+          onSave={async () => {
+            await loadAllData();
+            setShowAddModal(false);
+            setEditingTeacher(null);
+          }}
+        />
+      )}
 
-{showAddParentModal && (
-  <AddParentModal
-    onClose={() => setShowAddParentModal(false)}
-    onSave={async () => {
-      await loadAllData(); // ✅ Explicitly reload
-      setShowAddParentModal(false);
-    }}
-  />
-)}
+      {showAddParentModal && (
+        <AddParentModal
+          onClose={() => setShowAddParentModal(false)}
+          onSave={async () => {
+            await loadAllData();
+            setShowAddParentModal(false);
+          }}
+        />
+      )}
+
+      {showEditParentModal && selectedParent && (
+        <EditParentModal
+          parent={selectedParent}
+          onClose={() => {
+            setShowEditParentModal(false);
+            setSelectedParent(null);
+          }}
+          onSave={async () => {
+            await loadAllData();
+            setShowEditParentModal(false);
+            setSelectedParent(null);
+          }}
+        />
+      )}
+
+      {showManageChildrenModal && selectedParent && (
+        <ManageChildrenModal
+          parent={selectedParent}
+          onClose={() => {
+            setShowManageChildrenModal(false);
+            setSelectedParent(null);
+          }}
+          onSave={async () => {
+            await loadAllData();
+            setShowManageChildrenModal(false);
+            setSelectedParent(null);
+          }}
+        />
+      )}
+
+      {showDeleteParentModal && selectedParent && (
+        <DeleteParentModal
+          parent={selectedParent}
+          onClose={() => {
+            setShowDeleteParentModal(false);
+            setSelectedParent(null);
+          }}
+          onDelete={async () => {
+            await loadAllData();
+            setShowDeleteParentModal(false);
+            setSelectedParent(null);
+          }}
+        />
+      )}
+
+      {showExportEmailsModal && (
+        <ExportEmailsModal
+          onClose={() => setShowExportEmailsModal(false)}
+        />
+      )}
     </div>
   );
 };
 
 // ============================================
-// ADD TEACHER MODAL (unchanged - already good)
+// ADD TEACHER MODAL (unchanged)
 // ============================================
 const AddTeacherModal = ({ teacher, onClose, onSave }) => {
   const [formData, setFormData] = useState({
@@ -832,140 +991,87 @@ const AddTeacherModal = ({ teacher, onClose, onSave }) => {
     setAvailableClasses(data?.map((c) => c.class_name) || []);
   };
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  
-  if (!formData.full_name || !formData.email) {
-    alert('Please fill in name and email');
-    return;
-  }
-
-  try {
-    setSaving(true);
-
-    if (!hasAdminAccess()) {
-      alert('⚠️ Admin features not configured.');
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!formData.full_name || !formData.email) {
+      alert('Please fill in name and email');
       return;
     }
 
-    console.log('🔐 Creating parent account...');
-    const tempPassword = `Green${Math.floor(1000 + Math.random() * 9000)}!`;
-    
-    // Step 1: Create auth user (trigger will auto-create profile!)
-    const authData = await createUserWithAdmin(
-      formData.email,
-      tempPassword,
-      {
-        full_name: formData.full_name,
-        role: 'parent'  // ← Trigger uses this!
-      }
-    );
+    try {
+      setSaving(true);
 
-    if (!authData?.id) throw new Error('Failed to create user');
-    console.log('✅ Auth user created:', authData.id);
+      if (teacher) {
+        // Update existing teacher
+        const { error } = await supabase
+          .from('teachers')
+          .update({
+            full_name: formData.full_name,
+            subjects: formData.subjects,
+            role: formData.role,
+            class_teacher_for: formData.class_teacher_for || null
+          })
+          .eq('id', teacher.id);
 
-    // ❌ DELETE THIS SECTION - Trigger already created profile!
-    /*
-    console.log('🔐 Creating profile...');
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .upsert([{
-        id: authData.id,
-        role: 'parent',
-        full_name: formData.full_name
-      }], {
-        onConflict: 'id'
-      });
+        if (error) throw error;
+        alert('✅ Teacher updated successfully!');
+      } else {
+        // Create new teacher
+        if (!hasAdminAccess()) {
+          alert('⚠️ Admin features not configured.');
+          return;
+        }
 
-    if (profileError) {
-      console.error('Profile error:', profileError);
-      throw new Error(`Profile error: ${profileError.message}`);
-    }
-    console.log('✅ Profile created');
-    */
+        const tempPassword = `Green${Math.floor(1000 + Math.random() * 9000)}!`;
+        
+        const authData = await createUserWithAdmin(
+          formData.email,
+          tempPassword,
+          {
+            full_name: formData.full_name,
+            role: formData.role,
+            subjects: formData.subjects
+          }
+        );
 
-    // ✅ Wait a bit for trigger to complete
-    await new Promise(resolve => setTimeout(resolve, 500));
+        await supabase.from('profiles').insert([{
+          id: authData.id,
+          role: formData.role,
+          full_name: formData.full_name
+        }]);
 
-    // Step 2: Create parent record
-    console.log('🔐 Creating parent record...');
-    const { data: parentData, error: parentInsertError } = await supabase
-      .from('parents')
-      .insert([{
-        user_id: authData.id,
-        email: formData.email,
-        full_name: formData.full_name,
-        phone: formData.phone || null
-      }])
-      .select()
-      .single();
+        await supabase.from('teachers').insert([{
+          user_id: authData.id,
+          email: formData.email,
+          full_name: formData.full_name,
+          subjects: formData.subjects,
+          role: formData.role,
+          class_teacher_for: formData.class_teacher_for || null
+        }]);
 
-    if (parentInsertError) {
-      console.error('Parent insert error:', parentInsertError);
-      throw new Error(`Parent insert error: ${parentInsertError.message}`);
-    }
-    console.log('✅ Parent record created:', parentData.id);
+        const credentials = 
+          `✅ TEACHER CREATED!\n\n` +
+          `Name: ${formData.full_name}\n` +
+          `Email: ${formData.email}\n` +
+          `Password: ${tempPassword}`;
 
-    // Step 3: Link to student (if selected)
-    if (formData.student_email) {
-      console.log('🔐 Linking to student...');
-      const { data: student } = await supabase
-        .from('students')
-        .select('id')
-        .eq('email', formData.student_email)
-        .single();
-      
-      if (student) {
-        const { error: linkError } = await supabase
-          .from('student_parents')
-          .insert([{
-            student_id: student.id,
-            parent_id: parentData.id,
-            relationship: 'parent',
-            is_primary: true
-          }]);
-
-        if (linkError) {
-          console.error('Link error:', linkError);
-        } else {
-          console.log('✅ Student linked');
+        try {
+          await navigator.clipboard.writeText(credentials);
+          alert(credentials + '\n\n📋 Copied to clipboard!');
+        } catch {
+          alert(credentials);
         }
       }
-    }
 
-    // Step 4: Show credentials
-    const credentials = 
-      `✅ PARENT ACCOUNT CREATED!\n\n` +
-      `👤 Name: ${formData.full_name}\n` +
-      `📧 Email: ${formData.email}\n` +
-      `🔒 Password: ${tempPassword}\n\n` +
-      `⚠️ Share these credentials securely!`;
-
-    try {
-      await navigator.clipboard.writeText(
-        `Name: ${formData.full_name}\nEmail: ${formData.email}\nPassword: ${tempPassword}\nLogin: ${window.location.origin}`
-      );
-      alert(credentials + '\n\n📋 Copied to clipboard!');
-    } catch {
-      alert(credentials);
+      onSave();
+    } catch (error) {
+      console.error('Error saving teacher:', error);
+      alert('Failed to save teacher: ' + error.message);
+    } finally {
+      setSaving(false);
     }
-
-    onSave();
-  } catch (error) {
-    console.error('❌ Error creating parent:', error);
-    
-    let errorMessage = 'Failed to create parent';
-    if (error.message.includes('already registered') || error.message.includes('already exists')) {
-      errorMessage = '⚠️ EMAIL ALREADY IN USE\n\nPlease use a different email.';
-    } else if (error.message) {
-      errorMessage = `⚠️ ERROR\n\n${error.message}`;
-    }
-    
-    alert(errorMessage);
-  } finally {
-    setSaving(false);
-  }
-};
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1028,7 +1134,7 @@ const handleSubmit = async (e) => {
               onChange={(e) => {
                 const selected = Array.from(
                   e.target.selectedOptions,
-                  (option) => option.value,
+                  (option) => option.value
                 );
                 setFormData({ ...formData, subjects: selected });
               }}
@@ -1070,248 +1176,14 @@ const handleSubmit = async (e) => {
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 bg-purple-500 text-white py-3 rounded-lg hover:bg-purple-600 disabled:opacity-50"
+              className="flex-1 bg-purple-500 text-white py-3 rounded-lg hover:bg-purple-600 disabled:opacity-50 font-medium"
             >
               {saving ? "Saving..." : teacher ? "Update" : "Create"}
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 bg-gray-200 py-3 rounded-lg hover:bg-gray-300"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
-// ============================================
-// ADD PARENT MODAL COMPONENT
-// ============================================
-const AddParentModal = ({ onClose, onSave }) => {
-const [formData, setFormData] = useState({
-  full_name: '',
-  email: '',
-  phone: '',
-  student_id: ''  
-});
-  const [students, setStudents] = useState([]);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    loadStudents();
-  }, []);
-
-  const loadStudents = async () => {
-    const { data } = await supabase
-      .from('students')
-      .select('*')
-      .eq('status', 'active')
-      .order('name');
-    setStudents(data || []);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!formData.full_name || !formData.email) {
-      alert('Please fill in name and email');
-      return;
-    }
-
-    try {
-      setSaving(true);
-
-      if (!hasAdminAccess()) {
-        alert('⚠️ Admin features not configured.');
-        return;
-      }
-
-      console.log('🔐 Creating parent account...');
-      const tempPassword = `Green${Math.floor(1000 + Math.random() * 9000)}!`;
-      
-      // Step 1: Create auth user (trigger will auto-create profile!)
-      const authData = await createUserWithAdmin(
-        formData.email,
-        tempPassword,
-        {
-          full_name: formData.full_name,
-          role: 'parent'  // ← Trigger uses this to create profile!
-        }
-      );
-
-      if (!authData?.id) throw new Error('Failed to create user');
-      console.log('✅ Auth user created:', authData.id);
-
-      // ✅ Wait for trigger to complete
-      console.log('⏳ Waiting for database trigger...');
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Step 2: Create parent record
-      console.log('🔐 Creating parent record...');
-      const { data: parentData, error: parentInsertError } = await supabase
-        .from('parents')
-        .insert([{
-          user_id: authData.id,
-          email: formData.email,
-          full_name: formData.full_name,
-          phone: formData.phone || null
-        }])
-        .select()
-        .single();
-
-      if (parentInsertError) {
-        console.error('Parent insert error:', parentInsertError);
-        throw new Error(`Parent insert error: ${parentInsertError.message}`);
-      }
-      console.log('✅ Parent record created:', parentData.id);
-
-      // Step 3: Link to student (if selected)
-      // Step 3: Link to student (if selected)
-if (formData.student_id) {  // ✅ Check student_id
-  console.log('🔐 Linking to student:', formData.student_id);
-  
-  const { error: linkError } = await supabase
-    .from('student_parents')
-    .insert([{
-      student_id: formData.student_id,  // ✅ Direct ID, no lookup needed!
-      parent_id: parentData.id,
-      relationship: 'parent',
-      is_primary: true
-    }]);
-
-  if (linkError) {
-    console.error('❌ Link error:', linkError);
-  } else {
-    console.log('✅ Student linked successfully!');
-  }
-}
-
-
-      // Step 4: Show credentials
-      const credentials = 
-        `✅ PARENT ACCOUNT CREATED!\n\n` +
-        `👤 Name: ${formData.full_name}\n` +
-        `📧 Email: ${formData.email}\n` +
-        `🔒 Password: ${tempPassword}\n\n` +
-        `⚠️ Share these credentials securely!`;
-
-      try {
-        await navigator.clipboard.writeText(
-          `Name: ${formData.full_name}\nEmail: ${formData.email}\nPassword: ${tempPassword}\nLogin: ${window.location.origin}`
-        );
-        alert(credentials + '\n\n📋 Copied to clipboard!');
-      } catch {
-        alert(credentials);
-      }
-
-      onSave();
-    } catch (error) {
-      console.error('❌ Error creating parent:', error);
-      
-      let errorMessage = 'Failed to create parent';
-      if (error.message.includes('already registered') || error.message.includes('already exists')) {
-        errorMessage = '⚠️ EMAIL ALREADY IN USE\n\nPlease use a different email.';
-      } else if (error.message) {
-        errorMessage = `⚠️ ERROR\n\n${error.message}`;
-      }
-      
-      alert(errorMessage);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full">
-        <div className="p-6 border-b">
-          <h3 className="text-xl font-bold">Add New Parent</h3>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Full Name */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Full Name *</label>
-            <input
-              type="text"
-              value={formData.full_name}
-              onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-              className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
-              placeholder="Jane Smith"
-              required
-            />
-          </div>
-
-          {/* Email */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Email *</label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
-              placeholder="jane.smith@email.com"
-              required
-            />
-          </div>
-
-          {/* Phone */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Phone (Optional)</label>
-            <input
-              type="tel"
-              value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
-              placeholder="+381 60 123 4567"
-            />
-          </div>
-
-          {/* Link to Student */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Link to Student (Optional)</label>
-        <select
-  value={formData.student_id}  
-  onChange={(e) => setFormData({ ...formData, student_id: e.target.value })}
-  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
->
-  <option value="">-- Select Student --</option>
-  {students.map(student => (
-    <option key={student.id} value={student.id}>  {/* ✅ Use student.id as value */}
-      {student.name} ({student.class_name})
-    </option>
-  ))}
-</select>
-            <p className="text-xs text-gray-500 mt-1">
-              Parent will be able to view this student's data
-            </p>
-          </div>
-
-          {/* Info Box */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-blue-800">
-              <strong>Note:</strong> A temporary password will be generated. Share it securely with the parent.
-            </p>
-          </div>
-
-          {/* Buttons */}
-          <div className="flex gap-3 pt-4">
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 bg-green-500 text-white py-3 rounded-lg hover:bg-green-600 disabled:opacity-50"
-            >
-              {saving ? 'Creating...' : 'Create Parent Account'}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={saving}
-              className="flex-1 bg-gray-200 py-3 rounded-lg hover:bg-gray-300"
+              className="flex-1 bg-gray-200 py-3 rounded-lg hover:bg-gray-300 font-medium"
             >
               Cancel
             </button>
