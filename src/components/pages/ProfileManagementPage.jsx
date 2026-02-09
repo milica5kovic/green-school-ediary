@@ -832,145 +832,140 @@ const AddTeacherModal = ({ teacher, onClose, onSave }) => {
     setAvailableClasses(data?.map((c) => c.class_name) || []);
   };
 
-  const handleSubmit = async (e) => {
+const handleSubmit = async (e) => {
   e.preventDefault();
-  
-  // 🔍 DEBUG - ADD THIS
-  console.log('🔍 DEBUG hasAdminAccess:', hasAdminAccess());
-  console.log('🔍 DEBUG service key exists:', !!process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY);
-  console.log('🔍 DEBUG service key (first 20):', process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY?.substring(0, 20));
   
   if (!formData.full_name || !formData.email) {
     alert('Please fill in name and email');
     return;
   }
 
-    try {
-      setSaving(true);
+  try {
+    setSaving(true);
 
-      if (teacher) {
-        // UPDATE
-        const { error } = await supabase
-          .from("teachers")
-          .update({
-            full_name: formData.full_name,
-            email: formData.email,
-            subjects: formData.subjects,
-            role: formData.role,
-            class_teacher_for: formData.class_teacher_for || null,
-          })
-          .eq("id", teacher.id);
-
-        if (error) throw error;
-
-        alert("Teacher updated successfully!");
-        onSave();
-      } else {
-        // CREATE
-        if (!hasAdminAccess()) {
-          alert(
-            "⚠️ Admin features not configured. Contact system administrator.",
-          );
-          return;
-        }
-
-        const tempPassword = `Green${Math.floor(1000 + Math.random() * 9000)}!`;
-
-        const authData = await createUserWithAdmin(
-          formData.email,
-          tempPassword,
-          {
-            full_name: formData.full_name,
-            role: formData.role,
-            subjects: formData.subjects,
-          },
-        );
-
-        if (!authData?.id) throw new Error("Failed to create user");
-
-        // Step 1: Create profile
-        await supabase.from("profiles").insert([
-          {
-            id: authData.id,
-            role: "parent",
-            full_name: formData.full_name,
-          },
-        ]);
-
-        const { data: parentData, error: parentInsertError } = await supabase
-  .from('parents')
-  .insert([{
-    user_id: authData.id,
-    email: formData.email,
-    full_name: formData.full_name,
-    phone: formData.phone || null
-  }])
-  .select()
-  .single();
-
-if (parentInsertError) throw new Error(`Parent insert error: ${parentInsertError.message}`);
-
-console.log('✅ Parent record created:', parentData.id);
-
-// Step 3: Link to student (if selected)
-if (formData.student_email) {
-  const { data: student } = await supabase
-    .from('students')
-    .select('id')
-    .eq('email', formData.student_email)
-    .single();
-  
-  if (student) {
-    await supabase
-      .from('student_parents')
-      .insert([{
-        student_id: student.id,
-        parent_id: parentData.id,  // ✅ Use parent.id (NOT authData.id!)
-        relationship: 'parent',
-        is_primary: true
-      }]);
-  }
-}
-
-        await supabase.from("teachers").insert([
-          {
-            user_id: authData.id,
-            email: formData.email,
-            full_name: formData.full_name,
-            subjects: formData.subjects,
-            role: formData.role,
-            class_teacher_for: formData.class_teacher_for || null,
-          },
-        ]);
-
-        const credentials =
-          `✅ ${formData.role.toUpperCase()} CREATED!\n\n` +
-          `👤 ${formData.full_name}\n` +
-          `📧 ${formData.email}\n` +
-          `🔒 ${tempPassword}`;
-
-        try {
-          await navigator.clipboard.writeText(
-            `Name: ${formData.full_name}\nEmail: ${formData.email}\nPassword: ${tempPassword}`,
-          );
-          alert(credentials + "\n\n📋 Copied!");
-        } catch {
-          alert(credentials);
-        }
-
-        onSave();
-      }
-    } catch (error) {
-      console.error("Error:", error);
-      alert(
-        error.message.includes("already")
-          ? "⚠️ Email already in use!"
-          : `❌ ${error.message}`,
-      );
-    } finally {
-      setSaving(false);
+    if (!hasAdminAccess()) {
+      alert('⚠️ Admin features not configured.');
+      return;
     }
-  };
+
+    console.log('🔐 Creating parent account...');
+    const tempPassword = `Green${Math.floor(1000 + Math.random() * 9000)}!`;
+    
+    // Step 1: Create auth user (trigger will auto-create profile!)
+    const authData = await createUserWithAdmin(
+      formData.email,
+      tempPassword,
+      {
+        full_name: formData.full_name,
+        role: 'parent'  // ← Trigger uses this!
+      }
+    );
+
+    if (!authData?.id) throw new Error('Failed to create user');
+    console.log('✅ Auth user created:', authData.id);
+
+    // ❌ DELETE THIS SECTION - Trigger already created profile!
+    /*
+    console.log('🔐 Creating profile...');
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .upsert([{
+        id: authData.id,
+        role: 'parent',
+        full_name: formData.full_name
+      }], {
+        onConflict: 'id'
+      });
+
+    if (profileError) {
+      console.error('Profile error:', profileError);
+      throw new Error(`Profile error: ${profileError.message}`);
+    }
+    console.log('✅ Profile created');
+    */
+
+    // ✅ Wait a bit for trigger to complete
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Step 2: Create parent record
+    console.log('🔐 Creating parent record...');
+    const { data: parentData, error: parentInsertError } = await supabase
+      .from('parents')
+      .insert([{
+        user_id: authData.id,
+        email: formData.email,
+        full_name: formData.full_name,
+        phone: formData.phone || null
+      }])
+      .select()
+      .single();
+
+    if (parentInsertError) {
+      console.error('Parent insert error:', parentInsertError);
+      throw new Error(`Parent insert error: ${parentInsertError.message}`);
+    }
+    console.log('✅ Parent record created:', parentData.id);
+
+    // Step 3: Link to student (if selected)
+    if (formData.student_email) {
+      console.log('🔐 Linking to student...');
+      const { data: student } = await supabase
+        .from('students')
+        .select('id')
+        .eq('email', formData.student_email)
+        .single();
+      
+      if (student) {
+        const { error: linkError } = await supabase
+          .from('student_parents')
+          .insert([{
+            student_id: student.id,
+            parent_id: parentData.id,
+            relationship: 'parent',
+            is_primary: true
+          }]);
+
+        if (linkError) {
+          console.error('Link error:', linkError);
+        } else {
+          console.log('✅ Student linked');
+        }
+      }
+    }
+
+    // Step 4: Show credentials
+    const credentials = 
+      `✅ PARENT ACCOUNT CREATED!\n\n` +
+      `👤 Name: ${formData.full_name}\n` +
+      `📧 Email: ${formData.email}\n` +
+      `🔒 Password: ${tempPassword}\n\n` +
+      `⚠️ Share these credentials securely!`;
+
+    try {
+      await navigator.clipboard.writeText(
+        `Name: ${formData.full_name}\nEmail: ${formData.email}\nPassword: ${tempPassword}\nLogin: ${window.location.origin}`
+      );
+      alert(credentials + '\n\n📋 Copied to clipboard!');
+    } catch {
+      alert(credentials);
+    }
+
+    onSave();
+  } catch (error) {
+    console.error('❌ Error creating parent:', error);
+    
+    let errorMessage = 'Failed to create parent';
+    if (error.message.includes('already registered') || error.message.includes('already exists')) {
+      errorMessage = '⚠️ EMAIL ALREADY IN USE\n\nPlease use a different email.';
+    } else if (error.message) {
+      errorMessage = `⚠️ ERROR\n\n${error.message}`;
+    }
+    
+    alert(errorMessage);
+  } finally {
+    setSaving(false);
+  }
+};
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1097,12 +1092,12 @@ if (formData.student_email) {
 // ADD PARENT MODAL COMPONENT
 // ============================================
 const AddParentModal = ({ onClose, onSave }) => {
-  const [formData, setFormData] = useState({
-    full_name: '',
-    email: '',
-    phone: '',
-    student_email: ''
-  });
+const [formData, setFormData] = useState({
+  full_name: '',
+  email: '',
+  phone: '',
+  student_id: ''  
+});
   const [students, setStudents] = useState([]);
   const [saving, setSaving] = useState(false);
 
@@ -1138,38 +1133,24 @@ const AddParentModal = ({ onClose, onSave }) => {
       console.log('🔐 Creating parent account...');
       const tempPassword = `Green${Math.floor(1000 + Math.random() * 9000)}!`;
       
-      // Step 1: Create auth user
+      // Step 1: Create auth user (trigger will auto-create profile!)
       const authData = await createUserWithAdmin(
         formData.email,
         tempPassword,
         {
           full_name: formData.full_name,
-          role: 'parent'
+          role: 'parent'  // ← Trigger uses this to create profile!
         }
       );
 
       if (!authData?.id) throw new Error('Failed to create user');
       console.log('✅ Auth user created:', authData.id);
 
-      // Step 2: Create profile
+      // ✅ Wait for trigger to complete
+      console.log('⏳ Waiting for database trigger...');
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-console.log('🔐 Creating profile...');
-const { error: profileError } = await supabase
-  .from('profiles')
-  .upsert([{  // ✅ UPSERT umesto INSERT!
-    id: authData.id,
-    role: 'parent',
-    full_name: formData.full_name
-  }], {
-    onConflict: 'id'  // ✅ If exists, update
-  });
-
-if (profileError) {
-  console.error('Profile error:', profileError);
-  throw new Error(`Profile error: ${profileError.message}`);
-}
-
-      // Step 3: Create parent record
+      // Step 2: Create parent record
       console.log('🔐 Creating parent record...');
       const { data: parentData, error: parentInsertError } = await supabase
         .from('parents')
@@ -1188,34 +1169,29 @@ if (profileError) {
       }
       console.log('✅ Parent record created:', parentData.id);
 
-      // Step 4: Link to student (if selected)
-      if (formData.student_email) {
-        console.log('🔐 Linking to student...');
-        const { data: student } = await supabase
-          .from('students')
-          .select('id')
-          .eq('email', formData.student_email)
-          .single();
-        
-        if (student) {
-          const { error: linkError } = await supabase
-            .from('student_parents')
-            .insert([{
-              student_id: student.id,
-              parent_id: parentData.id,
-              relationship: 'parent',
-              is_primary: true
-            }]);
+      // Step 3: Link to student (if selected)
+      // Step 3: Link to student (if selected)
+if (formData.student_id) {  // ✅ Check student_id
+  console.log('🔐 Linking to student:', formData.student_id);
+  
+  const { error: linkError } = await supabase
+    .from('student_parents')
+    .insert([{
+      student_id: formData.student_id,  // ✅ Direct ID, no lookup needed!
+      parent_id: parentData.id,
+      relationship: 'parent',
+      is_primary: true
+    }]);
 
-          if (linkError) {
-            console.error('Link error:', linkError);
-          } else {
-            console.log('✅ Student linked');
-          }
-        }
-      }
+  if (linkError) {
+    console.error('❌ Link error:', linkError);
+  } else {
+    console.log('✅ Student linked successfully!');
+  }
+}
 
-      // Step 5: Show credentials
+
+      // Step 4: Show credentials
       const credentials = 
         `✅ PARENT ACCOUNT CREATED!\n\n` +
         `👤 Name: ${formData.full_name}\n` +
@@ -1298,18 +1274,18 @@ if (profileError) {
           {/* Link to Student */}
           <div>
             <label className="block text-sm font-medium mb-2">Link to Student (Optional)</label>
-            <select
-              value={formData.student_email}
-              onChange={(e) => setFormData({ ...formData, student_email: e.target.value })}
-              className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
-            >
-              <option value="">-- Select Student --</option>
-              {students.map(student => (
-                <option key={student.id} value={student.email}>
-                  {student.name} ({student.class_name})
-                </option>
-              ))}
-            </select>
+        <select
+  value={formData.student_id}  
+  onChange={(e) => setFormData({ ...formData, student_id: e.target.value })}
+  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+>
+  <option value="">-- Select Student --</option>
+  {students.map(student => (
+    <option key={student.id} value={student.id}>  {/* ✅ Use student.id as value */}
+      {student.name} ({student.class_name})
+    </option>
+  ))}
+</select>
             <p className="text-xs text-gray-500 mt-1">
               Parent will be able to view this student's data
             </p>

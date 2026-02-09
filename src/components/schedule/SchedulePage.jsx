@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Clock, Download, Calendar, Award } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -9,6 +9,12 @@ import autoTable from 'jspdf-autotable';
 const SchedulePage = () => {
   const { scheduleService } = useApp();
   const { teacher, profile } = useAuth();
+    console.log('🎨 SchedulePage RENDER', {
+    hasService: !!scheduleService,
+    hasTeacher: !!teacher,
+    teacherId: teacher?.user_id,
+    timestamp: new Date().toISOString()
+  });
   
   const [schedule, setSchedule] = useState({
     Monday: [],
@@ -21,53 +27,88 @@ const SchedulePage = () => {
   const [modalType, setModalType] = useState('class');
   const [editingEntry, setEditingEntry] = useState(null);
   const [localLoading, setLocalLoading] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
-  // ✅ Load schedule - ONLY for this teacher
-  const loadSchedule = useCallback(async () => {
-    if (!scheduleService) {
-      console.log('❌ No schedule service');
-      return;
-    }
+  // ✅ FIXED: Always reload on mount + when dependencies change
+  useEffect(() => {
+    let isMounted = true; // Track if component is mounted
     
-    try {
-      setLocalLoading(true);
+    const loadSchedule = async () => {
+      if (!isMounted) return; // Don't update if unmounted
       
-      // ✅ ALWAYS use teacher.user_id (if exists)
-      const teacherId = teacher?.user_id || null;
+      console.log('🔄 SchedulePage loading...');
       
-      console.log('📅 Loading schedule for teacherId:', teacherId);
-      
-      if (!teacherId) {
-        console.log('⚠️ No teacher ID - user has no schedule');
-        setSchedule({
-          Monday: [],
-          Tuesday: [],
-          Wednesday: [],
-          Thursday: [],
-          Friday: [],
-        });
+      if (!scheduleService) {
+        console.log('❌ No scheduleService');
         return;
       }
       
-      const weekSchedule = await scheduleService.getWeekSchedule(teacherId);
-      console.log('✅ Schedule loaded:', weekSchedule);
+      const teacherId = teacher?.user_id || null;
       
-      setSchedule(weekSchedule);
-    } catch (error) {
-      console.error('❌ Error loading schedule:', error);
-      alert('Failed to load schedule');
-    } finally {
-      setLocalLoading(false);
-    }
-  }, [scheduleService, teacher]);
-
-  useEffect(() => {
+      console.log('📊 State:', {
+        teacherId,
+        hasTeacher: !!teacher,
+        hasService: !!scheduleService,
+        refreshTrigger
+      });
+      
+      if (!teacherId) {
+        console.log('⚠️ No teacherId - clearing schedule');
+        if (isMounted) {
+          setSchedule({
+            Monday: [],
+            Tuesday: [],
+            Wednesday: [],
+            Thursday: [],
+            Friday: [],
+          });
+        }
+        return;
+      }
+      
+      try {
+        if (isMounted) setLocalLoading(true);
+        
+        console.log('📞 Fetching schedule for:', teacherId);
+        const weekSchedule = await scheduleService.getWeekSchedule(teacherId);
+        
+        console.log('✅ Schedule loaded:', {
+          Monday: weekSchedule.Monday?.length || 0,
+          Tuesday: weekSchedule.Tuesday?.length || 0,
+          Wednesday: weekSchedule.Wednesday?.length || 0,
+          Thursday: weekSchedule.Thursday?.length || 0,
+          Friday: weekSchedule.Friday?.length || 0,
+        });
+        
+        if (isMounted) {
+          setSchedule(weekSchedule);
+        }
+      } catch (error) {
+        console.error('❌ Error loading schedule:', error);
+        if (isMounted) {
+          setSchedule({
+            Monday: [],
+            Tuesday: [],
+            Wednesday: [],
+            Thursday: [],
+            Friday: [],
+          });
+        }
+      } finally {
+        if (isMounted) setLocalLoading(false);
+      }
+    };
+    
     loadSchedule();
-  }, [loadSchedule]);
+    
+    // Cleanup function
+    return () => {
+      isMounted = false;
+    };
+  }, [teacher?.user_id, scheduleService, refreshTrigger]); // ✅ All deps
 
-  // ✅ Check if user can edit (has teacher_id)
   const canEdit = () => {
     return !!teacher?.user_id;
   };
@@ -82,7 +123,6 @@ const SchedulePage = () => {
       setLocalLoading(true);
 
       if (editingEntry) {
-        // Delete old entry and create new one (edit)
         await scheduleService.deleteScheduleClass(editingEntry.id);
         await scheduleService.addScheduleClass(
           entry.day,
@@ -93,7 +133,6 @@ const SchedulePage = () => {
           teacher.user_id
         );
       } else {
-        // Create new entry
         await scheduleService.addScheduleClass(
           entry.day,
           entry.time,
@@ -104,7 +143,8 @@ const SchedulePage = () => {
         );
       }
 
-      await loadSchedule();
+      console.log('💾 Schedule saved, triggering refresh');
+      setRefreshTrigger(prev => prev + 1);
       setShowModal(false);
       setEditingEntry(null);
       setModalType('class');
@@ -128,7 +168,8 @@ const SchedulePage = () => {
       
       if (scheduleItem.id) {
         await scheduleService.deleteScheduleClass(scheduleItem.id);
-        await loadSchedule();
+        console.log('🗑️ Schedule deleted, triggering refresh');
+        setRefreshTrigger(prev => prev + 1);
       } else {
         alert('Cannot delete: schedule item ID not found');
       }
@@ -198,13 +239,11 @@ const SchedulePage = () => {
       
       logoImg.onload = () => {
         const pageWidth = pdf.internal.pageSize.width;
-
         const logoAspectRatio = logoImg.width / logoImg.height;
         const logoHeight = 12;
         const logoWidth = logoHeight * logoAspectRatio;
 
         pdf.addImage(logoImg, 'PNG', 20, 12, logoWidth, logoHeight);
-
         pdf.setFontSize(22);
         pdf.setTextColor(0, 133, 66);
         pdf.setFont('helvetica', 'bold');
@@ -228,15 +267,9 @@ const SchedulePage = () => {
         const lunchBreakPart1 = '12:30 - 12:50';
         const lunchBreakPart2 = '12:50 - 13:25';
 
-        if (!actualTimeSlots.includes(snackBreak)) {
-          actualTimeSlots.push(snackBreak);
-        }
-        if (!actualTimeSlots.includes(lunchBreakPart1)) {
-          actualTimeSlots.push(lunchBreakPart1);
-        }
-        if (!actualTimeSlots.includes(lunchBreakPart2)) {
-          actualTimeSlots.push(lunchBreakPart2);
-        }
+        if (!actualTimeSlots.includes(snackBreak)) actualTimeSlots.push(snackBreak);
+        if (!actualTimeSlots.includes(lunchBreakPart1)) actualTimeSlots.push(lunchBreakPart1);
+        if (!actualTimeSlots.includes(lunchBreakPart2)) actualTimeSlots.push(lunchBreakPart2);
         
         actualTimeSlots.sort();
 
@@ -259,13 +292,9 @@ const SchedulePage = () => {
               if (entries.length > 0) {
                 const entryTexts = entries.map(entry => {
                   const type = entry.type || 'class';
-                  if (type === 'duty') {
-                    return `DUTY: ${entry.subject}`;
-                  } else if (type === 'extracurricular') {
-                    return `EXTRA: ${entry.subject}`;
-                  } else {
-                    return `${entry.class}\n${entry.subject}`;
-                  }
+                  if (type === 'duty') return `DUTY: ${entry.subject}`;
+                  if (type === 'extracurricular') return `EXTRA: ${entry.subject}`;
+                  return `${entry.class}\n${entry.subject}`;
                 });
                 row.push(entryTexts.join('\n'));
               } else {
@@ -282,13 +311,9 @@ const SchedulePage = () => {
             } else {
               const entryTexts = entries.map(entry => {
                 const type = entry.type || 'class';
-                if (type === 'duty') {
-                  return `DUTY: ${entry.subject}`;
-                } else if (type === 'extracurricular') {
-                  return `EXTRA: ${entry.subject}`;
-                } else {
-                  return `${entry.class}\n${entry.subject}`;
-                }
+                if (type === 'duty') return `DUTY: ${entry.subject}`;
+                if (type === 'extracurricular') return `EXTRA: ${entry.subject}`;
+                return `${entry.class}\n${entry.subject}`;
               });
               row.push(entryTexts.join('\n'));
             }
@@ -337,12 +362,7 @@ const SchedulePage = () => {
             cellPadding: 4,
           },
           columnStyles: {
-            0: { 
-              cellWidth: 27,
-              fillColor: [249, 250, 251],
-              fontStyle: 'bold',
-              fontSize: fontSize,
-            },
+            0: { cellWidth: 27, fillColor: [249, 250, 251], fontStyle: 'bold', fontSize: fontSize },
             1: { cellWidth: 46 },
             2: { cellWidth: 46 },
             3: { cellWidth: 46 },
@@ -384,9 +404,7 @@ const SchedulePage = () => {
             if (data.section === 'body' && data.column.index > 0 && data.cell.text.length > 0) {
               const cellText = data.cell.text.join(' ');
               
-              if (cellText === 'SNACK BREAK' || cellText === 'LUNCH') {
-                return;
-              }
+              if (cellText === 'SNACK BREAK' || cellText === 'LUNCH') return;
               
               if (cellText.includes('DUTY:')) {
                 pdf.setDrawColor(245, 158, 11);
@@ -407,12 +425,11 @@ const SchedulePage = () => {
 
         const filename = `Green_School_Timetable_${new Date().toISOString().split('T')[0]}.pdf`;
         pdf.save(filename);
-        
         setLocalLoading(false);
       };
 
       logoImg.onerror = () => {
-        console.warn('Logo not found, generating PDF without logo');
+        console.warn('Logo not found');
         setLocalLoading(false);
       };
 
@@ -425,11 +442,8 @@ const SchedulePage = () => {
 
   const getEntryStyle = (entry) => {
     const type = entry.type || 'class';
-    if (type === 'duty') {
-      return 'bg-yellow-50 border-yellow-200';
-    } else if (type === 'extracurricular') {
-      return 'bg-purple-50 border-purple-200';
-    }
+    if (type === 'duty') return 'bg-yellow-50 border-yellow-200';
+    if (type === 'extracurricular') return 'bg-purple-50 border-purple-200';
     return 'bg-emerald-50 border-emerald-200';
   };
 
@@ -441,13 +455,10 @@ const SchedulePage = () => {
   };
 
   const subjectStats = getClassesBySubject();
-  
-  // Check if user has no teacher profile
   const showNoTeacherMessage = !teacher?.user_id && profile?.role === 'admin';
 
   return (
     <div className="space-y-6">
-      {/* No Teacher Profile Message */}
       {showNoTeacherMessage && (
         <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6">
           <h3 className="font-semibold text-blue-900 mb-2">📋 No Teaching Schedule</h3>
@@ -461,7 +472,6 @@ const SchedulePage = () => {
         </div>
       )}
 
-      {/* Header */}
       {!showNoTeacherMessage && (
         <div className="bg-white rounded-2xl shadow-lg p-6 border border-emerald-100">
           <div className="flex justify-between items-center mb-6">
@@ -472,44 +482,27 @@ const SchedulePage = () => {
             <div className="flex gap-3">
               {canEdit() && (
                 <>
-                  <button
-                    onClick={() => openAddModal('class')}
-                    disabled={localLoading}
-                    className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
+                  <button onClick={() => openAddModal('class')} disabled={localLoading} className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                     <Plus size={20} />
                     Add Class
                   </button>
-                  <button
-                    onClick={() => openAddModal('duty')}
-                    disabled={localLoading}
-                    className="bg-gradient-to-r from-orange-500 to-amber-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
+                  <button onClick={() => openAddModal('duty')} disabled={localLoading} className="bg-gradient-to-r from-orange-500 to-amber-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                     <Calendar size={20} />
                     Add Duty
                   </button>
-                  <button
-                    onClick={() => openAddModal('extracurricular')}
-                    disabled={localLoading}
-                    className="bg-gradient-to-r from-purple-500 to-violet-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
+                  <button onClick={() => openAddModal('extracurricular')} disabled={localLoading} className="bg-gradient-to-r from-purple-500 to-violet-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                     <Award size={20} />
                     Add Extra
                   </button>
                 </>
               )}
-              <button
-                onClick={exportTimetable}
-                disabled={localLoading}
-                className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              <button onClick={exportTimetable} disabled={localLoading} className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                 <Download size={20} />
                 {localLoading ? 'Generating...' : 'Export PDF'}
               </button>
             </div>
           </div>
 
-          {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
               <p className="text-3xl font-bold text-emerald-700">{scheduleStats.classes}</p>
@@ -533,7 +526,6 @@ const SchedulePage = () => {
         </div>
       )}
 
-      {/* Schedule Grid */}
       {!showNoTeacherMessage && (
         <div className="space-y-6">
           {days.map((day) => (
@@ -553,48 +545,29 @@ const SchedulePage = () => {
               ) : (
                 <div className="space-y-2">
                   {schedule[day].map((cls, idx) => (
-                    <div
-                      key={idx}
-                      className={`flex items-center justify-between p-4 rounded-lg border hover:opacity-80 transition-colors ${getEntryStyle(cls)}`}
-                    >
+                    <div key={idx} className={`flex items-center justify-between p-4 rounded-lg border hover:opacity-80 transition-colors ${getEntryStyle(cls)}`}>
                       <div className="flex items-center gap-4 flex-1">
                         <span className="text-2xl">{getEntryIcon(cls)}</span>
-                        <span className="text-sm font-bold text-emerald-600 w-28">
-                          {cls.time}
-                        </span>
+                        <span className="text-sm font-bold text-emerald-600 w-28">{cls.time}</span>
                         <div className="flex items-center gap-3">
                           {(!cls.type || cls.type === 'class') && (
-                            <span className="font-semibold text-gray-800 bg-white px-3 py-1 rounded-lg">
-                              {cls.class}
-                            </span>
+                            <span className="font-semibold text-gray-800 bg-white px-3 py-1 rounded-lg">{cls.class}</span>
                           )}
                           <span className="text-gray-700 font-medium">{cls.subject}</span>
                           {cls.type && cls.type !== 'class' && (
-                            <span className="text-xs bg-white px-2 py-1 rounded capitalize">
-                              {cls.type}
-                            </span>
+                            <span className="text-xs bg-white px-2 py-1 rounded capitalize">{cls.type}</span>
                           )}
                         </div>
                       </div>
                       {canEdit() && (
                         <div className="flex gap-2">
-                          <button
-                            onClick={() => handleEdit(day, cls, cls.id)}
-                            disabled={localLoading}
-                            className="p-2 hover:bg-white/50 text-emerald-700 rounded-lg transition-colors disabled:opacity-50"
-                            title="Edit"
-                          >
+                          <button onClick={() => handleEdit(day, cls, cls.id)} disabled={localLoading} className="p-2 hover:bg-white/50 text-emerald-700 rounded-lg transition-colors disabled:opacity-50" title="Edit">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                             </svg>
                           </button>
-                          <button
-                            onClick={() => handleDelete(cls)}
-                            disabled={localLoading}
-                            className="p-2 hover:bg-red-100 text-red-500 rounded-lg transition-colors disabled:opacity-50"
-                            title="Delete"
-                          >
+                          <button onClick={() => handleDelete(cls)} disabled={localLoading} className="p-2 hover:bg-red-100 text-red-500 rounded-lg transition-colors disabled:opacity-50" title="Delete">
                             <Trash2 size={16} />
                           </button>
                         </div>
@@ -608,7 +581,6 @@ const SchedulePage = () => {
         </div>
       )}
 
-      {/* Modal */}
       {showModal && (
         <ScheduleModal
           onClose={() => {

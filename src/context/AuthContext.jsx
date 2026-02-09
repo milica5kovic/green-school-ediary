@@ -17,11 +17,13 @@ export const AuthProvider = ({ children, supabase }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // Track if we're in the middle of signing out
+  // Refs for state management
   const isSigningOut = useRef(false);
   const isMounted = useRef(true);
+  const isLoadingAuth = useRef(false);
+  const hasLoadedInitialUser = useRef(false); // ✅ NEW - Prevent duplicate loads
 
-  // Load user profile from profiles table
+  // ✅ FIXED: Only update if data actually changed
   const loadProfile = useCallback(async (userId) => {
     if (!supabase || !userId || isSigningOut.current) return null;
     
@@ -45,7 +47,7 @@ export const AuthProvider = ({ children, supabase }) => {
     }
   }, [supabase]);
 
-  // Load teacher info from teachers table
+  // ✅ FIXED: Only update if data actually changed
   const loadTeacher = useCallback(async (userId) => {
     if (!supabase || !userId || isSigningOut.current) return null;
     
@@ -69,7 +71,6 @@ export const AuthProvider = ({ children, supabase }) => {
     }
   }, [supabase]);
 
-  // Centralized state clearing function
   const clearAuthState = useCallback(() => {
     console.log('🔒 Clearing auth state');
     if (!isMounted.current) return;
@@ -98,12 +99,12 @@ export const AuthProvider = ({ children, supabase }) => {
 
         if (session?.user && mounted && !isSigningOut.current) {
           console.log('✅ Session found');
+          hasLoadedInitialUser.current = true; // ✅ Mark as loaded
           setUser(session.user);
           
           const profileData = await loadProfile(session.user.id);
           if (mounted) setProfile(profileData);
           
-          // Only load teacher if user is teacher or admin
           if (profileData?.role === 'teacher' || profileData?.role === 'admin') {
             const teacherData = await loadTeacher(session.user.id);
             if (mounted) setTeacher(teacherData);
@@ -125,11 +126,17 @@ export const AuthProvider = ({ children, supabase }) => {
 
     initAuth();
 
-    // Handle auth state changes (login, logout, token refresh)
+    // ✅ FIXED: Handle auth state changes with duplicate prevention
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('🔔 Auth event:', event);
       
       if (!mounted) return;
+
+      // Prevent concurrent auth loads
+      if (isLoadingAuth.current && event !== 'SIGNED_OUT') {
+        console.log('⚠️ Auth already loading, skipping');
+        return;
+      }
 
       // If signing out, only clear state
       if (isSigningOut.current || event === 'SIGNED_OUT') {
@@ -137,22 +144,69 @@ export const AuthProvider = ({ children, supabase }) => {
         clearAuthState();
         setLoading(false);
         isSigningOut.current = false;
+        isLoadingAuth.current = false;
+        hasLoadedInitialUser.current = false; // ✅ Reset flag
         return;
       }
 
-      // Handle sign in and token refresh (keeps user logged in)
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      // ✅ FIXED: Only load on FIRST SIGNED_IN, ignore subsequent ones
+      if (event === 'SIGNED_IN') {
+        // Skip if we already loaded user data
+        if (hasLoadedInitialUser.current) {
+          console.log('⚠️ Already loaded user, skipping duplicate SIGNED_IN event');
+          return;
+        }
+        
+        hasLoadedInitialUser.current = true; // ✅ Mark as loaded
+        isLoadingAuth.current = true;
+        
         if (session?.user) {
-          console.log('🔐 Loading user data after', event);
+          console.log('🔐 Loading user data after SIGNED_IN (first time)');
           setUser(session.user);
           
           const profileData = await loadProfile(session.user.id);
-          if (mounted) setProfile(profileData);
+          
+          // ✅ Only update if data changed
+          if (mounted) {
+            setProfile(prev => {
+              if (JSON.stringify(prev) === JSON.stringify(profileData)) {
+                return prev; // Same data, keep same reference
+              }
+              return profileData;
+            });
+          }
           
           if (profileData?.role === 'teacher' || profileData?.role === 'admin') {
             const teacherData = await loadTeacher(session.user.id);
-            if (mounted) setTeacher(teacherData);
+            
+            // ✅ Only update if data changed
+            if (mounted) {
+              setTeacher(prev => {
+                if (!teacherData) return null;
+                
+                // Compare key fields to avoid unnecessary updates
+                if (prev && 
+                    prev.user_id === teacherData.user_id && 
+                    prev.full_name === teacherData.full_name &&
+                    prev.email === teacherData.email &&
+                    JSON.stringify(prev.subjects) === JSON.stringify(teacherData.subjects)) {
+                  return prev; // Same data, keep same reference!
+                }
+                
+                return teacherData;
+              });
+            }
           }
+        }
+        
+        isLoadingAuth.current = false;
+      }
+      
+      // ✅ TOKEN_REFRESHED: Do NOT reload data, just update session
+      if (event === 'TOKEN_REFRESHED') {
+        console.log('🔄 Token refreshed (keeping existing data, no reload)');
+        if (session?.user && mounted) {
+          setUser(session.user); // Update session only
         }
       }
       
@@ -172,6 +226,7 @@ export const AuthProvider = ({ children, supabase }) => {
       setLoading(true);
       setError(null);
       isSigningOut.current = false;
+      hasLoadedInitialUser.current = false; // ✅ Reset on login
 
       console.log('🔐 Signing in...');
 
@@ -196,13 +251,11 @@ export const AuthProvider = ({ children, supabase }) => {
     try {
       console.log('🚪 Signing out...');
       
-      // Set flag to prevent reloading during sign out
       isSigningOut.current = true;
+      hasLoadedInitialUser.current = false; // ✅ Reset flag
       
-      // Clear state immediately
       clearAuthState();
       
-      // Sign out from Supabase
       const { error } = await supabase.auth.signOut();
       
       if (error) {
@@ -210,12 +263,9 @@ export const AuthProvider = ({ children, supabase }) => {
       }
       
       console.log('✅ Signed out');
-      
-      // Force redirect to login
       window.location.href = '/';
     } catch (error) {
       console.error('❌ Sign out error:', error);
-      // Even on error, redirect to login
       window.location.href = '/';
     }
   };

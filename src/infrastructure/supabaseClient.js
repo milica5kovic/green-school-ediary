@@ -50,7 +50,12 @@ export const createUserWithAdmin = async (email, password, metadata) => {
         'Authorization': `Bearer ${supabaseServiceKey}`,
         'apikey': supabaseServiceKey
       },
-      body: JSON.stringify(requestBody)
+       body: JSON.stringify({
+    email: email,
+    password: password,
+    email_confirm: true,
+    user_metadata: metadata  // ← This should contain { role: 'parent', full_name: '...' }
+  })
     });
 
     console.log('📥 Response status:', response.status);
@@ -76,6 +81,7 @@ export const createUserWithAdmin = async (email, password, metadata) => {
     console.error('❌ createUserWithAdmin error:', error);
     throw error;
   }
+  
 };
 
 // ✅ Helper to check if admin operations are available
