@@ -3,7 +3,7 @@ import { X, Upload, File, Trash2, Loader } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
-  const { supabase, studentsDb } = useApp();
+  const { supabase } = useApp();
   
   const [formData, setFormData] = useState({
     class_name: existingHomework?.class_name || '',
@@ -19,8 +19,8 @@ const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
   );
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [availableClasses, setAvailableClasses] = useState([]);
 
-  const availableClasses = Object.keys(studentsDb || {}).sort();
   const availableSubjects = [
     'Mathematics',
     'ICT',
@@ -34,10 +34,27 @@ const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
     'Serbian'
   ];
 
+  useEffect(() => {
+    loadClasses();
+  }, []);
+
+  const loadClasses = async () => {
+    try {
+      const { data } = await supabase
+        .from('custom_classes')
+        .select('class_name')
+        .eq('is_active', true)
+        .order('class_name');
+      
+      setAvailableClasses(data?.map(c => c.class_name) || []);
+    } catch (error) {
+      console.error('Error loading classes:', error);
+    }
+  };
+
   const handleFileSelect = (e) => {
     const selectedFiles = Array.from(e.target.files);
     
-    // Validate file size (10MB max)
     const invalidFiles = selectedFiles.filter(file => file.size > 10 * 1024 * 1024);
     if (invalidFiles.length > 0) {
       alert('Some files exceed 10MB limit');
@@ -145,22 +162,19 @@ const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
         <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4 flex items-center justify-between">
           <h3 className="text-xl font-bold text-white">
             {existingHomework ? 'Edit Assignment' : 'New Assignment'}
           </h3>
           <button 
             onClick={onClose} 
-            className="p-2 hover:bg-white/20 rounded-lg transition-colors text-white"
+            className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors text-white"
           >
             <X size={20} />
           </button>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
-          {/* Class */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Class *
@@ -178,7 +192,6 @@ const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
             </select>
           </div>
 
-          {/* Subject */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Subject *
@@ -196,7 +209,6 @@ const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
             </select>
           </div>
 
-          {/* Title */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Title *
@@ -211,7 +223,6 @@ const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
             />
           </div>
 
-          {/* Description */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Description
@@ -225,7 +236,6 @@ const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
             />
           </div>
 
-          {/* Due Date */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Due Date *
@@ -240,7 +250,6 @@ const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
             />
           </div>
 
-          {/* File Upload */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Attachments
@@ -261,7 +270,6 @@ const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
               />
             </label>
 
-            {/* Existing Attachments */}
             {existingAttachments.length > 0 && (
               <div className="mt-3 space-y-2">
                 <p className="text-xs font-medium text-gray-600">Current files:</p>
@@ -293,7 +301,6 @@ const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
               </div>
             )}
 
-            {/* New Files */}
             {files.length > 0 && (
               <div className="mt-3 space-y-2">
                 <p className="text-xs font-medium text-gray-600">New files:</p>
@@ -325,7 +332,6 @@ const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
               </div>
             )}
 
-            {/* Upload Progress */}
             {uploading && (
               <div className="mt-3 bg-emerald-50 rounded-lg p-3">
                 <div className="flex items-center justify-between mb-2">
@@ -343,7 +349,6 @@ const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
           </div>
         </form>
 
-        {/* Footer */}
         <div className="border-t px-6 py-4 bg-gray-50 flex gap-3">
           <button
             type="submit"

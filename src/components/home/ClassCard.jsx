@@ -1,15 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { MessageSquare, X } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
-import { supabase } from '../../infrastructure/supabaseClient';
+import React, { useState, useEffect, useCallback } from "react";
+import { MessageSquare, X } from "lucide-react";
+import { useApp } from "../../context/AppContext";
+import { supabase } from "../../infrastructure/supabaseClient";
 
 const ClassCard = ({ cls, onRemove }) => {
   const { attendanceService, getDateKey, selectedDate } = useApp();
   const [students, setStudents] = useState([]);
-  const [stats, setStats] = useState({ total: 0, present: 0, absent: 0, late: 0 });
+  const [stats, setStats] = useState({
+    total: 0,
+    present: 0,
+    absent: 0,
+    late: 0,
+  });
   const [showBehaviorModal, setShowBehaviorModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
-  const [behaviorComment, setBehaviorComment] = useState('');
+  const [behaviorComment, setBehaviorComment] = useState("");
   const [localAttendance, setLocalAttendance] = useState({}); // Local state for instant updates
 
   const dateKey = getDateKey(selectedDate);
@@ -17,29 +22,32 @@ const ClassCard = ({ cls, onRemove }) => {
   // ✅ FIX: Load students with proper dependencies and NO school_year filter
   const loadData = useCallback(async () => {
     try {
-      console.log('📚 ClassCard - Loading students for class:', cls.class);
-      console.log('  Class ID:', cls.id);
-      console.log('  Date Key:', dateKey);
-      
+      console.log("📚 ClassCard - Loading students for class:", cls.class);
+      console.log("  Class ID:", cls.id);
+      console.log("  Date Key:", dateKey);
+
       // ✅ FIX: Don't filter by school_year - it might be null!
       const { data: classStudents, error } = await supabase
-        .from('students')
-        .select('*')
-        .eq('class_name', cls.class)
-        .eq('status', 'active')  // Only active students
-        .order('student_no', { ascending: true });
+        .from("students")
+        .select("*")
+        .eq("class_name", cls.class)
+        .eq("status", "active") // Only active students
+        .order("student_no", { ascending: true });
 
       if (error) {
-        console.error('❌ Error loading students:', error);
+        console.error("❌ Error loading students:", error);
         setStudents([]);
         return;
       }
 
-      console.log('✅ ClassCard - Students loaded:', classStudents?.length || 0);
-      
+      console.log(
+        "✅ ClassCard - Students loaded:",
+        classStudents?.length || 0,
+      );
+
       if (classStudents && classStudents.length > 0) {
-        console.log('  Students:');
-        classStudents.forEach(s => {
+        console.log("  Students:");
+        classStudents.forEach((s) => {
           console.log(`    ${s.student_no}. ${s.name} (${s.class_name})`);
         });
       }
@@ -51,22 +59,26 @@ const ClassCard = ({ cls, onRemove }) => {
 
       // Initialize local attendance state
       const attendance = {};
-      (classStudents || []).forEach(student => {
-        attendance[student.id] = attendanceService.getAttendance(dateKey, cls.id, student.id);
+      (classStudents || []).forEach((student) => {
+        attendance[student.id] = attendanceService.getAttendance(
+          dateKey,
+          cls.id,
+          student.id,
+        );
       });
       setLocalAttendance(attendance);
 
       // Calculate stats
       updateStats(classStudents || [], attendance);
     } catch (error) {
-      console.error('❌ Error loading attendance:', error);
+      console.error("❌ Error loading attendance:", error);
       setStudents([]);
     }
   }, [cls.id, cls.class, dateKey, attendanceService]); // ✅ All dependencies
 
   // ✅ FIX: Re-run when dependencies change
   useEffect(() => {
-    console.log('🔄 ClassCard - useEffect triggered');
+    console.log("🔄 ClassCard - useEffect triggered");
     loadData();
   }, [loadData]); // ✅ Include callback
 
@@ -75,12 +87,14 @@ const ClassCard = ({ cls, onRemove }) => {
       total: studentList.length,
       present: 0,
       absent: 0,
-      late: 0
+      late: 0,
+      sentOut: 0,
     };
 
-    studentList.forEach(student => {
+    studentList.forEach((student) => {
       const record = attendanceData[student.id];
       if (record?.isPresent()) newStats.present++;
+      if (record?.status === "sent_out") newStats.sentOut++;
       else if (record?.isAbsent()) newStats.absent++;
       else if (record?.isLate()) newStats.late++;
     });
@@ -91,33 +105,42 @@ const ClassCard = ({ cls, onRemove }) => {
   const handleMarkAttendance = async (studentId, status) => {
     try {
       console.log(`✏️ Marking attendance: ${status} for student ${studentId}`);
-      
+
       // Optimistic update - update UI immediately
-      const updatedRecord = await attendanceService.markAttendance(dateKey, cls.id, studentId, status);
-      
+      const updatedRecord = await attendanceService.markAttendance(
+        dateKey,
+        cls.id,
+        studentId,
+        status,
+      );
+
       // Update local state
-      setLocalAttendance(prev => ({
+      setLocalAttendance((prev) => ({
         ...prev,
-        [studentId]: updatedRecord
+        [studentId]: updatedRecord,
       }));
 
       // Recalculate stats with new attendance
       const newAttendance = {
         ...localAttendance,
-        [studentId]: updatedRecord
+        [studentId]: updatedRecord,
       };
       updateStats(students, newAttendance);
 
-      console.log('✅ Attendance marked successfully');
+      console.log("✅ Attendance marked successfully");
     } catch (error) {
-      console.error('❌ Error marking attendance:', error);
-      alert('Failed to mark attendance. Please try again.');
-      
+      console.error("❌ Error marking attendance:", error);
+      alert("Failed to mark attendance. Please try again.");
+
       // Reload from database on error
-      const record = attendanceService.getAttendance(dateKey, cls.id, studentId);
-      setLocalAttendance(prev => ({
+      const record = attendanceService.getAttendance(
+        dateKey,
+        cls.id,
+        studentId,
+      );
+      setLocalAttendance((prev) => ({
         ...prev,
-        [studentId]: record
+        [studentId]: record,
       }));
     }
   };
@@ -125,31 +148,40 @@ const ClassCard = ({ cls, onRemove }) => {
   const openBehaviorModal = (studentId) => {
     const record = localAttendance[studentId];
     setSelectedStudent(studentId);
-    setBehaviorComment(record?.comment || '');
+    setBehaviorComment(record?.comment || "");
     setShowBehaviorModal(true);
   };
 
   const saveBehaviorComment = async () => {
     try {
-      console.log('💬 Saving behavior comment for student:', selectedStudent);
-      
-      await attendanceService.updateComment(dateKey, cls.id, selectedStudent, behaviorComment);
-      
+      console.log("💬 Saving behavior comment for student:", selectedStudent);
+
+      await attendanceService.updateComment(
+        dateKey,
+        cls.id,
+        selectedStudent,
+        behaviorComment,
+      );
+
       // Update local state
-      const updatedRecord = attendanceService.getAttendance(dateKey, cls.id, selectedStudent);
-      setLocalAttendance(prev => ({
+      const updatedRecord = attendanceService.getAttendance(
+        dateKey,
+        cls.id,
+        selectedStudent,
+      );
+      setLocalAttendance((prev) => ({
         ...prev,
-        [selectedStudent]: updatedRecord
+        [selectedStudent]: updatedRecord,
       }));
 
       setShowBehaviorModal(false);
-      setBehaviorComment('');
+      setBehaviorComment("");
       setSelectedStudent(null);
-      
-      console.log('✅ Comment saved successfully');
+
+      console.log("✅ Comment saved successfully");
     } catch (error) {
-      console.error('❌ Error saving comment:', error);
-      alert('Failed to save comment. Please try again.');
+      console.error("❌ Error saving comment:", error);
+      alert("Failed to save comment. Please try again.");
     }
   };
 
@@ -196,6 +228,11 @@ const ClassCard = ({ cls, onRemove }) => {
             <p className="text-2xl font-bold text-orange-600">{stats.late}</p>
             <p className="text-xs text-orange-600">Late</p>
           </div>
+          <div className="bg-orange-50 rounded-lg p-3 text-center border border-orange-200">
+            <p className="text-2xl font-bold text-orange-600">{stats.sentOut}</p>
+            <p className="text-xs text-purple-600">Sent out</p>
+          </div>
+         
         </div>
 
         {/* Debug Info
@@ -207,7 +244,9 @@ const ClassCard = ({ cls, onRemove }) => {
         {students.length === 0 ? (
           <div className="text-center py-8 bg-gray-50 rounded-lg">
             <p className="text-gray-500">No students found in {cls.class}</p>
-            <p className="text-xs text-gray-400 mt-2">Check console for details</p>
+            <p className="text-xs text-gray-400 mt-2">
+              Check console for details
+            </p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -226,7 +265,9 @@ const ClassCard = ({ cls, onRemove }) => {
                       </span>
                     </div>
                     <div>
-                      <p className="font-semibold text-gray-800">{student.name}</p>
+                      <p className="font-semibold text-gray-800">
+                        {student.name}
+                      </p>
                       {attendanceData?.comment && (
                         <p className="text-xs text-gray-500 italic">
                           💬 {attendanceData.comment}
@@ -237,34 +278,49 @@ const ClassCard = ({ cls, onRemove }) => {
 
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => handleMarkAttendance(student.id, 'present')}
+                      onClick={() =>
+                        handleMarkAttendance(student.id, "present")
+                      }
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                        attendanceData?.status === 'present'
-                          ? 'bg-green-500 text-white shadow-md'
-                          : 'bg-gray-100 text-gray-600 hover:bg-green-100'
+                        attendanceData?.status === "present"
+                          ? "bg-green-500 text-white shadow-md"
+                          : "bg-gray-100 text-gray-600 hover:bg-green-100"
                       }`}
                     >
                       Present
                     </button>
                     <button
-                      onClick={() => handleMarkAttendance(student.id, 'late')}
+                      onClick={() => handleMarkAttendance(student.id, "late")}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                        attendanceData?.status === 'late'
-                          ? 'bg-orange-500 text-white shadow-md'
-                          : 'bg-gray-100 text-gray-600 hover:bg-orange-100'
+                        attendanceData?.status === "late"
+                          ? "bg-orange-500 text-white shadow-md"
+                          : "bg-gray-100 text-gray-600 hover:bg-orange-100"
                       }`}
                     >
                       Late
                     </button>
                     <button
-                      onClick={() => handleMarkAttendance(student.id, 'absent')}
+                      onClick={() => handleMarkAttendance(student.id, "absent")}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                        attendanceData?.status === 'absent'
-                          ? 'bg-red-500 text-white shadow-md'
-                          : 'bg-gray-100 text-gray-600 hover:bg-red-100'
+                        attendanceData?.status === "absent"
+                          ? "bg-red-500 text-white shadow-md"
+                          : "bg-gray-100 text-gray-600 hover:bg-red-100"
                       }`}
                     >
                       Absent
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        handleMarkAttendance(student.id, "sent_out")
+                      }
+                      className={
+                        attendanceData?.status === "sent_out"
+                          ? "bg-purple-500 text-white shadow-md"
+                          : "bg-gray-100 text-gray-600 hover:bg-purple-100"
+                      }
+                    >
+                      Sent Out
                     </button>
                     <button
                       onClick={() => openBehaviorModal(student.id)}
@@ -303,7 +359,7 @@ const ClassCard = ({ cls, onRemove }) => {
               <button
                 onClick={() => {
                   setShowBehaviorModal(false);
-                  setBehaviorComment('');
+                  setBehaviorComment("");
                   setSelectedStudent(null);
                 }}
                 className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-300 transition-all"

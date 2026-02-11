@@ -6,29 +6,52 @@ import {
   Settings,
   CheckSquare,
   BarChart3,
+  Home,
+  Users,
+  Clock,
+  Award,
+  User,
+  CalendarDays,
+  ClipboardList,
+  GraduationCap,
+  LayoutDashboard,
+  BookMarked,
+  UserCircle,
+  CalendarCheck,
+  ClipboardCheck,
+  Target
 } from "lucide-react";
 import { AppProvider, useApp } from "./context/AppContext";
 import { useAuth } from "./context/AuthContext";
 import NavItem from "./components/shared/NavItem";
 import LoadingSpinner from "./components/shared/LoadingSpinner";
 import ErrorMessage from "./components/shared/ErrorMessage";
+
+// Teacher/Admin Pages
 import HomePage from "./components/home/HomePage";
-import HomeworkPage from "./components/homework/HomeworkPage";
 import SchedulePage from "./components/schedule/SchedulePage";
-import SettingsPage from "./components/settings/SettingsPage";
-import LoginPage from "./components/auth/LoginPage";
-import GradesPage from "./components/grades/GradesPage";
-import UnauthorizedPage from "./components/shared/UnauthorizedPage";
-import ParentDashboard from "./components/parent/ParentDashboard";
-import ParentGradesPage from "./components/parent/ParentGradesPage";
-import ParentAttendancePage from "./components/parent/ParentAttendancePage";
-import ParentHomeworkPage from "./components/parent/ParentHomeworkPage";
-import ParentMyChildPage from "./components/parent/ParentMyChildPage";
+import TeacherCalendarPage from "./components/teacher/TeacherCalendarPage";
+import AdminCalendarPage from "./components/admin/AdminCalendarPage";
 import TodoPage from "./components/todo/TodoPage";
+import HomeworkPage from "./components/homework/HomeworkPage";
+import GradesPage from "./components/grades/GradesPage";
 import DailyOverviewPage from "./components/pages/DailyOverviewPage";
-import ParentDailyViewPage from "./components/pages/ParentDailyView";
 import TestMakerPage from "./components/pages/TestMakerPage";
 import ManagementPage from "./components/pages/ManagementPage";
+import SettingsPage from "./components/settings/SettingsPage";
+
+// Parent Pages
+import ParentDashboard from "./components/parent/ParentDashboard";
+import ParentMyChildPage from "./components/parent/ParentMyChildPage";
+import ParentGradesPage from "./components/parent/ParentGradesPage";
+import ParentAttendancePage from "./components/parent/ParentAttendancePage";
+import ParentCalendarPage from "./components/parent/ParentCalendarPage"; // ← ADDED
+import ParentDailyViewPage from "./components/pages/ParentDailyView";
+import ParentHomeworkPage from "./components/parent/ParentHomeworkPage";
+
+// Shared
+import LoginPage from "./components/auth/LoginPage";
+import UnauthorizedPage from "./components/shared/UnauthorizedPage";
 
 const AppContent = () => {
   const { currentPage, loading, error, loadAllStudents } = useApp();
@@ -43,7 +66,6 @@ const AppContent = () => {
     isParent,
   } = useAuth();
 
-  // Show loading while checking auth
   if (authLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 flex items-center justify-center">
@@ -52,36 +74,31 @@ const AppContent = () => {
     );
   }
 
-  // Show login page if not authenticated
   if (!user || !profile) {
     return <LoginPage />;
   }
 
-  // Render page based on role and route
   const renderPage = () => {
-    if (loading) {
-      return <LoadingSpinner message="Loading..." />;
-    }
+    if (loading) return <LoadingSpinner message="Loading..." />;
+    if (error) return <ErrorMessage message={error} onRetry={loadAllStudents} />;
 
-    if (error) {
-      return <ErrorMessage message={error} onRetry={loadAllStudents} />;
-    }
-
-    // Parent routing
+    // PARENT ROUTES
     if (isParent()) {
       switch (currentPage) {
         case "home":
           return <ParentDashboard />;
-        case "homework":
-          return <ParentHomeworkPage />;
+        case "my-child":
+          return <ParentMyChildPage />;
         case "grading":
           return <ParentGradesPage />;
         case "parent-attendance":
           return <ParentAttendancePage />;
+        case "parent-calendar": // ← ADDED
+          return <ParentCalendarPage />;
         case "parent-daily":
           return <ParentDailyViewPage />;
-        case "my-child":
-          return <ParentMyChildPage />;
+        case "homework":
+          return <ParentHomeworkPage />;
         case "settings":
           return <SettingsPage />;
         default:
@@ -89,44 +106,41 @@ const AppContent = () => {
       }
     }
 
-    // Teacher/Admin routing
+    // TEACHER / ADMIN ROUTES
     switch (currentPage) {
       case "home":
         return <HomePage />;
-      
       case "schedule":
         return <SchedulePage />;
-      
-      case "homework":
-        return <HomeworkPage />;
-      
-      case "grading":
-        return <GradesPage />;
-      
+      case "teacher-calendar":
+        return <TeacherCalendarPage />;
+      case "admin-calendar":
+        if (!isAdmin()) {
+          return <UnauthorizedPage />;
+        }
+        return <AdminCalendarPage />;
       case "tasks":
         return <TodoPage />;
-      
-      case "test-maker":
-        return <TestMakerPage />;
-      
+      case "homework":
+        return <HomeworkPage />;
+      case "grading":
+        return <GradesPage />;
       case "daily-overview":
         if (!teacher?.class_teacher_for) {
           return <UnauthorizedPage />;
         }
         return <DailyOverviewPage />;
-      
+      case "test-maker":
+        return <TestMakerPage />;
       case "management":
         if (!isAdmin()) {
           return <UnauthorizedPage />;
         }
         return <ManagementPage />;
-      
       case "settings":
         return <SettingsPage />;
-      
       case "unauthorized":
         return <UnauthorizedPage />;
-      
       default:
         return <HomePage />;
     }
@@ -142,7 +156,7 @@ const AppContent = () => {
       <header className="bg-white shadow-md border-b border-emerald-100">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-emerald-500 rounded-lg flex items-center justify-center">
+            <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
               <BookOpen size={24} className="text-white" />
             </div>
             <div>
@@ -157,69 +171,67 @@ const AppContent = () => {
           <div className="flex items-center gap-4">
             <div className="text-right">
               <p className="text-sm font-semibold text-gray-700">
-                {teacher?.full_name || profile?.full_name || profile?.email || "User"}
+                {teacher?.full_name || profile?.full_name || profile?.email}
               </p>
               <p className="text-xs text-emerald-600">
-                {teacher?.subjects?.join(", ") || profile?.role?.toUpperCase() || "User"}
+                {teacher?.subjects?.join(", ") || profile?.role?.toUpperCase()}
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center text-white font-bold">
-                {(teacher?.full_name || profile?.full_name)
-                  ?.split(" ")
-                  .map((n) => n[0])
-                  .join("")
-                  .slice(0, 2) || "U"}
-              </div>
-              <button
-                onClick={handleSignOut}
-                className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg font-medium hover:shadow-lg transition-all text-sm"
-              >
-                Logout
-              </button>
-            </div>
+            <button
+              onClick={handleSignOut}
+              className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg font-medium text-sm hover:shadow-lg transition-all"
+            >
+              Logout
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Main Layout */}
+      {/* Layout */}
       <div className="max-w-7xl mx-auto px-6 py-6 flex gap-6">
         {/* Sidebar */}
         <aside className="w-64 bg-white rounded-2xl shadow-lg p-6 h-fit sticky top-6 border border-emerald-100">
           <nav className="space-y-2">
             {isParent() ? (
-              // PARENT NAVIGATION
               <>
-                <NavItem icon={BookOpen} label="Dashboard" page="home" />
-                <NavItem icon={FileText} label="My Child" page="my-child" />
-                <NavItem icon={BarChart3} label="Grades" page="grading" />
-                <NavItem icon={Calendar} label="Attendance" page="parent-attendance" />
-                <NavItem icon={Calendar} label="Daily View" page="parent-daily" />
-                <NavItem icon={FileText} label="Homework" page="homework" />
+                <NavItem icon={LayoutDashboard} label="Dashboard" page="home" />
+                <NavItem icon={UserCircle} label="My Child" page="my-child" />
+                <NavItem icon={Award} label="Grades" page="grading" />
+                <NavItem icon={CalendarCheck} label="Attendance" page="parent-attendance" />
+                <NavItem icon={Calendar} label="Calendar" page="parent-calendar" /> {/* ← ADDED */}
+                <NavItem icon={CalendarDays} label="Daily View" page="parent-daily" />
+                <NavItem icon={ClipboardList} label="Homework" page="homework" />
                 <NavItem icon={Settings} label="Settings" page="settings" />
               </>
             ) : (
-              // TEACHER/ADMIN NAVIGATION
               <>
-                <NavItem icon={BookOpen} label="Home" page="home" />
-                <NavItem icon={Calendar} label="My Schedule" page="schedule" />
-                <NavItem icon={CheckSquare} label="My Tasks" page="tasks" />
-                <NavItem icon={FileText} label="Homework" page="homework" />
-                <NavItem icon={BarChart3} label="Grading" page="grading" />
-                
-                {teacher?.class_teacher_for && (
-                  <NavItem icon={Calendar} label="Daily Overview" page="daily-overview" />
-                )}
-                
-                <NavItem icon={FileText} label="Test Maker" page="test-maker" />
+                <NavItem icon={Home} label="Home" page="home" />
+                <NavItem icon={Clock} label="My Schedule" page="schedule" />
+                <NavItem icon={Calendar} label="Calendar" page="teacher-calendar" />
                 
                 {isAdmin() && (
-                  <NavItem icon={Settings} label="Management" page="management" />
+                  <NavItem 
+                    icon={CalendarDays} 
+                    label="School Calendar" 
+                    page="admin-calendar" 
+                  />
                 )}
                 
-                {isTeacher() && !isAdmin() && (
-                  <NavItem icon={Settings} label="Settings" page="settings" />
+                <NavItem icon={CheckSquare} label="My Tasks" page="tasks" />
+                <NavItem icon={BookMarked} label="Homework" page="homework" />
+                <NavItem icon={GraduationCap} label="Grading" page="grading" />
+                {teacher?.class_teacher_for && (
+                  <NavItem
+                    icon={ClipboardCheck}
+                    label="Daily Overview"
+                    page="daily-overview"
+                  />
                 )}
+                <NavItem icon={FileText} label="Test Maker" page="test-maker" />
+                {isAdmin() && (
+                  <NavItem icon={Users} label="Management" page="management" />
+                )}
+                <NavItem icon={Settings} label="Settings" page="settings" />
               </>
             )}
           </nav>

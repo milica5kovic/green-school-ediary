@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Plus, Search, Filter, Calendar, Clock, CheckCircle2 } from 'lucide-react';
+import { FileText, Plus, Search, Calendar, Clock, CheckCircle2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import HomeworkCard from './HomeworkCard';
 import HomeworkModal from './HomeworkModal';
+import StudentHomeworkTracker from './StudentHomeworkTracker';
 
 const HomeworkPage = () => {
   const { supabase } = useApp();
@@ -14,6 +15,8 @@ const HomeworkPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterClass, setFilterClass] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
+  const [trackingHomework, setTrackingHomework] = useState(null);
 
   useEffect(() => {
     loadHomework();
@@ -125,7 +128,6 @@ const HomeworkPage = () => {
     }
   };
 
-  // Filter homework
   const filteredHomework = homework.filter(hw => {
     const matchesSearch = hw.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          hw.subject.toLowerCase().includes(searchQuery.toLowerCase());
@@ -134,7 +136,6 @@ const HomeworkPage = () => {
     return matchesSearch && matchesClass && matchesStatus;
   });
 
-  // Categorize
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
@@ -151,12 +152,10 @@ const HomeworkPage = () => {
   const pending = filteredHomework.filter(hw => hw.status === 'pending');
   const completed = filteredHomework.filter(hw => hw.status === 'completed');
 
-  // Get unique classes
   const classes = [...new Set(homework.map(hw => hw.class_name))].sort();
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-xl p-8 text-white">
         <div className="flex justify-between items-start">
           <div>
@@ -172,9 +171,8 @@ const HomeworkPage = () => {
           </button>
         </div>
 
-        {/* Quick Stats */}
         <div className="grid grid-cols-4 gap-4 mt-8">
-          <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 border border-white/30">
+          <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl p-4 border border-white border-opacity-30">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-emerald-100 text-sm mb-1">Total</p>
@@ -184,7 +182,7 @@ const HomeworkPage = () => {
             </div>
           </div>
           
-          <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 border border-white/30">
+          <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl p-4 border border-white border-opacity-30">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-emerald-100 text-sm mb-1">Due Soon</p>
@@ -194,7 +192,7 @@ const HomeworkPage = () => {
             </div>
           </div>
           
-          <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 border border-white/30">
+          <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl p-4 border border-white border-opacity-30">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-red-100 text-sm mb-1">Overdue</p>
@@ -204,7 +202,7 @@ const HomeworkPage = () => {
             </div>
           </div>
           
-          <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 border border-white/30">
+          <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl p-4 border border-white border-opacity-30">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-emerald-100 text-sm mb-1">Completed</p>
@@ -216,7 +214,6 @@ const HomeworkPage = () => {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
         <div className="flex gap-4">
           <div className="flex-1 relative">
@@ -253,7 +250,6 @@ const HomeworkPage = () => {
         </div>
       </div>
 
-      {/* Homework List */}
       {loading ? (
         <div className="bg-white rounded-xl shadow-sm p-12 text-center">
           <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -267,7 +263,6 @@ const HomeworkPage = () => {
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Overdue Section */}
           {overdue.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-3">
@@ -284,13 +279,16 @@ const HomeworkPage = () => {
                       setShowModal(true);
                     }}
                     onDelete={handleDelete}
+                    onTrackStudents={(hw) => {
+                      setTrackingHomework(hw);
+                      setShowTrackingModal(true);
+                    }}
                   />
                 ))}
               </div>
             </div>
           )}
 
-          {/* Upcoming Section */}
           {upcoming.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-3">
@@ -307,13 +305,16 @@ const HomeworkPage = () => {
                       setShowModal(true);
                     }}
                     onDelete={handleDelete}
+                    onTrackStudents={(hw) => {
+                      setTrackingHomework(hw);
+                      setShowTrackingModal(true);
+                    }}
                   />
                 ))}
               </div>
             </div>
           )}
 
-          {/* Other Pending */}
           {pending.filter(hw => !overdue.includes(hw) && !upcoming.includes(hw)).length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-3">
@@ -330,13 +331,16 @@ const HomeworkPage = () => {
                       setShowModal(true);
                     }}
                     onDelete={handleDelete}
+                    onTrackStudents={(hw) => {
+                      setTrackingHomework(hw);
+                      setShowTrackingModal(true);
+                    }}
                   />
                 ))}
               </div>
             </div>
           )}
 
-          {/* Completed */}
           {completed.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-3">
@@ -353,6 +357,10 @@ const HomeworkPage = () => {
                       setShowModal(true);
                     }}
                     onDelete={handleDelete}
+                    onTrackStudents={(hw) => {
+                      setTrackingHomework(hw);
+                      setShowTrackingModal(true);
+                    }}
                   />
                 ))}
               </div>
@@ -361,7 +369,6 @@ const HomeworkPage = () => {
         </div>
       )}
 
-      {/* Modal */}
       {showModal && (
         <HomeworkModal
           onClose={() => {
@@ -370,6 +377,16 @@ const HomeworkPage = () => {
           }}
           onSave={editingHomework ? handleEdit : handleAdd}
           existingHomework={editingHomework}
+        />
+      )}
+
+      {showTrackingModal && trackingHomework && (
+        <StudentHomeworkTracker
+          homework={trackingHomework}
+          onClose={() => {
+            setShowTrackingModal(false);
+            setTrackingHomework(null);
+          }}
         />
       )}
     </div>

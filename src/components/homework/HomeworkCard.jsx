@@ -1,7 +1,7 @@
 import React from 'react';
-import { Calendar, FileText, Edit2, Trash2, Paperclip } from 'lucide-react';
+import { Calendar, Edit2, Trash2, Paperclip, Users } from 'lucide-react';
 
-const HomeworkCard = ({ homework, onEdit, onDelete }) => {
+const HomeworkCard = ({ homework, onEdit, onDelete, onTrackStudents }) => {
   const getDaysUntilDue = (dueDate) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -22,7 +22,6 @@ const HomeworkCard = ({ homework, onEdit, onDelete }) => {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-all">
       <div className="flex items-start justify-between gap-4">
-        {/* Left: Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2">
             <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs font-medium">
@@ -56,8 +55,14 @@ const HomeworkCard = ({ homework, onEdit, onDelete }) => {
           </div>
         </div>
 
-        {/* Right: Actions */}
         <div className="flex gap-2">
+          <button
+            onClick={() => onTrackStudents(homework)}
+            className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
+            title="Track Students"
+          >
+            <Users size={16} />
+          </button>
           <button
             onClick={() => onEdit(homework)}
             className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
