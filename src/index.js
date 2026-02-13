@@ -3,8 +3,8 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
-import { AuthProvider } from './context/AuthContext';
-import { supabase } from './infrastructure/supabaseClient';
+import { AuthProvider } from './core/context/AuthContext';
+import { supabase } from './core/infrastructure/supabaseClient';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
