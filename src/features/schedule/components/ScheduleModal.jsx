@@ -16,11 +16,11 @@ const ScheduleModal = ({ onClose, onSave, existingSchedule, days, modalType = 'c
   const timeSlots = [
   '09:00 - 09:40',
   '09:45 - 10:30',
-  '10:30 - 10:55', // SNACK BREAK
+  '10:30 - 10:55 - Snack Break', // SNACK BREAK
   '11:00 - 11:45',
   '11:50 - 12:30',
-  '12:30 - 12:50', // LUNCH (part 1)
-  '12:50 - 13:25', // LUNCH (part 2)
+  '12:30 - 12:50 - Lunch Break', // LUNCH (part 1)
+  '12:50 - 13:25 - Lunch Break', // LUNCH (part 2)
   '13:30 - 14:15',
   '14:20 - 15:00',
   '15:05 - 15:45',
