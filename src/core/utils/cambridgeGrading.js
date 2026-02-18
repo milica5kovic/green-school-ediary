@@ -22,14 +22,14 @@ const getBand = (percentage) => {
 
 // IGCSE Secondary: percentage → letter grade
 const getIGCSEGrade = (percentage) => {
-  if (percentage >= 90) return { grade: 'A*', color: '#059669' };
-  if (percentage >= 80) return { grade: 'A', color: '#10b981' };
-  if (percentage >= 70) return { grade: 'B', color: '#3b82f6' };
-  if (percentage >= 60) return { grade: 'C', color: '#0ea5e9' };
-  if (percentage >= 50) return { grade: 'D', color: '#f59e0b' };
-  if (percentage >= 40) return { grade: 'E', color: '#f97316' };
-  if (percentage >= 30) return { grade: 'F', color: '#ef4444' };
-  if (percentage >= 20) return { grade: 'G', color: '#dc2626' };
+  if (percentage >= 95) return { grade: 'A*', color: '#059669' };
+  if (percentage >= 85) return { grade: 'A', color: '#10b981' };
+  if (percentage >= 75) return { grade: 'B', color: '#3b82f6' };
+  if (percentage >= 65) return { grade: 'C', color: '#0ea5e9' };
+  if (percentage >= 55) return { grade: 'D', color: '#f59e0b' };
+  if (percentage >= 45) return { grade: 'E', color: '#f97316' };
+  if (percentage >= 35) return { grade: 'F', color: '#ef4444' };
+  if (percentage >= 25) return { grade: 'G', color: '#dc2626' };
   return { grade: 'U', color: '#991b1b' };
 };
 

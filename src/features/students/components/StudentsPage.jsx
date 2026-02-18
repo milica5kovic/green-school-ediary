@@ -1,13 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
-import {
-  Plus,
-  Edit2,
-  Trash2,
-  Download,
-  Upload,
-  Link as LinkIcon,
-} from "lucide-react";
-import { useApp } from "../../../core/context/AppContext";
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, Edit2, Trash2, Download, Upload, Link as LinkIcon, Search, X, Phone, Mail, User, Calendar, Users, ChevronRight, Filter } from 'lucide-react';
+import { useApp } from '../../../core/context/AppContext';
 
 const StudentsPage = () => {
   const { supabase, studentsService, loadAllStudents } = useApp();
@@ -15,154 +8,155 @@ const StudentsPage = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showLinkParentModal, setShowLinkParentModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [showStudentCard, setShowStudentCard] = useState(null);
   const [editingStudent, setEditingStudent] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [classFilter, setClassFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('active');
+
+  const getInitials = (name) => name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
   const loadStudents = useCallback(async () => {
     try {
       setLoading(true);
-      console.log('📚 Loading all students...');
-      
       const allStudents = await studentsService.getAllStudents();
 
-      // Load parent links for each student
       const studentsWithParents = await Promise.all(
         allStudents.map(async (student) => {
           const { data: parentLinks } = await supabase
-            .from("student_parents")
-            .select("parents(full_name, email), relationship")
-            .eq("student_id", student.id);
-
-          return {
-            ...student,
-            parents: parentLinks || [],
-          };
-        }),
+            .from('student_parents')
+            .select('parents(id, full_name, email, phone), relationship, is_primary')
+            .eq('student_id', student.id);
+          return { ...student, parents: parentLinks || [] };
+        })
       );
 
-      console.log('✅ Students loaded:', studentsWithParents.length);
       setStudents(studentsWithParents);
     } catch (error) {
-      console.error("❌ Error loading students:", error);
+      console.error('Error loading students:', error);
     } finally {
       setLoading(false);
     }
   }, [studentsService, supabase]);
 
-  useEffect(() => {
-    loadStudents();
-  }, [loadStudents]);
+  useEffect(() => { loadStudents(); }, [loadStudents]);
 
   const handleDelete = async (studentId) => {
-    if (!window.confirm("Are you sure you want to delete this student?")) {
-      return;
-    }
-
+    if (!window.confirm('Are you sure you want to delete this student?')) return;
     try {
       await studentsService.deleteStudent(studentId);
       await loadStudents();
       await loadAllStudents();
-    } catch (error) {
-      console.error("Error deleting student:", error);
-      alert("Failed to delete student");
-    }
+    } catch (error) { alert('Failed to delete student'); }
   };
 
-  const handleEdit = (student) => {
-    setEditingStudent(student);
-    setShowAddModal(true);
-  };
-
-  const handleLinkParent = (student) => {
-    setSelectedStudent(student);
-    setShowLinkParentModal(true);
-  };
+  const handleEdit = (student) => { setEditingStudent(student); setShowAddModal(true); };
+  const handleLinkParent = (student) => { setSelectedStudent(student); setShowLinkParentModal(true); };
 
   const downloadCSVTemplate = () => {
-    const csv = `Name,Class,Email
-John Doe,Y7,john.doe@student.com
-Jane Smith,Y5A,jane.smith@student.com`;
-
-    const blob = new Blob([csv], { type: "text/csv" });
+    const csv = `Name,Class,Email,Date of Birth\nJohn Doe,Y7,john.doe@student.com,2013-05-15\nJane Smith,Y5A,jane.smith@student.com,2015-03-22`;
+    const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "students_template.csv";
-    a.click();
+    const a = document.createElement('a');
+    a.href = url; a.download = 'students_template.csv'; a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Filtering
+  const allClasses = [...new Set(students.map(s => s.class_name))].sort();
+  const filteredStudents = students.filter(s => {
+    const matchesSearch = searchTerm === '' || s.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesClass = classFilter === 'all' || s.class_name === classFilter;
+    const matchesStatus = statusFilter === 'all' || s.status === statusFilter;
+    return matchesSearch && matchesClass && matchesStatus;
+  });
+
+  const statsByClass = students.reduce((acc, s) => { acc[s.class_name] = (acc[s.class_name] || 0) + 1; return acc; }, {});
+
+  const calculateAge = (dob) => {
+    if (!dob) return null;
+    const today = new Date();
+    const birth = new Date(dob);
+    let age = today.getFullYear() - birth.getFullYear();
+    if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) age--;
+    return age;
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
-  const statsByClass = students.reduce((acc, s) => {
-    acc[s.class_name] = (acc[s.class_name] || 0) + 1;
-    return acc;
-  }, {});
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="bg-white rounded-2xl shadow-lg p-6 border border-emerald-100">
-        <div className="flex justify-between items-center mb-6">
+      <div className="bg-white rounded-2xl shadow-lg p-5 border border-emerald-100">
+        <div className="flex justify-between items-center mb-4">
           <div>
-            <h2 className="text-2xl font-bold text-gray-800">
-              Students Management
+            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+              <Users size={22} className="text-emerald-600" />
+              Students
             </h2>
-            <p className="text-gray-600 mt-1">
-              Manage student records and parent links
-            </p>
+            <p className="text-xs text-gray-400 mt-0.5">Manage records, parents, and contact details</p>
           </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => {
-                setEditingStudent(null);
-                setShowAddModal(true);
-              }}
-              className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2"
-            >
-              <Plus size={20} />
-              Add Student
+          <div className="flex gap-2">
+            <button onClick={() => { setEditingStudent(null); setShowAddModal(true); }}
+              className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:shadow-lg transition-all flex items-center gap-1.5">
+              <Plus size={16} /> Add Student
             </button>
-            <button
-              onClick={downloadCSVTemplate}
-              className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2"
-            >
-              <Download size={20} />
-              CSV Template
+            <button onClick={downloadCSVTemplate}
+              className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-all flex items-center gap-1.5">
+              <Download size={16} /> CSV Template
             </button>
           </div>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-            <p className="text-2xl font-bold text-blue-700">
-              {students.filter((s) => s.status === "active").length}
-            </p>
-            <p className="text-sm text-blue-600">Active Students</p>
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-200">
+            <p className="text-2xl font-bold text-emerald-700">{students.filter(s => s.status === 'active').length}</p>
+            <p className="text-[11px] text-emerald-600">Active Students</p>
           </div>
-          <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
-            <p className="text-2xl font-bold text-orange-700">
-              {students.filter((s) => s.status === "graduated").length}
-            </p>
-            <p className="text-sm text-orange-600">Graduated</p>
+          <div className="bg-orange-50 rounded-xl p-3 border border-orange-200">
+            <p className="text-2xl font-bold text-orange-700">{students.filter(s => s.status === 'graduated').length}</p>
+            <p className="text-[11px] text-orange-600">Graduated</p>
           </div>
-          <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-            <p className="text-2xl font-bold text-red-700">
-              {
-                students.filter(
-                  (s) => s.status === "archived" || s.status === "transferred",
-                ).length
-              }
-            </p>
-            <p className="text-sm text-red-600">Dropped Out / Kicked Out</p>
+          <div className="bg-red-50 rounded-xl p-3 border border-red-200">
+            <p className="text-2xl font-bold text-red-700">{students.filter(s => s.status === 'archived' || s.status === 'transferred').length}</p>
+            <p className="text-[11px] text-red-600">Archived / Transferred</p>
           </div>
+        </div>
+
+        {/* Search + Filters */}
+        <div className="flex gap-3 flex-wrap">
+          <div className="flex-1 min-w-[200px] relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+            <input type="text" placeholder="Search by name..." value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+            {searchTerm && (
+              <button onClick={() => setSearchTerm('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <option value="all">All Classes</option>
+            {allClasses.map(c => <option key={c} value={c}>{c} ({statsByClass[c]})</option>)}
+          </select>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <option value="all">All Status</option>
+            <option value="active">Active</option>
+            <option value="graduated">Graduated</option>
+            <option value="archived">Archived</option>
+            <option value="transferred">Transferred</option>
+          </select>
         </div>
       </div>
 
@@ -170,158 +164,256 @@ Jane Smith,Y5A,jane.smith@student.com`;
       <CSVUploadSection onUploadComplete={loadStudents} />
 
       {/* Students Table */}
-      <div className="bg-white rounded-2xl shadow-lg p-6 border border-emerald-100">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">All Students</h3>
+      <div className="bg-white rounded-2xl shadow-lg border border-emerald-100 overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-gray-700">
+            {filteredStudents.length} Student{filteredStudents.length !== 1 ? 's' : ''}
+            {searchTerm && <span className="text-gray-400 font-normal ml-1">matching "{searchTerm}"</span>}
+          </h3>
+        </div>
 
-        {students.length === 0 ? (
-          <div className="text-center py-12 bg-gray-50 rounded-lg">
-            <p className="text-gray-500">No students yet</p>
+        {filteredStudents.length === 0 ? (
+          <div className="text-center py-16 bg-gray-50">
+            <Users size={40} className="mx-auto text-gray-300 mb-3" />
+            <p className="text-gray-400 text-sm">{searchTerm ? 'No students found' : 'No students yet'}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-emerald-50 border-b border-emerald-100">
-                <tr>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-700">
-                    Student #
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-700">
-                    Name
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-700">
-                    Class
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-700">
-                    Email
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-700">
-                    School Year
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-emerald-700">
-                    Parents
-                  </th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-emerald-700">
-                    Actions
-                  </th>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Student</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-gray-600">Class</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-gray-600">DOB / Age</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-gray-600">Parents</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-gray-600">Year</th>
+                  <th className="text-center px-3 py-2.5 font-semibold text-gray-600">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {students.map((student) => (
-                  <tr
-                    key={student.id}
-                    className="hover:bg-emerald-50 transition-colors"
-                  >
-                    <td className="px-4 py-3 font-medium text-gray-900">
-                      {student.student_no}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-gray-900">
-                      {student.name}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-medium">
-                        {student.class_name}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {student.email || "-"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        student.school_year === '2025-26' 
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-red-100 text-red-700'
-                      }`}>
-                        {student.school_year || 'NOT SET'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {student.parents?.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {student.parents.map((link, idx) => (
-                            <span
-                              key={idx}
-                              className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs"
-                            >
-                              {link.parents.full_name} ({link.relationship})
-                            </span>
-                          ))}
+                {filteredStudents.map((student, idx) => {
+                  const age = calculateAge(student.date_of_birth);
+                  return (
+                    <tr key={student.id} className={`hover:bg-emerald-50/50 transition-colors cursor-pointer ${idx % 2 ? 'bg-gray-50/30' : ''}`}
+                      onClick={() => setShowStudentCard(student)}>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center flex-shrink-0">
+                            <span className="text-white font-bold text-[11px]">{getInitials(student.name)}</span>
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-800">{student.name}</p>
+                            {student.email && <p className="text-[11px] text-gray-400">{student.email}</p>}
+                          </div>
                         </div>
-                      ) : (
-                        <span className="text-gray-400 text-xs">
-                          No parents linked
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-xs font-medium">{student.class_name}</span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {student.date_of_birth ? (
+                          <div>
+                            <p className="text-xs text-gray-700">{new Date(student.date_of_birth + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                            <p className="text-[11px] text-gray-400">{age} years old</p>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-300">Not set</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {student.parents?.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {student.parents.slice(0, 2).map((link, i) => (
+                              <span key={i} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[11px] font-medium">
+                                {link.parents?.full_name} ({link.relationship})
+                              </span>
+                            ))}
+                            {student.parents.length > 2 && <span className="text-[11px] text-gray-400">+{student.parents.length - 2}</span>}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-gray-300">No parents</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${
+                          student.school_year === '2025-26' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                        }`}>
+                          {student.school_year || 'NOT SET'}
                         </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-center gap-2">
-                        <button
-                          onClick={() => handleLinkParent(student)}
-                          className="p-2 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
-                          title="Link Parent"
-                        >
-                          <LinkIcon size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleEdit(student)}
-                          className="p-2 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors"
-                          title="Edit"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(student.id)}
-                          className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-center gap-1">
+                          <button onClick={() => handleLinkParent(student)} className="p-1.5 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors" title="Link Parent">
+                            <LinkIcon size={14} />
+                          </button>
+                          <button onClick={() => handleEdit(student)} className="p-1.5 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors" title="Edit">
+                            <Edit2 size={14} />
+                          </button>
+                          <button onClick={() => handleDelete(student.id)} className="p-1.5 hover:bg-red-100 text-red-500 rounded-lg transition-colors" title="Delete">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      {/* Add/Edit Student Modal */}
+      {/* ─── STUDENT DETAIL CARD ─────────────────────────── */}
+      {showStudentCard && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+            {/* Card Header */}
+            <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-6 text-white">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center">
+                  <span className="text-2xl font-bold">{getInitials(showStudentCard.name)}</span>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold">{showStudentCard.name}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="px-2 py-0.5 bg-white/20 rounded text-xs font-medium">{showStudentCard.class_name}</span>
+                    <span className="px-2 py-0.5 bg-white/20 rounded text-xs font-medium">#{showStudentCard.student_no}</span>
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                      showStudentCard.status === 'active' ? 'bg-emerald-300/30' : 'bg-red-300/30'
+                    }`}>{showStudentCard.status}</span>
+                  </div>
+                </div>
+                <button onClick={() => setShowStudentCard(null)} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Student Info */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <p className="text-[11px] text-gray-500 mb-0.5 flex items-center gap-1"><Calendar size={12} /> Date of Birth</p>
+                  {showStudentCard.date_of_birth ? (
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">
+                        {new Date(showStudentCard.date_of_birth + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </p>
+                      <p className="text-xs text-gray-500">{calculateAge(showStudentCard.date_of_birth)} years old</p>
+                    </div>
+                  ) : <p className="text-sm text-gray-400">Not set</p>}
+                </div>
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <p className="text-[11px] text-gray-500 mb-0.5 flex items-center gap-1"><Mail size={12} /> Email</p>
+                  <p className="text-sm font-semibold text-gray-800">{showStudentCard.email || 'Not set'}</p>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <p className="text-[11px] text-gray-500 mb-0.5">School Year</p>
+                  <p className="text-sm font-semibold text-gray-800">{showStudentCard.school_year || 'Not set'}</p>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <p className="text-[11px] text-gray-500 mb-0.5">Student No.</p>
+                  <p className="text-sm font-semibold text-gray-800">#{showStudentCard.student_no}</p>
+                </div>
+              </div>
+
+              {/* Parents / Emergency Contacts */}
+              <div>
+                <h4 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                  <Users size={16} className="text-blue-600" />
+                  Parents & Emergency Contacts
+                </h4>
+
+                {showStudentCard.parents?.length > 0 ? (
+                  <div className="space-y-2">
+                    {showStudentCard.parents.map((link, idx) => (
+                      <div key={idx} className="bg-blue-50 rounded-xl p-3.5 border border-blue-200">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="text-sm font-semibold text-gray-800">{link.parents?.full_name}</p>
+                              <span className="px-1.5 py-0.5 bg-blue-200 text-blue-800 rounded text-[10px] font-bold capitalize">{link.relationship}</span>
+                              {link.is_primary && (
+                                <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[10px] font-bold">PRIMARY</span>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              {link.parents?.email && (
+                                <a href={`mailto:${link.parents.email}`} className="flex items-center gap-1.5 text-xs text-blue-700 hover:underline">
+                                  <Mail size={12} /> {link.parents.email}
+                                </a>
+                              )}
+                              {link.parents?.phone && (
+                                <a href={`tel:${link.parents.phone}`} className="flex items-center gap-1.5 text-xs text-blue-700 hover:underline font-semibold">
+                                  <Phone size={12} /> {link.parents.phone}
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                          {link.parents?.phone && (
+                            <a href={`tel:${link.parents.phone}`}
+                              className="w-10 h-10 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl flex items-center justify-center transition-colors shadow-sm">
+                              <Phone size={18} />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 rounded-xl p-4 text-center">
+                    <Users size={24} className="mx-auto text-gray-300 mb-2" />
+                    <p className="text-xs text-gray-400">No parents linked yet</p>
+                    <button onClick={() => { setShowStudentCard(null); handleLinkParent(showStudentCard); }}
+                      className="mt-2 text-xs text-emerald-600 font-medium hover:underline">
+                      + Link a parent
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Quick Actions */}
+              <div className="flex gap-2 pt-2 border-t border-gray-100">
+                <button onClick={() => { setShowStudentCard(null); handleEdit(showStudentCard); }}
+                  className="flex-1 bg-emerald-50 text-emerald-700 py-2 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-all flex items-center justify-center gap-1.5">
+                  <Edit2 size={14} /> Edit
+                </button>
+                <button onClick={() => { setShowStudentCard(null); handleLinkParent(showStudentCard); }}
+                  className="flex-1 bg-blue-50 text-blue-700 py-2 rounded-lg text-sm font-medium hover:bg-blue-100 transition-all flex items-center justify-center gap-1.5">
+                  <LinkIcon size={14} /> Parents
+                </button>
+                <button onClick={() => setShowStudentCard(null)}
+                  className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-all">
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modals */}
       {showAddModal && (
         <AddStudentModal
           student={editingStudent}
-          onClose={() => {
-            setShowAddModal(false);
-            setEditingStudent(null);
-          }}
-          onSave={async () => {
-            await loadStudents();
-            await loadAllStudents();
-            setShowAddModal(false);
-            setEditingStudent(null);
-          }}
+          onClose={() => { setShowAddModal(false); setEditingStudent(null); }}
+          onSave={async () => { await loadStudents(); await loadAllStudents(); setShowAddModal(false); setEditingStudent(null); }}
         />
       )}
 
-      {/* Link Parent Modal */}
       {showLinkParentModal && (
         <LinkParentModal
           student={selectedStudent}
-          onClose={() => {
-            setShowLinkParentModal(false);
-            setSelectedStudent(null);
-          }}
-          onSave={async () => {
-            await loadStudents();
-            setShowLinkParentModal(false);
-            setSelectedStudent(null);
-          }}
+          onClose={() => { setShowLinkParentModal(false); setSelectedStudent(null); }}
+          onSave={async () => { await loadStudents(); setShowLinkParentModal(false); setSelectedStudent(null); }}
         />
       )}
     </div>
   );
 };
 
-// ✅ FIXED: CSV Upload Component - Uses studentsService
+// ─── CSV UPLOAD ──────────────────────────────────────────
+
 const CSVUploadSection = ({ onUploadComplete }) => {
   const { studentsService } = useApp();
   const [uploading, setUploading] = useState(false);
@@ -329,251 +421,138 @@ const CSVUploadSection = ({ onUploadComplete }) => {
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     try {
       setUploading(true);
       const text = await file.text();
-      const lines = text.split("\n").filter((line) => line.trim());
+      const lines = text.split('\n').filter(line => line.trim());
       const dataLines = lines.slice(1);
-
-      // Get next student number
       const nextStudentNo = await studentsService.getNextStudentNumber('');
-
       let currentNo = nextStudentNo;
-      
-      // ✅ CRITICAL: Use studentsService.addStudent() for each student
-      for (const line of dataLines) {
-        const [name, className, email] = line
-          .split(",")
-          .map((s) => s.trim().replace(/^"|"$/g, ""));
 
+      for (const line of dataLines) {
+        const [name, className, email, dob] = line.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
         await studentsService.addStudent({
-          name: name,
-          class_name: className,
-          email: email || null,
-          student_no: currentNo,
-          school_year: '2025-26', // ✅ Explicit
-          status: 'active' // ✅ Explicit
+          name, class_name: className, email: email || null,
+          date_of_birth: dob || null,
+          student_no: currentNo, school_year: '2025-26', status: 'active'
         });
-        
         currentNo++;
       }
 
       alert(`Successfully imported ${dataLines.length} students!`);
       onUploadComplete();
-    } catch (error) {
-      console.error("❌ Error uploading CSV:", error);
-      alert("Failed to upload CSV: " + error.message);
-    } finally {
-      setUploading(false);
-      e.target.value = "";
-    }
+    } catch (error) { alert('Failed: ' + error.message); }
+    finally { setUploading(false); e.target.value = ''; }
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6 border border-blue-100">
-      <div className="flex items-center gap-3 mb-4">
-        <Upload size={24} className="text-blue-600" />
-        <div>
-          <h3 className="text-lg font-bold text-gray-800">
-            Bulk Import via CSV
-          </h3>
-          <p className="text-sm text-gray-600">
-            Upload a CSV file to import multiple students at once
-          </p>
+    <div className="bg-white rounded-2xl shadow-lg p-5 border border-blue-100">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
+          <Upload size={20} className="text-blue-600" />
         </div>
+        <div className="flex-1">
+          <h3 className="text-sm font-bold text-gray-800">Bulk Import via CSV</h3>
+          <p className="text-[11px] text-gray-500">Format: Name, Class, Email, Date of Birth (YYYY-MM-DD)</p>
+        </div>
+        <label className="block">
+          <input type="file" accept=".csv" onChange={handleFileUpload} disabled={uploading} className="hidden" />
+          <span className={`inline-block bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium cursor-pointer hover:shadow-lg transition-all ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+            {uploading ? 'Uploading...' : 'Choose CSV'}
+          </span>
+        </label>
       </div>
-
-      <label className="block">
-        <input
-          type="file"
-          accept=".csv"
-          onChange={handleFileUpload}
-          disabled={uploading}
-          className="hidden"
-        />
-        <span
-          className={`inline-block bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-3 rounded-lg font-medium cursor-pointer hover:shadow-lg transition-all ${
-            uploading ? "opacity-50 cursor-not-allowed" : ""
-          }`}
-        >
-          {uploading ? "Uploading..." : "Choose CSV File"}
-        </span>
-      </label>
-
-      <p className="text-xs text-gray-500 mt-3">
-        Format: Name, Class, Email (School year 2025-26 will be auto-assigned)
-      </p>
     </div>
   );
 };
 
-// ✅ FIXED: Add/Edit Student Modal - Uses studentsService
+// ─── ADD/EDIT MODAL ──────────────────────────────────────
+
 const AddStudentModal = ({ student, onClose, onSave }) => {
   const { studentsService } = useApp();
   const [formData, setFormData] = useState({
-    name: student?.name || "",
-    class_name: student?.class_name || "Y1",
-    email: student?.email || "",
-    school_year: student?.school_year || "2025-26", // ✅ Default
+    name: student?.name || '',
+    class_name: student?.class_name || 'Y1',
+    email: student?.email || '',
+    date_of_birth: student?.date_of_birth || '',
+    school_year: student?.school_year || '2025-26',
   });
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!formData.name || !formData.class_name) {
-      alert("Please fill in name and class");
-      return;
-    }
-
+    if (!formData.name || !formData.class_name) { alert('Please fill in name and class'); return; }
     try {
       setSaving(true);
-      console.log('💾 Saving student:', formData);
-
       if (student) {
-        // ✅ UPDATE - use studentsService
         await studentsService.updateStudent(student.id, {
-          name: formData.name,
-          class_name: formData.class_name,
-          email: formData.email || null,
-          student_no: student.student_no, // Keep existing
-          school_year: formData.school_year,
+          name: formData.name, class_name: formData.class_name,
+          email: formData.email || null, date_of_birth: formData.date_of_birth || null,
+          student_no: student.student_no, school_year: formData.school_year,
           status: student.status || 'active'
         });
       } else {
-        // ✅ CREATE - use studentsService
         const nextStudentNo = await studentsService.getNextStudentNumber(formData.class_name);
-        
         await studentsService.addStudent({
-          name: formData.name,
-          class_name: formData.class_name,
-          email: formData.email || null,
-          student_no: nextStudentNo,
-          school_year: formData.school_year, // ✅ Explicit
-          status: 'active' // ✅ Explicit
+          name: formData.name, class_name: formData.class_name,
+          email: formData.email || null, date_of_birth: formData.date_of_birth || null,
+          student_no: nextStudentNo, school_year: formData.school_year, status: 'active'
         });
       }
-
-      console.log('✅ Student saved successfully');
       onSave();
-    } catch (error) {
-      console.error("❌ Error saving student:", error);
-      alert("Failed to save student: " + error.message);
-    } finally {
-      setSaving(false);
-    }
+    } catch (error) { alert('Failed: ' + error.message); }
+    finally { setSaving(false); }
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-8 max-w-lg w-full">
-        <h3 className="text-2xl font-bold text-gray-800 mb-6">
-          {student ? "Edit Student" : "Add New Student"}
-        </h3>
+      <div className="bg-white rounded-2xl p-6 max-w-lg w-full">
+        <h3 className="text-lg font-bold text-gray-800 mb-5">{student ? 'Edit Student' : 'Add New Student'}</h3>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Full Name *
-            </label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              placeholder="John Doe"
-            />
+            <label className="block text-xs font-medium text-gray-600 mb-1">Full Name *</label>
+            <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="John Doe" />
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Class *
-            </label>
-            <select
-              value={formData.class_name}
-              onChange={(e) =>
-                setFormData({ ...formData, class_name: e.target.value })
-              }
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-            >
-              <option value="Y1">Y1</option>
-              <option value="Y2">Y2</option>
-              <option value="Y3">Y3</option>
-              <option value="Y4">Y4</option>
-              <option value="Y5A">Y5A</option>
-              <option value="Y5B">Y5B</option>
-              <option value="Y6">Y6</option>
-              <option value="Y7">Y7</option>
-              <option value="Y8">Y8</option>
-              <option value="Y9">Y9</option>
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Class *</label>
+              <select value={formData.class_name} onChange={(e) => setFormData({ ...formData, class_name: e.target.value })}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                {['Y1','Y2','Y3','Y4','Y5A','Y5B','Y6','Y7','Y8','Y9'].map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Date of Birth</label>
+              <input type="date" value={formData.date_of_birth} onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+            </div>
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              School Year
-            </label>
-            <input
-              type="text"
-              value={formData.school_year}
-              onChange={(e) =>
-                setFormData({ ...formData, school_year: e.target.value })
-              }
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-gray-50"
-              placeholder="2025-26"
-              readOnly
-            />
-            <p className="text-xs text-gray-500 mt-1">Current academic year</p>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Email (Optional)</label>
+            <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="john@student.com" />
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email (Optional)
-            </label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) =>
-                setFormData({ ...formData, email: e.target.value })
-              }
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              placeholder="john.doe@student.com"
-            />
+            <label className="block text-xs font-medium text-gray-600 mb-1">School Year</label>
+            <input type="text" value={formData.school_year} readOnly
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50" />
           </div>
 
           {!student && (
-            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-              <p className="text-sm text-blue-900">
-                <strong>✅ Auto-generated:</strong>
-              </p>
-              <ul className="text-xs text-blue-700 mt-2 space-y-1">
-                <li>• Student # (next available)</li>
-                <li>• School Year: 2025-26</li>
-                <li>• Status: Active</li>
-              </ul>
+            <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-200 text-xs text-emerald-700">
+              Student # will be auto-generated. Status: Active.
             </div>
           )}
 
-          <div className="flex gap-3 pt-4">
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-3 rounded-lg font-medium hover:shadow-lg transition-all disabled:opacity-50"
-            >
-              {saving
-                ? "Saving..."
-                : student
-                  ? "Update Student"
-                  : "Add Student"}
+          <div className="flex gap-3 pt-3">
+            <button type="submit" disabled={saving}
+              className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-2.5 rounded-lg text-sm font-medium hover:shadow-lg transition-all disabled:opacity-50">
+              {saving ? 'Saving...' : student ? 'Update' : 'Add Student'}
             </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-300 transition-all"
-            >
+            <button type="button" onClick={onClose}
+              className="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-300 transition-all">
               Cancel
             </button>
           </div>
@@ -583,142 +562,88 @@ const AddStudentModal = ({ student, onClose, onSave }) => {
   );
 };
 
-// Link Parent Modal (unchanged - already good)
+// ─── LINK PARENT MODAL ───────────────────────────────────
+
 const LinkParentModal = ({ student, onClose, onSave }) => {
   const { supabase } = useApp();
   const [parents, setParents] = useState([]);
   const [linkedParents, setLinkedParents] = useState([]);
-  const [selectedParent, setSelectedParent] = useState("");
-  const [relationship, setRelationship] = useState("mother");
+  const [selectedParent, setSelectedParent] = useState('');
+  const [relationship, setRelationship] = useState('mother');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     try {
       setLoading(true);
-
-      const { data: allParents } = await supabase
-        .from("parents")
-        .select("*")
-        .order("full_name");
-
+      const { data: allParents } = await supabase.from('parents').select('*').order('full_name');
       setParents(allParents || []);
-
-      const { data: links } = await supabase
-        .from("student_parents")
-        .select("*, parents(full_name, email)")
-        .eq("student_id", student.id);
-
+      const { data: links } = await supabase.from('student_parents').select('*, parents(full_name, email, phone)').eq('student_id', student.id);
       setLinkedParents(links || []);
-    } catch (error) {
-      console.error("Error loading parents:", error);
-    } finally {
-      setLoading(false);
-    }
+    } catch (error) { console.error(error); }
+    finally { setLoading(false); }
   };
 
   const handleAddLink = async () => {
-    if (!selectedParent) {
-      alert("Please select a parent");
-      return;
-    }
-
+    if (!selectedParent) { alert('Please select a parent'); return; }
     try {
       setSaving(true);
-
-      const { error } = await supabase.from("student_parents").insert([
-        {
-          student_id: student.id,
-          parent_id: selectedParent,
-          relationship: relationship,
-          is_primary: linkedParents.length === 0,
-        },
-      ]);
-
+      const { error } = await supabase.from('student_parents').insert([{
+        student_id: student.id, parent_id: selectedParent,
+        relationship, is_primary: linkedParents.length === 0
+      }]);
       if (error) throw error;
-
-      await loadData();
-      setSelectedParent("");
-    } catch (error) {
-      console.error("Error linking parent:", error);
-      alert("Failed to link parent: " + error.message);
-    } finally {
-      setSaving(false);
-    }
+      await loadData(); setSelectedParent('');
+    } catch (error) { alert('Failed: ' + error.message); }
+    finally { setSaving(false); }
   };
 
   const handleRemoveLink = async (linkId) => {
-    if (!window.confirm("Remove this parent link?")) return;
-
+    if (!window.confirm('Remove this parent link?')) return;
     try {
-      const { error } = await supabase
-        .from("student_parents")
-        .delete()
-        .eq("id", linkId);
-
-      if (error) throw error;
+      await supabase.from('student_parents').delete().eq('id', linkId);
       await loadData();
-    } catch (error) {
-      console.error("Error removing link:", error);
-      alert("Failed to remove link");
-    }
+    } catch (error) { alert('Failed to remove'); }
   };
+
+  const getInitials = (name) => name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <h3 className="text-2xl font-bold text-gray-800 mb-2">
-          Link Parents to {student.name}
-        </h3>
-        <p className="text-sm text-gray-600 mb-6">
-          Class {student.class_name} • Student #{student.student_no}
-        </p>
+      <div className="bg-white rounded-2xl p-6 max-w-lg w-full max-h-[85vh] overflow-y-auto">
+        <h3 className="text-lg font-bold text-gray-800 mb-1">Link Parents</h3>
+        <p className="text-xs text-gray-500 mb-5">{student.name} • {student.class_name}</p>
 
         {loading ? (
           <div className="flex justify-center py-8">
-            <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+            <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
           </div>
         ) : (
           <>
-            {/* Currently Linked Parents */}
-            <div className="mb-6">
-              <h4 className="font-semibold text-gray-800 mb-3">
-                Linked Parents
-              </h4>
+            {/* Linked */}
+            <div className="mb-5">
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">Linked Parents</h4>
               {linkedParents.length === 0 ? (
-                <p className="text-sm text-gray-500 italic">
-                  No parents linked yet
-                </p>
+                <p className="text-xs text-gray-400 italic py-2">No parents linked</p>
               ) : (
                 <div className="space-y-2">
-                  {linkedParents.map((link) => (
-                    <div
-                      key={link.id}
-                      className="flex justify-between items-center p-3 bg-blue-50 rounded-lg border border-blue-200"
-                    >
+                  {linkedParents.map(link => (
+                    <div key={link.id} className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-200">
                       <div>
-                        <p className="font-medium text-gray-900">
-                          {link.parents.full_name}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          {link.parents.email} • {link.relationship}
-                        </p>
-                        {link.is_primary && (
-                          <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded mt-1 inline-block">
-                            Primary Contact
-                          </span>
-                        )}
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <p className="text-sm font-semibold text-gray-800">{link.parents?.full_name}</p>
+                          <span className="px-1.5 py-0.5 bg-blue-200 text-blue-800 rounded text-[10px] font-bold capitalize">{link.relationship}</span>
+                          {link.is_primary && <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[10px] font-bold">PRIMARY</span>}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {link.parents?.email && <span className="text-[11px] text-gray-500 flex items-center gap-1"><Mail size={10} /> {link.parents.email}</span>}
+                          {link.parents?.phone && <span className="text-[11px] text-blue-700 font-semibold flex items-center gap-1"><Phone size={10} /> {link.parents.phone}</span>}
+                        </div>
                       </div>
-                      <button
-                        onClick={() => handleRemoveLink(link.id)}
-                        className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
-                        title="Remove"
-                      >
-                        <Trash2 size={16} />
+                      <button onClick={() => handleRemoveLink(link.id)} className="p-1.5 hover:bg-red-100 text-red-500 rounded-lg transition-colors">
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   ))}
@@ -726,75 +651,41 @@ const LinkParentModal = ({ student, onClose, onSave }) => {
               )}
             </div>
 
-            {/* Add New Parent Link */}
-            <div className="border-t border-gray-200 pt-6">
-              <h4 className="font-semibold text-gray-800 mb-3">
-                Add Parent Link
-              </h4>
-
-              <div className="grid grid-cols-2 gap-4 mb-4">
+            {/* Add link */}
+            <div className="border-t border-gray-200 pt-4">
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">Add Parent Link</h4>
+              <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select Parent
-                  </label>
-                  <select
-                    value={selectedParent}
-                    onChange={(e) => setSelectedParent(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  >
-                    <option value="">Choose a parent...</option>
-                    {parents
-                      .filter(
-                        (p) => !linkedParents.some((l) => l.parent_id === p.id),
-                      )
-                      .map((parent) => (
-                        <option key={parent.id} value={parent.id}>
-                          {parent.full_name} ({parent.email})
-                        </option>
-                      ))}
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Parent</label>
+                  <select value={selectedParent} onChange={(e) => setSelectedParent(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    <option value="">Choose...</option>
+                    {parents.filter(p => !linkedParents.some(l => l.parent_id === p.id)).map(p => (
+                      <option key={p.id} value={p.id}>{p.full_name} ({p.email})</option>
+                    ))}
                   </select>
                 </div>
-
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Relationship
-                  </label>
-                  <select
-                    value={relationship}
-                    onChange={(e) => setRelationship(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  >
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Relationship</label>
+                  <select value={relationship} onChange={(e) => setRelationship(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
                     <option value="mother">Mother</option>
                     <option value="father">Father</option>
                     <option value="guardian">Guardian</option>
                   </select>
                 </div>
               </div>
-
-              <button
-                onClick={handleAddLink}
-                disabled={saving || !selectedParent}
-                className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-3 rounded-lg font-medium hover:shadow-lg transition-all disabled:opacity-50"
-              >
-                {saving ? "Adding..." : "Add Parent Link"}
+              <button onClick={handleAddLink} disabled={saving || !selectedParent}
+                className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-2.5 rounded-lg text-sm font-medium hover:shadow-lg transition-all disabled:opacity-50">
+                {saving ? 'Adding...' : 'Add Parent Link'}
               </button>
             </div>
           </>
         )}
 
-        <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200">
-          <button
-            onClick={onSave}
-            className="flex-1 bg-emerald-600 text-white py-3 rounded-lg font-medium hover:bg-emerald-700 transition-all"
-          >
-            Done
-          </button>
-          <button
-            onClick={onClose}
-            className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-300 transition-all"
-          >
-            Cancel
-          </button>
+        <div className="flex gap-3 mt-5 pt-4 border-t border-gray-200">
+          <button onClick={onSave} className="flex-1 bg-emerald-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-all">Done</button>
+          <button onClick={onClose} className="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-300 transition-all">Cancel</button>
         </div>
       </div>
     </div>

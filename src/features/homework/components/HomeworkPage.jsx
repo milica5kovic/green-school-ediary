@@ -1,414 +1,537 @@
-import React, { useState, useEffect } from 'react';
-import { FileText, Plus, Search, Calendar, Clock, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { ClipboardList, Plus, Trash2, Edit2, CheckCircle, Clock, XCircle, Snowflake, Flower2, Sun, BookOpen, AlertCircle, Search, Filter } from 'lucide-react';
 import { useApp } from '../../../core/context/AppContext';
-import HomeworkCard from './HomeworkCard';
-import HomeworkModal from './HomeworkModal';
-import StudentHomeworkTracker from './StudentHomeworkTracker';
+import { useAuth } from '../../../core/context/AuthContext';
+import useActiveTerm from '../../../shared/hooks/useActiveTerm';
+
+const TERM_CONFIG = {
+  1: { name: 'Winter', icon: Snowflake, bgActive: 'bg-blue-100 text-blue-700 border-blue-300', bgInactive: 'text-gray-500 hover:bg-gray-100' },
+  2: { name: 'Spring', icon: Flower2, bgActive: 'bg-pink-100 text-pink-700 border-pink-300', bgInactive: 'text-gray-500 hover:bg-gray-100' },
+  3: { name: 'Summer', icon: Sun, bgActive: 'bg-amber-100 text-amber-700 border-amber-300', bgInactive: 'text-gray-500 hover:bg-gray-100' }
+};
+
+const STATUS_CONFIG = {
+  done: { label: 'Done', bg: 'bg-emerald-100 text-emerald-700 border-emerald-300', icon: CheckCircle },
+  partially_done: { label: 'Partial', bg: 'bg-orange-100 text-orange-700 border-orange-300', icon: Clock },
+  not_done: { label: 'Not Done', bg: 'bg-red-100 text-red-700 border-red-300', icon: XCircle }
+};
 
 const HomeworkPage = () => {
-  const { supabase } = useApp();
-  
+  const { supabase, studentsService } = useApp();
+  const { teacher } = useAuth();
+  const { activeTerm, allTerms, loading: termsLoading } = useActiveTerm();
+
+  const [classes, setClasses] = useState([]);
+  const [selectedClass, setSelectedClass] = useState('');
+  const [selectedTermNumber, setSelectedTermNumber] = useState(null);
+  const [selectedSubject, setSelectedSubject] = useState('all');
   const [homework, setHomework] = useState([]);
-  const [showModal, setShowModal] = useState(false);
-  const [editingHomework, setEditingHomework] = useState(null);
+  const [students, setStudents] = useState([]);
+  const [studentHomework, setStudentHomework] = useState({});
+  const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterClass, setFilterClass] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [showTrackingModal, setShowTrackingModal] = useState(false);
-  const [trackingHomework, setTrackingHomework] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(null); // homework item
+  const [editingHomework, setEditingHomework] = useState(null);
+
+  const mySubjects = teacher?.subjects || [];
+
+  // Init term
+  useEffect(() => {
+    if (activeTerm && !selectedTermNumber) setSelectedTermNumber(activeTerm.term_number);
+  }, [activeTerm, selectedTermNumber]);
+
+  useEffect(() => { loadClasses(); loadSubjects(); }, []);
 
   useEffect(() => {
-    loadHomework();
-  }, []);
+    if (selectedClass) loadStudents();
+    else { setStudents([]); setHomework([]); }
+  }, [selectedClass]);
 
-const loadHomework = async () => {
-  if (!supabase) return;
-  
-  try {
-    setLoading(true);
-    
-    // ✅ Get current teacher ID from auth
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      console.error('No user found');
-      return;
-    }
-    
-    // ✅ Load only homework created by this teacher
-    const { data, error } = await supabase
-      .from('homework')
-      .select('*')
-      .eq('teacher_id', user.id)  // ← FILTER BY TEACHER
-      .order('due_date', { ascending: true });
-    
-    if (error) throw error;
-    
-    console.log('✅ Homework loaded for teacher:', data?.length || 0);
-    setHomework(data || []);
-  } catch (error) {
-    console.error('❌ Error loading homework:', error);
-  } finally {
-    setLoading(false);
-  }
-};
+  useEffect(() => {
+    if (selectedClass && selectedTermNumber) loadHomework();
+  }, [selectedClass, selectedTermNumber]);
 
-const handleAdd = async (homeworkData) => {
-  if (!supabase) return;
-  
-  try {
-    setLoading(true);
-    
-    // ✅ Get current teacher ID
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      alert('❌ User not found');
-      return;
-    }
-    
-    const { error } = await supabase
-      .from('homework')
-      .insert([{
-        homework_id: 'hw_' + Date.now(),
-        teacher_id: user.id,  // ← ADD TEACHER ID
-        class_name: homeworkData.class_name,
-        subject: homeworkData.subject,
-        title: homeworkData.title,
-        description: homeworkData.description || null,
-        due_date: homeworkData.due_date,
-        assigned_date: new Date().toISOString().split('T')[0],
-        status: 'pending',
-        attachments: homeworkData.attachments || []
-      }]);
-    
-    if (error) throw error;
-    
-    await loadHomework();
-    setShowModal(false);
-  } catch (error) {
-    console.error('❌ Error adding homework:', error);
-    alert('Failed to add homework: ' + error.message);
-  } finally {
-    setLoading(false);
-  }
-};
-
-  const handleEdit = async (homeworkData) => {
-    if (!supabase || !editingHomework) return;
-    
+  const loadClasses = async () => {
     try {
-      setLoading(true);
-      
-      const { error } = await supabase
+      const { data } = await supabase.from('custom_classes').select('*').eq('is_active', true).order('class_name');
+      setClasses(data || []);
+    } catch (err) { console.error(err); }
+  };
+
+  const loadSubjects = async () => {
+    try {
+      const { data } = await supabase.from('custom_subjects').select('*').eq('is_active', true).order('subject_name');
+      setSubjects((data || []).filter(s => mySubjects.includes(s.subject_name)));
+    } catch (err) { console.error(err); }
+  };
+
+  const loadStudents = async () => {
+    try {
+      const { data } = await supabase.from('students').select('*').eq('class_name', selectedClass).eq('status', 'active').order('student_no');
+      setStudents(data || []);
+    } catch (err) { console.error(err); }
+  };
+
+  const loadHomework = async () => {
+    if (!selectedClass || !selectedTermNumber) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
         .from('homework')
-        .update({
-          class_name: homeworkData.class_name,
-          subject: homeworkData.subject,
-          title: homeworkData.title,
-          description: homeworkData.description || null,
-          due_date: homeworkData.due_date,
-          attachments: homeworkData.attachments || []
-        })
-        .eq('id', editingHomework.id);
-      
+        .select('*')
+        .eq('class_name', selectedClass)
+        .eq('term_number', selectedTermNumber)
+        .in('subject', mySubjects)
+        .order('due_date', { ascending: false });
+
       if (error) throw error;
-      
-      await loadHomework();
-      setShowModal(false);
+      const hw = data || [];
+      setHomework(hw);
+
+      // Load student_homework for all these
+      if (hw.length > 0) {
+        const ids = hw.map(h => h.id);
+        const { data: shData } = await supabase
+          .from('student_homework')
+          .select('*')
+          .in('homework_id', ids);
+
+        const map = {};
+        (shData || []).forEach(sh => {
+          if (!map[sh.homework_id]) map[sh.homework_id] = {};
+          map[sh.homework_id][sh.student_id] = sh;
+        });
+        setStudentHomework(map);
+      } else {
+        setStudentHomework({});
+      }
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
+  };
+
+  const handleAddHomework = async (formData) => {
+    if (!activeTerm) { alert('No active term set.'); return; }
+    try {
+      const record = {
+        ...formData,
+        class_name: selectedClass,
+        term_number: activeTerm.term_number,
+        created_at: new Date().toISOString()
+      };
+
+      if (editingHomework) {
+        const { error } = await supabase.from('homework').update(record).eq('id', editingHomework.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('homework').insert([record]);
+        if (error) throw error;
+      }
+
+      setShowAddModal(false);
       setEditingHomework(null);
-    } catch (error) {
-      console.error('❌ Error updating homework:', error);
-      alert('Failed to update homework: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDelete = async (homeworkId) => {
-    if (!window.confirm('Delete this homework? This cannot be undone.')) return;
-    
-    try {
-      setLoading(true);
-      
-      const { error } = await supabase
-        .from('homework')
-        .delete()
-        .eq('id', homeworkId);
-      
-      if (error) throw error;
-      
       await loadHomework();
-    } catch (error) {
-      console.error('❌ Error deleting homework:', error);
-      alert('Failed to delete homework');
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      alert('Failed to save: ' + err.message);
     }
   };
 
-  const filteredHomework = homework.filter(hw => {
-    const matchesSearch = hw.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         hw.subject.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesClass = filterClass === 'all' || hw.class_name === filterClass;
-    const matchesStatus = filterStatus === 'all' || hw.status === filterStatus;
-    return matchesSearch && matchesClass && matchesStatus;
-  });
+  const handleDeleteHomework = async (id) => {
+    if (!window.confirm('Delete this homework?')) return;
+    try {
+      await supabase.from('student_homework').delete().eq('homework_id', id);
+      await supabase.from('homework').delete().eq('id', id);
+      await loadHomework();
+    } catch (err) { alert('Failed to delete'); }
+  };
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  const overdue = filteredHomework.filter(hw => 
-    hw.status === 'pending' && new Date(hw.due_date) < today
-  );
-  
-  const upcoming = filteredHomework.filter(hw => {
-    const dueDate = new Date(hw.due_date);
-    const daysUntil = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
-    return hw.status === 'pending' && daysUntil >= 0 && daysUntil <= 7;
-  });
-  
-  const pending = filteredHomework.filter(hw => hw.status === 'pending');
-  const completed = filteredHomework.filter(hw => hw.status === 'completed');
+  const handleUpdateStudentStatus = async (homeworkId, studentId, status) => {
+    try {
+      const existing = studentHomework[homeworkId]?.[studentId];
+      if (existing) {
+        await supabase.from('student_homework').update({ status, submitted_at: status === 'done' ? new Date().toISOString() : null }).eq('id', existing.id);
+      } else {
+        await supabase.from('student_homework').insert([{
+          homework_id: homeworkId, student_id: studentId, status,
+          submitted_at: status === 'done' ? new Date().toISOString() : null
+        }]);
+      }
+      await loadHomework();
+    } catch (err) { alert('Failed to update status'); }
+  };
 
-  const classes = [...new Set(homework.map(hw => hw.class_name))].sort();
+  // Filtered homework
+  const filteredHomework = selectedSubject === 'all' ? homework : homework.filter(h => h.subject === selectedSubject);
+  const hwSubjects = [...new Set(homework.map(h => h.subject))];
+  const selectedTermData = allTerms.find(t => t.term_number === selectedTermNumber);
+  const isActiveTerm = selectedTermNumber === activeTerm?.term_number;
+  const isFinalized = selectedTermData?.is_finalized;
+
+  const getInitials = (name) => name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+
+  const getCompletionStats = (hwId) => {
+    const shMap = studentHomework[hwId] || {};
+    const total = students.length;
+    const done = Object.values(shMap).filter(s => s.status === 'done').length;
+    const partial = Object.values(shMap).filter(s => s.status === 'partially_done').length;
+    const notDone = total - done - partial;
+    return { total, done, partial, notDone, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-xl p-8 text-white">
-        <div className="flex justify-between items-start">
-          <div>
-            <h2 className="text-3xl font-bold mb-2">Homework Management</h2>
-            <p className="text-emerald-100">Assign, track, and manage assignments</p>
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="bg-white rounded-2xl shadow-lg p-5 border border-emerald-100">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+            <ClipboardList size={22} className="text-emerald-600" />
+            Homework
+          </h2>
+          {activeTerm && (
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${TERM_CONFIG[activeTerm.term_number]?.bgActive}`}>
+              {React.createElement(TERM_CONFIG[activeTerm.term_number]?.icon || BookOpen, { size: 14 })}
+              Active: {TERM_CONFIG[activeTerm.term_number]?.name} Term
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3 items-end">
+          <div className="flex-1">
+            <label className="block text-[11px] font-medium text-gray-500 mb-1">Class</label>
+            <select value={selectedClass} onChange={(e) => { setSelectedClass(e.target.value); setSelectedSubject('all'); }}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+              <option value="">Choose a class...</option>
+              {classes.map(c => <option key={c.id} value={c.class_name}>{c.class_name}</option>)}
+            </select>
           </div>
-          <button
-            onClick={() => setShowModal(true)}
-            className="bg-white text-emerald-600 px-6 py-3 rounded-xl flex items-center gap-2 hover:shadow-lg transition-all font-semibold"
-          >
-            <Plus size={20} />
-            New Assignment
+          <button onClick={() => { setEditingHomework(null); setShowAddModal(true); }}
+            disabled={!selectedClass || subjects.length === 0 || !activeTerm || isFinalized}
+            className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg transition-all">
+            <Plus size={16} /> Assign
           </button>
         </div>
 
-        <div className="grid grid-cols-4 gap-4 mt-8">
-          <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl p-4 border border-white border-opacity-30">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-emerald-100 text-sm mb-1">Total</p>
-                <p className="text-3xl font-bold">{homework.length}</p>
-              </div>
-              <FileText size={32} className="opacity-50" />
-            </div>
+        {!termsLoading && !activeTerm && (
+          <div className="mt-3 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+            <AlertCircle size={14} />
+            No active term. Go to Management → Academic Terms.
           </div>
-          
-          <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl p-4 border border-white border-opacity-30">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-emerald-100 text-sm mb-1">Due Soon</p>
-                <p className="text-3xl font-bold">{upcoming.length}</p>
-              </div>
-              <Clock size={32} className="opacity-50" />
-            </div>
-          </div>
-          
-          <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl p-4 border border-white border-opacity-30">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-red-100 text-sm mb-1">Overdue</p>
-                <p className="text-3xl font-bold">{overdue.length}</p>
-              </div>
-              <Calendar size={32} className="opacity-50" />
-            </div>
-          </div>
-          
-          <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl p-4 border border-white border-opacity-30">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-emerald-100 text-sm mb-1">Completed</p>
-                <p className="text-3xl font-bold">{completed.length}</p>
-              </div>
-              <CheckCircle2 size={32} className="opacity-50" />
-            </div>
-          </div>
-        </div>
+        )}
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <div className="flex gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-            <input
-              type="text"
-              placeholder="Search homework..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
-            />
+      {/* Term Tabs + Content */}
+      {selectedClass && allTerms.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-lg border border-emerald-100 overflow-hidden">
+          {/* Term Tabs */}
+          <div className="flex border-b border-gray-200 bg-gray-50">
+            {allTerms.map(term => {
+              const config = TERM_CONFIG[term.term_number];
+              const Icon = config?.icon || BookOpen;
+              const isSelected = selectedTermNumber === term.term_number;
+              const isActive = activeTerm?.term_number === term.term_number;
+              return (
+                <button key={term.id} onClick={() => setSelectedTermNumber(term.term_number)}
+                  className={`flex-1 px-4 py-3 flex items-center justify-center gap-2 text-sm font-medium transition-colors border-b-2 ${
+                    isSelected ? `${config?.bgActive} border-current` : `${config?.bgInactive} border-transparent`
+                  }`}>
+                  <Icon size={16} />
+                  <span className="hidden sm:inline">Term {term.term_number}:</span> {config?.name}
+                  {isActive && <span className="text-[10px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-bold ml-1">ACTIVE</span>}
+                  {term.is_finalized && <span className="text-[10px] bg-gray-400 text-white px-1.5 py-0.5 rounded-full font-bold ml-1">LOCKED</span>}
+                </button>
+              );
+            })}
           </div>
-          
-          <select
-            value={filterClass}
-            onChange={(e) => setFilterClass(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-          >
-            <option value="all">All Classes</option>
-            {classes.map(cls => (
-              <option key={cls} value={cls}>{cls}</option>
-            ))}
-          </select>
-          
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-          >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="completed">Completed</option>
-          </select>
-        </div>
-      </div>
 
-      {loading ? (
-        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-500">Loading...</p>
-        </div>
-      ) : filteredHomework.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-          <FileText size={64} className="mx-auto text-gray-300 mb-4" />
-          <p className="text-gray-500 text-lg">No homework found</p>
-          <p className="text-gray-400 text-sm mt-2">Try adjusting your filters or create a new assignment</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {overdue.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-1 h-6 bg-red-500 rounded"></div>
-                <h3 className="text-lg font-bold text-gray-800">Overdue ({overdue.length})</h3>
-              </div>
-              <div className="grid gap-3">
-                {overdue.map(hw => (
-                  <HomeworkCard
-                    key={hw.id}
-                    homework={hw}
-                    onEdit={(hw) => {
-                      setEditingHomework(hw);
-                      setShowModal(true);
-                    }}
-                    onDelete={handleDelete}
-                    onTrackStudents={(hw) => {
-                      setTrackingHomework(hw);
-                      setShowTrackingModal(true);
-                    }}
-                  />
-                ))}
-              </div>
+          {/* Subject Filter */}
+          {hwSubjects.length > 0 && (
+            <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2 flex-wrap">
+              <Filter size={13} className="text-gray-400" />
+              <button onClick={() => setSelectedSubject('all')}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${selectedSubject === 'all' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                All
+              </button>
+              {hwSubjects.map(s => (
+                <button key={s} onClick={() => setSelectedSubject(s)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${selectedSubject === s ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                  {s}
+                </button>
+              ))}
             </div>
           )}
 
-          {upcoming.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-1 h-6 bg-orange-500 rounded"></div>
-                <h3 className="text-lg font-bold text-gray-800">Due This Week ({upcoming.length})</h3>
-              </div>
-              <div className="grid gap-3">
-                {upcoming.map(hw => (
-                  <HomeworkCard
-                    key={hw.id}
-                    homework={hw}
-                    onEdit={(hw) => {
-                      setEditingHomework(hw);
-                      setShowModal(true);
-                    }}
-                    onDelete={handleDelete}
-                    onTrackStudents={(hw) => {
-                      setTrackingHomework(hw);
-                      setShowTrackingModal(true);
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Term info */}
+          <div className="px-4 py-2 bg-gray-50/50 border-b border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
+            <span>
+              {selectedTermData && (
+                <>
+                  {new Date(selectedTermData.start_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                  {' – '}
+                  {new Date(selectedTermData.end_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </>
+              )}
+            </span>
+            <span>{filteredHomework.length} assignment{filteredHomework.length !== 1 ? 's' : ''}</span>
+          </div>
 
-          {pending.filter(hw => !overdue.includes(hw) && !upcoming.includes(hw)).length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-1 h-6 bg-blue-500 rounded"></div>
-                <h3 className="text-lg font-bold text-gray-800">Other Pending</h3>
+          {/* Homework List */}
+          <div className="p-4">
+            {loading ? (
+              <div className="flex justify-center py-12">
+                <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
               </div>
-              <div className="grid gap-3">
-                {pending.filter(hw => !overdue.includes(hw) && !upcoming.includes(hw)).map(hw => (
-                  <HomeworkCard
-                    key={hw.id}
-                    homework={hw}
-                    onEdit={(hw) => {
-                      setEditingHomework(hw);
-                      setShowModal(true);
-                    }}
-                    onDelete={handleDelete}
-                    onTrackStudents={(hw) => {
-                      setTrackingHomework(hw);
-                      setShowTrackingModal(true);
-                    }}
-                  />
-                ))}
+            ) : filteredHomework.length === 0 ? (
+              <div className="text-center py-16 bg-gray-50 rounded-xl">
+                <ClipboardList size={40} className="mx-auto text-gray-300 mb-3" />
+                <p className="text-gray-400 text-sm">No homework for {TERM_CONFIG[selectedTermNumber]?.name} Term{selectedSubject !== 'all' ? ` (${selectedSubject})` : ''}</p>
+                {isActiveTerm && <p className="text-xs text-gray-400 mt-1">Click "Assign" to create one</p>}
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="space-y-3">
+                {filteredHomework.map(hw => {
+                  const stats = getCompletionStats(hw.id);
+                  const isOverdue = new Date(hw.due_date) < new Date();
+                  const pctColor = stats.pct >= 80 ? 'bg-emerald-500' : stats.pct >= 50 ? 'bg-amber-500' : 'bg-red-500';
 
-          {completed.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-1 h-6 bg-green-500 rounded"></div>
-                <h3 className="text-lg font-bold text-gray-800">Completed ({completed.length})</h3>
+                  return (
+                    <div key={hw.id} className="border border-gray-200 rounded-xl overflow-hidden hover:shadow-sm transition-shadow">
+                      {/* HW Header */}
+                      <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[11px] font-semibold">{hw.subject}</span>
+                            <span className="font-semibold text-gray-800 text-sm truncate">{hw.title}</span>
+                            {isOverdue && <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-[10px] font-bold">OVERDUE</span>}
+                          </div>
+                          <div className="flex items-center gap-3 text-[11px] text-gray-500">
+                            <span>Assigned: {new Date(hw.assigned_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                            <span className={isOverdue ? 'text-red-600 font-semibold' : 'font-medium'}>Due: {new Date(hw.due_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                          </div>
+                          {hw.description && <p className="text-xs text-gray-500 mt-1 line-clamp-1">{hw.description}</p>}
+                        </div>
+
+                        <div className="flex items-center gap-2 ml-3">
+                          {/* Completion bar */}
+                          <div className="text-right">
+                            <span className="text-xs font-bold text-gray-700">{stats.done}/{stats.total}</span>
+                            <div className="w-20 h-1.5 bg-gray-200 rounded-full mt-0.5">
+                              <div className={`h-1.5 rounded-full ${pctColor} transition-all`} style={{ width: `${stats.pct}%` }}></div>
+                            </div>
+                          </div>
+
+                          {!isFinalized && (
+                            <div className="flex gap-1">
+                              <button onClick={() => setShowStatusModal(hw)}
+                                className="p-1.5 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors" title="Track completion">
+                                <CheckCircle size={15} />
+                              </button>
+                              <button onClick={() => { setEditingHomework(hw); setShowAddModal(true); }}
+                                className="p-1.5 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors" title="Edit">
+                                <Edit2 size={15} />
+                              </button>
+                              <button onClick={() => handleDeleteHomework(hw.id)}
+                                className="p-1.5 hover:bg-red-100 text-red-500 rounded-lg transition-colors" title="Delete">
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Quick student status pills */}
+                      <div className="px-4 py-2 flex flex-wrap gap-1">
+                        {students.map(s => {
+                          const sh = studentHomework[hw.id]?.[s.id];
+                          const status = sh?.status || 'not_done';
+                          const cfg = STATUS_CONFIG[status];
+                          return (
+                            <span key={s.id} className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${cfg.bg}`} title={`${s.name}: ${cfg.label}`}>
+                              {getInitials(s.name)}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <div className="grid gap-3">
-                {completed.map(hw => (
-                  <HomeworkCard
-                    key={hw.id}
-                    homework={hw}
-                    onEdit={(hw) => {
-                      setEditingHomework(hw);
-                      setShowModal(true);
-                    }}
-                    onDelete={handleDelete}
-                    onTrackStudents={(hw) => {
-                      setTrackingHomework(hw);
-                      setShowTrackingModal(true);
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 
-      {showModal && (
-        <HomeworkModal
-          onClose={() => {
-            setShowModal(false);
-            setEditingHomework(null);
-          }}
-          onSave={editingHomework ? handleEdit : handleAdd}
-          existingHomework={editingHomework}
+      {/* No terms */}
+      {selectedClass && allTerms.length === 0 && !termsLoading && (
+        <div className="bg-white rounded-2xl shadow-lg p-6 border border-amber-200 text-center py-8">
+          <AlertCircle size={40} className="mx-auto text-amber-400 mb-3" />
+          <p className="text-gray-700 font-medium">Academic terms not configured</p>
+          <p className="text-sm text-gray-500 mt-1">Go to Management → Academic Terms</p>
+        </div>
+      )}
+
+      {/* ─── ADD/EDIT MODAL ──────────────────────────────── */}
+      {showAddModal && (
+        <HomeworkFormModal
+          homework={editingHomework}
+          subjects={subjects}
+          activeTerm={activeTerm}
+          onSave={handleAddHomework}
+          onClose={() => { setShowAddModal(false); setEditingHomework(null); }}
         />
       )}
 
-      {showTrackingModal && trackingHomework && (
-        <StudentHomeworkTracker
-          homework={trackingHomework}
-          onClose={() => {
-            setShowTrackingModal(false);
-            setTrackingHomework(null);
-          }}
+      {/* ─── STUDENT STATUS MODAL ────────────────────────── */}
+      {showStatusModal && (
+        <StudentStatusModal
+          hw={showStatusModal}
+          students={students}
+          studentHomework={studentHomework[showStatusModal.id] || {}}
+          onUpdate={handleUpdateStudentStatus}
+          onClose={() => setShowStatusModal(null)}
+          isFinalized={isFinalized}
         />
       )}
+    </div>
+  );
+};
+
+// ─── HOMEWORK FORM MODAL ─────────────────────────────────
+
+const HomeworkFormModal = ({ homework, subjects, activeTerm, onSave, onClose }) => {
+  const [formData, setFormData] = useState({
+    title: homework?.title || '',
+    description: homework?.description || '',
+    subject: homework?.subject || '',
+    assigned_date: homework?.assigned_date || new Date().toISOString().split('T')[0],
+    due_date: homework?.due_date || '',
+  });
+
+  const handleSubmit = () => {
+    if (!formData.title || !formData.subject || !formData.due_date) {
+      alert('Please fill in title, subject and due date.');
+      return;
+    }
+    onSave(formData);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl p-6 max-w-lg w-full">
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-lg font-bold">{homework ? 'Edit Homework' : 'Assign Homework'}</h3>
+          {activeTerm && (
+            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${TERM_CONFIG[activeTerm.term_number]?.bgActive}`}>
+              {TERM_CONFIG[activeTerm.term_number]?.name} Term
+            </span>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Title *</label>
+            <input type="text" placeholder="e.g., Chapter 5 Exercises" value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Subject *</label>
+            <select value={formData.subject} onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+              <option value="">Select...</option>
+              {subjects.map(s => <option key={s.id} value={s.subject_name}>{s.subject_name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+            <textarea rows={3} placeholder="Optional details..." value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none resize-none" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Assigned Date</label>
+              <input type="date" value={formData.assigned_date} onChange={(e) => setFormData({ ...formData, assigned_date: e.target.value })}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Due Date *</label>
+              <input type="date" value={formData.due_date} onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-3 mt-5">
+          <button onClick={handleSubmit}
+            className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-2.5 rounded-lg text-sm font-medium hover:shadow-lg transition-all">
+            {homework ? 'Update' : 'Assign'}
+          </button>
+          <button onClick={onClose} className="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-300 transition-all">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── STUDENT STATUS MODAL ────────────────────────────────
+
+const StudentStatusModal = ({ hw, students, studentHomework, onUpdate, onClose, isFinalized }) => {
+  const getInitials = (name) => name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+
+  const statuses = ['done', 'partially_done', 'not_done'];
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl p-6 max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="mb-4">
+          <h3 className="text-lg font-bold text-gray-800">{hw.title}</h3>
+          <p className="text-xs text-gray-500">{hw.subject} • Due: {new Date(hw.due_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto space-y-1.5">
+          {students.map(student => {
+            const sh = studentHomework[student.id];
+            const currentStatus = sh?.status || 'not_done';
+
+            return (
+              <div key={student.id} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center flex-shrink-0">
+                  <span className="text-white font-bold text-[10px]">{getInitials(student.name)}</span>
+                </div>
+                <span className="flex-1 text-sm font-medium text-gray-800">{student.name}</span>
+
+                {isFinalized ? (
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${STATUS_CONFIG[currentStatus].bg}`}>
+                    {STATUS_CONFIG[currentStatus].label}
+                  </span>
+                ) : (
+                  <div className="flex gap-1">
+                    {statuses.map(status => {
+                      const cfg = STATUS_CONFIG[status];
+                      const isActive = currentStatus === status;
+                      return (
+                        <button key={status} onClick={() => onUpdate(hw.id, student.id, status)}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-medium border transition-all ${
+                            isActive ? cfg.bg + ' shadow-sm' : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300'
+                          }`}>
+                          {cfg.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <button onClick={onClose}
+          className="mt-4 w-full bg-gray-200 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 transition-all">
+          Done
+        </button>
+      </div>
     </div>
   );
 };
