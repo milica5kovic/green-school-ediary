@@ -77,7 +77,8 @@ const HomeworkPage = () => {
     if (!selectedClass || !selectedTermNumber) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // Fetch homework WITH this term_number OR with NULL term_number (legacy)
+      const { data: termData, error: e1 } = await supabase
         .from('homework')
         .select('*')
         .eq('class_name', selectedClass)
@@ -85,8 +86,32 @@ const HomeworkPage = () => {
         .in('subject', mySubjects)
         .order('due_date', { ascending: false });
 
-      if (error) throw error;
-      const hw = data || [];
+      if (e1) throw e1;
+
+      // Also fetch legacy homework without term_number
+      const { data: legacyData, error: e2 } = await supabase
+        .from('homework')
+        .select('*')
+        .eq('class_name', selectedClass)
+        .is('term_number', null)
+        .in('subject', mySubjects)
+        .order('due_date', { ascending: false });
+
+      if (e2) throw e2;
+
+      // Assign legacy homework to terms by date
+      const currentTermData = allTerms.find(t => t.term_number === selectedTermNumber);
+      const legacyForThisTerm = (legacyData || []).filter(h => {
+        if (!currentTermData) return selectedTermNumber === 1; // default to winter
+        return h.due_date >= currentTermData.start_date && h.due_date <= currentTermData.end_date;
+      });
+
+      // Backfill term_number for legacy homework (fire-and-forget)
+      legacyForThisTerm.forEach(h => {
+        supabase.from('homework').update({ term_number: selectedTermNumber }).eq('id', h.id).then(() => {});
+      });
+
+      const hw = [...(termData || []), ...legacyForThisTerm];
       setHomework(hw);
 
       // Load student_homework for all these
@@ -113,10 +138,15 @@ const HomeworkPage = () => {
   const handleAddHomework = async (formData) => {
     if (!activeTerm) { alert('No active term set.'); return; }
     try {
+      // Generate unique homework_id (required NOT NULL UNIQUE varchar)
+      const hwId = `HW-${selectedClass}-${Date.now()}`;
+
       const record = {
         ...formData,
+        homework_id: editingHomework ? editingHomework.homework_id : hwId,
         class_name: selectedClass,
         term_number: activeTerm.term_number,
+        teacher_id: teacher?.user_id || null,
         created_at: new Date().toISOString()
       };
 

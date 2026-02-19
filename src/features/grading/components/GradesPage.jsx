@@ -6,6 +6,7 @@ import { useAuth } from '../../../core/context/AuthContext';
 import useActiveTerm from '../../../shared/hooks/useActiveTerm';
 import { getCambridgeGrade, getPercentageColor } from '../../../core/utils/cambridgeGrading';
 
+
 const TERM_CONFIG = {
   1: { name: 'Winter', icon: Snowflake, bgActive: 'bg-blue-100 text-blue-700 border-blue-300', bgInactive: 'text-gray-500 hover:bg-gray-100' },
   2: { name: 'Spring', icon: Flower2, bgActive: 'bg-pink-100 text-pink-700 border-pink-300', bgInactive: 'text-gray-500 hover:bg-gray-100' },
@@ -87,7 +88,8 @@ const GradesPage = () => {
   const loadGrades = async () => {
     if (!selectedClass || !selectedTermNumber) return;
     try {
-      let query = supabase
+      // Fetch grades WITH this term_number
+      const { data: termData, error: e1 } = await supabase
         .from('grades')
         .select('*')
         .eq('class_name', selectedClass)
@@ -95,9 +97,32 @@ const GradesPage = () => {
         .in('subject', mySubjects)
         .order('date', { ascending: true });
 
-      const { data, error } = await query;
-      if (error) throw error;
-      setGrades(data || []);
+      if (e1) throw e1;
+
+      // Also fetch legacy grades without term_number
+      const { data: legacyData, error: e2 } = await supabase
+        .from('grades')
+        .select('*')
+        .eq('class_name', selectedClass)
+        .is('term_number', null)
+        .in('subject', mySubjects)
+        .order('date', { ascending: true });
+
+      if (e2) throw e2;
+
+      // Assign legacy grades to terms by date
+      const currentTermData = allTerms.find(t => t.term_number === selectedTermNumber);
+      const legacyForThisTerm = (legacyData || []).filter(g => {
+        if (!currentTermData) return selectedTermNumber === 1;
+        return g.date >= currentTermData.start_date && g.date <= currentTermData.end_date;
+      });
+
+      // Backfill term_number for legacy grades (fire-and-forget)
+      legacyForThisTerm.forEach(g => {
+        supabase.from('grades').update({ term_number: selectedTermNumber }).eq('id', g.id).then(() => {});
+      });
+
+      setGrades([...(termData || []), ...legacyForThisTerm]);
     } catch (err) { console.error('Error loading grades:', err); }
   };
 
