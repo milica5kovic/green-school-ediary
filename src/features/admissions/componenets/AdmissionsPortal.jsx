@@ -62,12 +62,12 @@ const AdmissionsPortal = () => {
       setLoading(true);
       const [aR, cR, sR] = await Promise.all([
         supabase.from('enrollment_applications').select('*').order('created_at', { ascending: false }),
-        supabase.from('custom_classes').select('*').eq('active', true).order('name'),
+        supabase.from('custom_classes').select('*').order('class_name'),
         supabase.from('students').select('id,name,class_name,date_of_birth,email,parent_contact,status').eq('status','active').order('class_name'),
       ]);
       const cntMap = {};
       (sR.data||[]).forEach(s => { const b=s.class_name?.match(/^Y\d+/)?.[0]||s.class_name; cntMap[b]=(cntMap[b]||0)+1; });
-      setClasses((cR.data||[]).map(c => ({...c, current_count:cntMap[c.name]||0, capacity:c.max_students||20})));
+      setClasses((cR.data||[]).map(c => ({...c, name: c.class_name||c.name, current_count:cntMap[c.class_name||c.name]||0, capacity:c.max_students||20})));
       setApps(aR.data||[]);
       setStudents(sR.data||[]);
     } catch(e) { console.error(e); }
@@ -163,10 +163,32 @@ const AdmissionsPortal = () => {
 
   const updateClassCapacity = async (className, newCap) => {
     if (!supabase) return;
-    const cls = classes.find(c=>c.name===className);
-    if (!cls) return;
+    // Match by exact name, or by name starting with className (e.g. Y7 matches Y7, Y7A, Y7B)
+    let cls = classes.find(c=>c.name===className);
+    if (!cls) cls = classes.find(c=>c.name?.startsWith(className));
+    if (!cls) {
+      // No matching class exists - create a default entry or update by name
+      // Try direct update by name pattern
+      const {error} = await supabase.from('custom_classes')
+        .update({max_students:newCap})
+        .like('class_name', `${className}%`);
+      if (error) {
+        // Last resort: insert a new class entry
+        const {error: insErr} = await supabase.from('custom_classes')
+          .insert({class_name:className, is_active:true, max_students:newCap});
+        if (insErr) { alert('Could not set capacity: '+insErr.message); }
+        else { 
+          setClasses(p=>[...p, {name:className, class_name:className, max_students:newCap, capacity:newCap, current_count:0}]);
+        }
+      } else {
+        setClasses(p=>p.map(c=>c.name?.startsWith(className)?{...c,capacity:newCap,max_students:newCap}:c));
+      }
+      setEditingCap(null);
+      return;
+    }
     const {error} = await supabase.from('custom_classes').update({max_students:newCap}).eq('id',cls.id);
-    if (!error) { setClasses(p=>p.map(c=>c.name===className?{...c,capacity:newCap,max_students:newCap}:c)); }
+    if (error) { alert('Failed to update capacity: '+error.message); }
+    else { setClasses(p=>p.map(c=>c.id===cls.id?{...c,capacity:newCap,max_students:newCap}:c)); }
     setEditingCap(null);
   };
 
