@@ -1,464 +1,390 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Clock,
-  ChevronDown,
-  File,
-  Download,
-  Calendar,
-  BookOpen,
-  AlertCircle,
-} from "lucide-react";
-import { useApp } from "../../../core/context/AppContext";
+  ChevronDown, ArrowLeft, ClipboardList, CheckCircle, Clock, XCircle,
+  AlertTriangle, Snowflake, Flower2, Sun, Calendar, BookOpen, Filter
+} from 'lucide-react';
+import { useApp } from '../../../core/context/AppContext';
+import useActiveTerm from '../../../shared/hooks/useActiveTerm';
+
+// ═══════════════════════════════════════════════════════════════
+// SHARED PARENT DESIGN TOKENS
+// ═══════════════════════════════════════════════════════════════
+
+const TERM_CONFIG = {
+  1: { name: 'Winter', icon: Snowflake, gradient: 'from-blue-500 to-cyan-600', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+  2: { name: 'Spring', icon: Flower2, gradient: 'from-pink-500 to-rose-600', bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
+  3: { name: 'Summer', icon: Sun, gradient: 'from-amber-500 to-orange-600', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+};
+
+const ChildSelector = ({ children, selectedChild, setSelectedChild }) => {
+  if (children.length <= 1) return null;
+  return (
+    <div className="relative">
+      <select value={selectedChild?.id || ''}
+        onChange={(e) => setSelectedChild(children.find(c => c.id === e.target.value))}
+        className="appearance-none bg-white/20 backdrop-blur border border-white/30 rounded-xl text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-white/50 cursor-pointer px-4 py-2.5 pr-10">
+        {children.map(c => (
+          <option key={c.id} value={c.id} className="text-gray-900">{c.name} — {c.class_name}</option>
+        ))}
+      </select>
+      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none" size={14} />
+    </div>
+  );
+};
+
+const STATUS_CONFIG = {
+  done: { label: 'Done', icon: CheckCircle, color: 'emerald', bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', badge: 'bg-emerald-100 text-emerald-700' },
+  partially_done: { label: 'Partial', icon: Clock, color: 'amber', bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-700' },
+  not_done: { label: 'Not Done', icon: XCircle, color: 'red', bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', badge: 'bg-red-100 text-red-700' },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// PARENT HOMEWORK PAGE
+// ═══════════════════════════════════════════════════════════════
+
 const ParentHomeworkPage = () => {
-  const { supabase } = useApp();
+  const { supabase, setCurrentPage } = useApp();
+  const { activeTerm, terms } = useActiveTerm();
+
   const [children, setChildren] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
-  const [homework, setHomework] = useState([]);
-  const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [homework, setHomework] = useState([]);
+  const [selectedTerm, setSelectedTerm] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [subjectFilter, setSubjectFilter] = useState('all');
 
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
+  const today = new Date().toISOString().split('T')[0];
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: parent } = await supabase
-        .from("parents")
-        .select("id")
-        .eq("user_id", user.id)
-        .single();
-
-      if (!parent) return;
-
-      const { data: studentParents } = await supabase
-        .from("student_parents")
-        .select("students(*)")
-        .eq("parent_id", parent.id);
-
-      const childrenList =
-        studentParents?.map((sp) => sp.students).filter(Boolean) || [];
-      setChildren(childrenList);
-
-      if (childrenList.length > 0) {
-        setSelectedChild(childrenList[0]);
-      }
-    } catch (error) {
-      console.error("Error loading data:", error);
-    } finally {
-      setLoading(false);
-    }
+  // ─── Load children ─────────────────────────────────────────
+  useEffect(() => {
+    (async () => {
+      if (!supabase) return;
+      try {
+        setLoading(true);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: parent } = await supabase.from('parents').select('id').eq('user_id', user.id).single();
+        if (!parent) return;
+        const { data: links } = await supabase.from('student_parents').select('students(*)').eq('parent_id', parent.id);
+        const list = links?.map(l => l.students).filter(Boolean) || [];
+        setChildren(list);
+        if (list.length > 0) setSelectedChild(list[0]);
+      } catch (err) { console.error(err); }
+      finally { setLoading(false); }
+    })();
   }, [supabase]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (activeTerm && !selectedTerm) setSelectedTerm(activeTerm);
+  }, [activeTerm, selectedTerm]);
 
+  // ─── Load homework ─────────────────────────────────────────
   const loadHomework = useCallback(async () => {
-    if (!selectedChild) return;
-
+    if (!supabase || !selectedChild || !selectedTerm) return;
     try {
-      const { data: homeworkData } = await supabase
-        .from("homework")
-        .select("*")
-        .eq("class_name", selectedChild.class_name)
-        .order("due_date", { ascending: true });
+      const className = selectedChild.class_name;
+      const childId = selectedChild.id;
+      const termNum = selectedTerm.term_number;
 
-      setHomework(homeworkData || []);
-    } catch (error) {
-      console.error("Error loading homework:", error);
-    }
-  }, [selectedChild, supabase]);
+      // Fetch homework for this class and term
+      let query = supabase.from('homework').select('*').eq('class_name', className);
+      query = query.eq('term_number', termNum);
+      const { data: hw } = await query.order('due_date', { ascending: false });
 
-  useEffect(() => {
-    if (selectedChild) {
-      loadHomework();
-    }
-  }, [selectedChild, loadHomework]);
+      if (!hw || hw.length === 0) { setHomework([]); return; }
 
-  const categorizeHomework = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+      // Fetch student's completion status
+      const hwIds = hw.map(h => h.id);
+      const { data: sh } = await supabase.from('student_homework')
+        .select('homework_id, status')
+        .eq('student_id', childId)
+        .in('homework_id', hwIds);
 
-    const overdue = homework.filter(
-      (hw) => hw.status === "pending" && new Date(hw.due_date) < today,
-    );
+      const statusMap = {};
+      (sh || []).forEach(s => { statusMap[s.homework_id] = s.status; });
 
-    const dueSoon = homework.filter((hw) => {
-      const dueDate = new Date(hw.due_date);
-      const daysUntil = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
-      return hw.status === "pending" && daysUntil >= 0 && daysUntil <= 7;
-    });
+      const enriched = hw.map(h => {
+        const status = statusMap[h.id] || 'not_done';
+        const overdue = status !== 'done' && h.due_date < today;
+        return { ...h, status, overdue };
+      });
 
-    const completed = homework.filter((hw) => hw.status === "completed");
+      setHomework(enriched);
+    } catch (err) { console.error('Load homework error:', err); }
+  }, [supabase, selectedChild, selectedTerm, today]);
 
-    return { overdue, dueSoon, completed };
-  };
+  useEffect(() => { loadHomework(); }, [loadHomework]);
 
-  const getDaysUntilDue = (dueDate) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const due = new Date(dueDate);
-    due.setHours(0, 0, 0, 0);
+  // ─── Derived data ──────────────────────────────────────────
+  const stats = useMemo(() => {
+    const total = homework.length;
+    const done = homework.filter(h => h.status === 'done').length;
+    const partial = homework.filter(h => h.status === 'partially_done').length;
+    const notDone = homework.filter(h => h.status === 'not_done').length;
+    const overdue = homework.filter(h => h.overdue).length;
+    const rate = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { total, done, partial, notDone, overdue, rate };
+  }, [homework]);
 
-    const diff = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
+  const subjects = useMemo(() => {
+    const set = new Set(homework.map(h => h.subject));
+    return ['all', ...Array.from(set).sort()];
+  }, [homework]);
 
-    if (diff < 0) {
-      return {
-        text: Math.abs(diff) + " days overdue",
-        color: "text-red-600",
-        bg: "bg-gradient-to-br from-red-50 to-orange-50",
-        border: "border-red-300",
-        icon: "bg-red-100 text-red-600",
-      };
-    }
-    if (diff === 0) {
-      return {
-        text: "Due today",
-        color: "text-orange-600",
-        bg: "bg-gradient-to-br from-orange-50 to-yellow-50",
-        border: "border-orange-300",
-        icon: "bg-orange-100 text-orange-600",
-      };
-    }
-    if (diff === 1) {
-      return {
-        text: "Due tomorrow",
-        color: "text-orange-600",
-        bg: "bg-gradient-to-br from-yellow-50 to-orange-50",
-        border: "border-orange-200",
-        icon: "bg-yellow-100 text-orange-600",
-      };
-    }
-    if (diff <= 7) {
-      return {
-        text: "Due in " + diff + " days",
-        color: "text-emerald-600",
-        bg: "bg-gradient-to-br from-emerald-50 to-teal-50",
-        border: "border-emerald-200",
-        icon: "bg-emerald-100 text-emerald-600",
-      };
-    }
-    return {
-      text: "Due in " + diff + " days",
-      color: "text-gray-600",
-      bg: "bg-gradient-to-br from-gray-50 to-slate-50",
-      border: "border-gray-200",
-      icon: "bg-gray-100 text-gray-600",
-    };
-  };
+  const filteredHomework = useMemo(() => {
+    let list = homework;
+    if (statusFilter === 'overdue') list = list.filter(h => h.overdue);
+    else if (statusFilter !== 'all') list = list.filter(h => h.status === statusFilter);
+    if (subjectFilter !== 'all') list = list.filter(h => h.subject === subjectFilter);
+    return list;
+  }, [homework, statusFilter, subjectFilter]);
+
+  const termConfig = selectedTerm ? TERM_CONFIG[selectedTerm.term_number] : null;
+  const TermIcon = termConfig?.icon || Calendar;
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="relative">
-          <div className="w-16 h-16 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin"></div>
-          <BookOpen
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-emerald-600"
-            size={24}
-          />
-        </div>
+        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
-
-  if (children.length === 0) {
-    return (
-      <div className="bg-white rounded-2xl shadow-lg p-12 text-center border border-gray-200">
-        <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <BookOpen size={40} className="text-gray-400" />
-        </div>
-        <p className="text-gray-600 text-lg">No student data available</p>
-        <p className="text-gray-400 text-sm mt-2">
-          Please contact your school administrator
-        </p>
-      </div>
-    );
-  }
-
-  const stats = categorizeHomework();
-
-  const filteredHomework =
-    filter === "all"
-      ? homework
-      : filter === "overdue"
-        ? stats.overdue
-        : filter === "pending"
-          ? stats.dueSoon
-          : stats.completed;
 
   return (
     <div className="space-y-6">
-      {/* Modern Header with Gradient */}
-      <div className="bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 rounded-3xl shadow-2xl p-8 text-white overflow-hidden relative">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32"></div>
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-5 rounded-full -ml-24 -mb-24"></div>
+
+      {/* ═══ HEADER ═══════════════════════════════════════════ */}
+      <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-lg p-6 md:p-8 text-white relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-5 rounded-full -ml-24 -mb-24" />
 
         <div className="relative z-10">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-12 h-12 bg-white bg-opacity-20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
-                  <BookOpen size={24} />
-                </div>
-                <div>
-                  <h1 className="text-3xl font-bold">Homework</h1>
-                  <p className="text-emerald-100 text-sm">
-                    Green School Assignment Tracker
-                  </p>
-                </div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <button onClick={() => setCurrentPage && setCurrentPage('parent-dashboard')}
+                className="bg-white/15 hover:bg-white/25 backdrop-blur p-2 rounded-lg transition-colors">
+                <ArrowLeft size={18} />
+              </button>
+              <div>
+                <p className="text-emerald-100 text-sm">Homework Tracker</p>
+                <h1 className="text-2xl md:text-3xl font-bold">All Homework</h1>
               </div>
             </div>
 
-            {children.length > 1 && (
-              <div className="relative">
-                <select
-                  value={selectedChild?.id || ""}
-                  onChange={(e) =>
-                    setSelectedChild(
-                      children.find((c) => c.id === e.target.value),
-                    )
-                  }
-                  className="appearance-none bg-white bg-opacity-20 backdrop-blur-sm border border-white border-opacity-30 rounded-xl px-4 py-3 pr-10 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 cursor-pointer"
-                >
-                  {children.map((child) => (
-                    <option
-                      key={child.id}
-                      value={child.id}
-                      className="text-gray-900"
-                    >
-                      {child.name} - {child.class_name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                  size={16}
-                />
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              {selectedTerm && termConfig && (
+                <div className="hidden sm:flex bg-white/15 backdrop-blur px-3 py-1.5 rounded-lg items-center gap-1.5">
+                  <TermIcon size={14} />
+                  <span className="text-xs font-medium">{termConfig.name} Term</span>
+                </div>
+              )}
+              <ChildSelector children={children} selectedChild={selectedChild} setSelectedChild={setSelectedChild} />
+            </div>
           </div>
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white bg-opacity-15 backdrop-blur-md rounded-2xl p-4 border border-white border-opacity-20 hover:bg-opacity-25 transition-all">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-emerald-100 text-xs font-medium">Total</p>
-                <div className="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
-                  <BookOpen size={16} />
+          {/* Stats in header */}
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+            {[
+              { label: 'Total', value: stats.total, icon: ClipboardList },
+              { label: 'Done', value: stats.done, icon: CheckCircle },
+              { label: 'Partial', value: stats.partial, icon: Clock },
+              { label: 'Not Done', value: stats.notDone, icon: XCircle },
+              { label: 'Rate', value: `${stats.rate}%`, icon: BookOpen },
+            ].map(s => {
+              const I = s.icon;
+              return (
+                <div key={s.label} className="bg-white/10 backdrop-blur rounded-xl p-3 border border-white/20 text-center">
+                  <I size={14} className="mx-auto text-white/60 mb-1" />
+                  <p className="text-xl font-bold">{s.value}</p>
+                  <p className="text-[10px] text-emerald-100">{s.label}</p>
                 </div>
-              </div>
-              <p className="text-3xl font-bold">{homework.length}</p>
-            </div>
-
-            <div className="bg-white bg-opacity-15 backdrop-blur-md rounded-2xl p-4 border border-white border-opacity-20 hover:bg-opacity-25 transition-all">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-red-100 text-xs font-medium">Overdue</p>
-                <div className="w-8 h-8 bg-red-500 bg-opacity-30 rounded-lg flex items-center justify-center">
-                  <AlertCircle size={16} />
-                </div>
-              </div>
-              <p className="text-3xl font-bold">{stats.overdue.length}</p>
-            </div>
-
-            <div className="bg-white bg-opacity-15 backdrop-blur-md rounded-2xl p-4 border border-white border-opacity-20 hover:bg-opacity-25 transition-all">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-orange-100 text-xs font-medium">This Week</p>
-                <div className="w-8 h-8 bg-orange-500 bg-opacity-30 rounded-lg flex items-center justify-center">
-                  <Clock size={16} />
-                </div>
-              </div>
-              <p className="text-3xl font-bold">{stats.dueSoon.length}</p>
-            </div>
-
-            <div className="bg-white bg-opacity-15 backdrop-blur-md rounded-2xl p-4 border border-white border-opacity-20 hover:bg-opacity-25 transition-all">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-emerald-100 text-xs font-medium">Done</p>
-                <div className="w-8 h-8 bg-emerald-400 bg-opacity-30 rounded-lg flex items-center justify-center">
-                  <Clock size={16} />
-                </div>
-              </div>
-              <p className="text-3xl font-bold">{stats.completed.length}</p>
-            </div>
+              );
+            })}
           </div>
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
-        <div className="flex gap-3 mb-6 overflow-x-auto pb-2">
-          <button
-            onClick={() => setFilter("all")}
-            className={
-              filter === "all"
-                ? "px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg"
-                : "px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }
-          >
-            All ({homework.length})
+      {/* ═══ TERM TABS ════════════════════════════════════════ */}
+      {terms && terms.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {terms.map(t => {
+            const tc = TERM_CONFIG[t.term_number];
+            const TI = tc?.icon || Calendar;
+            const active = selectedTerm?.id === t.id;
+            return (
+              <button key={t.id}
+                onClick={() => { setSelectedTerm(t); setStatusFilter('all'); setSubjectFilter('all'); }}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
+                  active
+                    ? `bg-gradient-to-r ${tc?.gradient || ''} text-white shadow-md`
+                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}>
+                <TI size={14} />
+                {tc?.name || `Term ${t.term_number}`}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ═══ FILTERS ══════════════════════════════════════════ */}
+      <div className="flex flex-wrap gap-2">
+        {/* Status filters */}
+        {[
+          { key: 'all', label: 'All', count: stats.total },
+          { key: 'done', label: 'Done', count: stats.done },
+          { key: 'partially_done', label: 'Partial', count: stats.partial },
+          { key: 'not_done', label: 'Not Done', count: stats.notDone },
+          { key: 'overdue', label: 'Overdue', count: stats.overdue },
+        ].map(f => (
+          <button key={f.key}
+            onClick={() => setStatusFilter(f.key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              statusFilter === f.key
+                ? f.key === 'overdue'
+                  ? 'bg-red-500 text-white shadow-sm'
+                  : 'bg-emerald-500 text-white shadow-sm'
+                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}>
+            {f.label} <span className="opacity-70">({f.count})</span>
           </button>
-          <button
-            onClick={() => setFilter("overdue")}
-            className={
-              filter === "overdue"
-                ? "px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-lg"
-                : "px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }
-          >
-            Overdue ({stats.overdue.length})
+        ))}
+
+        {/* Subject divider */}
+        {subjects.length > 2 && <div className="w-px bg-gray-200 mx-1" />}
+
+        {/* Subject filters */}
+        {subjects.length > 2 && subjects.map(s => (
+          <button key={s}
+            onClick={() => setSubjectFilter(s)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+              subjectFilter === s
+                ? 'bg-indigo-500 text-white shadow-sm'
+                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}>
+            {s === 'all' ? 'All Subjects' : s}
           </button>
-          <button
-            onClick={() => setFilter("pending")}
-            className={
-              filter === "pending"
-                ? "px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all bg-gradient-to-r from-orange-500 to-yellow-500 text-white shadow-lg"
-                : "px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }
-          >
-            Due This Week ({stats.dueSoon.length})
-          </button>
-          <button
-            onClick={() => setFilter("completed")}
-            className={
-              filter === "completed"
-                ? "px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-lg"
-                : "px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }
-          >
-            Completed ({stats.completed.length})
+        ))}
+      </div>
+
+      {/* ═══ OVERDUE ALERT ════════════════════════════════════ */}
+      {stats.overdue > 0 && statusFilter === 'all' && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-2.5">
+          <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
+          <span className="text-xs text-red-700 font-medium">
+            {stats.overdue} assignment{stats.overdue > 1 ? 's' : ''} overdue — please check with your child
+          </span>
+          <button onClick={() => setStatusFilter('overdue')}
+            className="ml-auto text-xs font-semibold text-red-600 hover:text-red-800">
+            Show overdue →
           </button>
         </div>
+      )}
 
-        {/* Homework List */}
-        {filteredHomework.length === 0 ? (
-          <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-slate-50 rounded-2xl border border-gray-200">
-            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Clock size={40} className="text-gray-300" />
+      {/* ═══ HOMEWORK LIST ════════════════════════════════════ */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center">
+              <ClipboardList size={16} className="text-orange-600" />
             </div>
-            <p className="text-gray-500 text-lg font-medium">
-              {filter === "overdue" && "No overdue homework! 🎉"}
-              {filter === "pending" && "Nothing due this week"}
-              {filter === "completed" && "No completed homework yet"}
-              {filter === "all" && "No homework assigned yet"}
-            </p>
-            <p className="text-gray-400 text-sm mt-2">
-              Check back later for new assignments
-            </p>
+            <h3 className="text-sm font-bold text-gray-800">Assignments</h3>
+            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+              {filteredHomework.length}
+            </span>
           </div>
-        ) : (
-          <div className="space-y-4">
-            {filteredHomework.map((hw) => {
-              const dueInfo = getDaysUntilDue(hw.due_date);
 
+          {/* Completion bar */}
+          {homework.length > 0 && (
+            <div className="hidden sm:flex items-center gap-2">
+              <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden flex">
+                {stats.done > 0 && <div className="bg-emerald-500" style={{ width: `${(stats.done / stats.total) * 100}%` }} />}
+                {stats.partial > 0 && <div className="bg-amber-400" style={{ width: `${(stats.partial / stats.total) * 100}%` }} />}
+                {stats.notDone > 0 && <div className="bg-red-400" style={{ width: `${(stats.notDone / stats.total) * 100}%` }} />}
+              </div>
+              <span className="text-xs font-semibold text-gray-500">{stats.rate}%</span>
+            </div>
+          )}
+        </div>
+
+        {filteredHomework.length > 0 ? (
+          <div className="space-y-2">
+            {filteredHomework.map(h => {
+              const sc = STATUS_CONFIG[h.status] || STATUS_CONFIG.not_done;
+              const StatusIcon = sc.icon;
               return (
-                <div
-                  key={hw.id}
-                  className={
-                    "p-6 rounded-2xl border-2 hover:shadow-xl transition-all " +
-                    dueInfo.border +
-                    " " +
-                    dueInfo.bg
-                  }
-                >
-                  {/* Header */}
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex items-start gap-4 flex-1">
-                      <div
-                        className={
-                          "w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 " +
-                          dueInfo.icon
-                        }
-                      >
-                        <BookOpen size={20} />
-                      </div>
-
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold">
-                            {hw.class_name}
-                          </span>
-                          <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold">
-                            {hw.subject}
-                          </span>
-                        </div>
-                        <h4 className="font-bold text-gray-900 text-lg">
-                          {hw.title}
-                        </h4>
-                      </div>
-                    </div>
-
-                    <span
-                      className={
-                        hw.status === "completed"
-                          ? "px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-100 text-emerald-700"
-                          : "px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700"
-                      }
-                    >
-                      {hw.status === "completed" ? "✓ Done" : "Pending"}
-                    </span>
+                <div key={h.id} className={`flex items-start gap-3 p-4 rounded-xl border transition-colors ${
+                  h.overdue ? 'bg-red-50/50 border-red-200' : 'bg-gray-50 border-transparent hover:bg-gray-100'
+                }`}>
+                  {/* Status icon */}
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${sc.bg} ${sc.border} border`}>
+                    <StatusIcon size={18} className={sc.text} />
                   </div>
 
-                  {/* Description */}
-                  {hw.description && (
-                    <p className="text-sm text-gray-700 mb-4 leading-relaxed pl-16">
-                      {hw.description}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="text-sm font-medium text-gray-800 truncate">{h.title}</p>
+                      {h.overdue && (
+                        <span className="text-[10px] font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                          OVERDUE
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">{h.subject} · {selectedChild?.class_name}</p>
+                    {h.description && (
+                      <p className="text-xs text-gray-400 mt-1 line-clamp-2">{h.description}</p>
+                    )}
+                  </div>
+
+                  <div className="text-right flex-shrink-0">
+                    <span className={`text-[10px] font-semibold px-2 py-1 rounded-full ${sc.badge}`}>
+                      {sc.label}
+                    </span>
+                    <p className="text-[10px] text-gray-400 mt-1.5">
+                      Due {new Date(h.due_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                     </p>
-                  )}
-
-                  {hw.attachments.map((attachment, idx) => (
-                    <a
-                      key={idx}
-                      href={attachment.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-purple-50 transition-all group border border-purple-100"
-                    >
-                      <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center group-hover:bg-purple-200 transition-colors">
-                        <File size={18} className="text-purple-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate group-hover:text-purple-700">
-                          {attachment.name}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          Click to view or download
-                        </p>
-                      </div>
-                      <Download
-                        size={16}
-                        className="text-purple-600 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                      />
-                    </a>
-                  ))}
-
-                  {/* Footer */}
-                  <div className="flex items-center justify-between text-sm pl-16 pt-3 border-t border-gray-200">
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Calendar size={14} />
-                      <span>
-                        Assigned:{" "}
-                        {new Date(hw.assigned_date).toLocaleDateString("en-GB")}
-                      </span>
-                    </div>
-                    <div
-                      className={
-                        "flex items-center gap-2 font-semibold px-3 py-1 rounded-lg " +
-                        dueInfo.icon
-                      }
-                    >
-                      <Clock size={14} />
-                      <span>{dueInfo.text}</span>
-                    </div>
+                    {h.assigned_date && (
+                      <p className="text-[10px] text-gray-300">
+                        Set {new Date(h.assigned_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                      </p>
+                    )}
                   </div>
                 </div>
               );
             })}
           </div>
+        ) : (
+          <div className="text-center py-12 bg-gray-50 rounded-xl">
+            <ClipboardList size={40} className="mx-auto text-gray-300 mb-3" />
+            <p className="text-sm text-gray-500 font-medium">No homework found</p>
+            <p className="text-xs text-gray-400 mt-1">
+              {statusFilter !== 'all'
+                ? 'Try changing the filter above'
+                : 'Homework will appear here as teachers assign it'}
+            </p>
+          </div>
         )}
       </div>
+
+      {/* ═══ TERM FOOTER ══════════════════════════════════════ */}
+      {selectedTerm && termConfig && (
+        <div className={`${termConfig.bg} border ${termConfig.border} rounded-xl px-4 py-3 flex items-center justify-between`}>
+          <div className="flex items-center gap-2">
+            <TermIcon size={14} className={termConfig.text} />
+            <span className={`text-xs font-semibold ${termConfig.text}`}>{termConfig.name} Term {selectedTerm.academic_year}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-24 bg-white/60 rounded-full h-1.5 hidden sm:block">
+              <div className={`bg-gradient-to-r ${termConfig.gradient} h-1.5 rounded-full`}
+                style={{ width: `${Math.min(100, Math.max(0, ((new Date() - new Date(selectedTerm.start_date)) / (new Date(selectedTerm.end_date) - new Date(selectedTerm.start_date))) * 100))}%` }} />
+            </div>
+            <span className={`text-[10px] font-medium ${termConfig.text}`}>
+              {Math.max(0, Math.ceil((new Date(selectedTerm.end_date + 'T00:00:00') - new Date()) / 86400000))}d left
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

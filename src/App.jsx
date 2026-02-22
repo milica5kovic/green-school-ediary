@@ -19,6 +19,7 @@ import {
   UserCircle,
   CalendarCheck,
   ClipboardCheck,
+  UserPlus,
   
   LogOut,
   Shield,
@@ -43,6 +44,7 @@ import DailyOverviewPage from './features/attendance/components/DailyOverviewPag
 import TestMakerPage from './features/tests/components/TestMakerPage';
 import ManagementPage from './features/management/components/ManagementPage';
 import SettingsPage from './features/settings/components/SettingsPage';
+import AdmissionsPortal from './features/admissions/componenets/AdmissionsPortal';
 
 // Parent Pages
 import ParentDashboard from './features/parents/components/ParentDashboard';
@@ -100,6 +102,7 @@ const renderPage = () => {
       case "my-child":
         return <ParentMyChildPage />;
       case "grading":
+      case "parent-grades":
         return <ParentGradesPage />;
       case "parent-attendance":
         return <ParentAttendancePage />;
@@ -108,6 +111,7 @@ const renderPage = () => {
       case "parent-daily":
         return <ParentDailyViewPage />;
       case "homework":
+      case "parent-homework":
         return <ParentHomeworkPage />;
       case "settings":
         return <SettingsPage />;
@@ -156,6 +160,9 @@ const renderPage = () => {
     
     case "management":
       return isAdmin() ? <ManagementPage /> : <UnauthorizedPage />;
+    
+    case "admissions":
+      return isAdmin() ? <AdmissionsPortal /> : <UnauthorizedPage />;
     
     case "reports":
       return isAdmin() ? <AdminDashboard /> : <UnauthorizedPage />; // Placeholder
@@ -303,6 +310,7 @@ const renderPage = () => {
         <NavItem icon={FileText} label="Test Maker" page="test-maker" />
         <div className="border-t border-gray-200 my-2"></div>
         <NavItem icon={Users} label="Management" page="management" />
+        <NavItem icon={UserPlus} label="Admissions" page="admissions" />
         <NavItem icon={Settings} label="Settings" page="settings" />
       </>
     ) : isPureAdmin ? (
@@ -311,6 +319,7 @@ const renderPage = () => {
         <NavItem icon={LayoutDashboard} label="Dashboard" page="home" />
         <NavItem icon={CalendarDays} label="School Calendar" page="admin-calendar" />
         <NavItem icon={Users} label="Management" page="management" />
+        <NavItem icon={UserPlus} label="Admissions" page="admissions" />
         <NavItem icon={BarChart3} label="Reports" page="reports" />
         <NavItem icon={Settings} label="Settings" page="settings" />
       </>
