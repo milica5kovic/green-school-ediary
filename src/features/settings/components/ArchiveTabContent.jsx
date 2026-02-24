@@ -886,7 +886,7 @@ const ArchiveTabContent = () => {
 
           <div className="bg-blue-50 rounded-xl p-3.5 border border-blue-200 text-xs text-blue-700">
             <strong>Next steps:</strong> Go to Academic Terms tab to set up Winter/Spring/Summer terms for {NEXT_YEAR}. 
-            New students can be enrolled via the Enrollment tab or Students page.
+            New students can be enrolled via the Admission tab or Students page.
           </div>
 
           <button onClick={() => { setStep(0); loadStats(); setConfirmText(''); setExportData(null); setResult(null); }}

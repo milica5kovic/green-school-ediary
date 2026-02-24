@@ -8,7 +8,7 @@ import ClassesTabContent from '../../settings/components/ClassesTabContent';
 import SubjectsTabContent from '../../settings/components/SubjectsTabContent';
 import ArchiveTabContent from '../../settings/components/ArchiveTabContent';
 import AccountTabContent from '../../settings/components/AccountTabContent';
-import EnrollmentTabContent from "../../settings/components/EnrollmentTabContent";
+// import EnrollmentTabContent from "../../settings/components/EnrollmentTabContent";
 import AcademicTermsManager from './AcademicTermsManager';
 
 const tabs = [
@@ -18,7 +18,7 @@ const tabs = [
   { id: 'classes', label: 'Classes', icon: UsersIcon },
   { id: 'subjects', label: 'Subjects', icon: BookOpen },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-  { id: 'enrollment', label: 'Enrollment', icon: UserPlus },
+  // { id: 'enrollment', label: 'Enrollment', icon: UserPlus },
   { id: 'terms', label: 'Academic Terms', icon: Calendar },
   { id: 'archive', label: 'Archive & Export', icon: ArchiveIcon },
 ];
@@ -81,7 +81,7 @@ const ManagementPage = () => {
           {activeTab === 'classes' && <ClassesTabContent />}
           {activeTab === 'subjects' && <SubjectsTabContent />}
           {activeTab === 'analytics' && <AnalyticsTab />}
-          {activeTab === 'enrollment' && <EnrollmentTabContent />}
+          {/* {activeTab === 'enrollment' && <EnrollmentTabContent />} */}
           {activeTab === 'terms' && <AcademicTermsManager />}
           {activeTab === 'archive' && <ArchiveTabContent />}
         </div>
