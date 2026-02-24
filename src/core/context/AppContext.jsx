@@ -1,177 +1,123 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useRef,
-} from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { supabase, getCurrentSchoolId } from '../infrastructure/supabaseClient';
 
-import { supabase } from "../infrastructure/supabaseClient";
-
-import { AttendanceService } from '../../features/attendance/services/attendanceService';
-import { ClassService } from '../../features/dashboard/services/classService';
-import { StudentsService } from '../../features/students/services/studentService';
-import GradingService from '../../features/grading/services/gradingService';
-
-import { ScheduleService } from "../../features/schedule/services/scheduleService";
-import { TodoService } from '../../features/tasks/services/todoService';
-import { ParentService } from '../../features/parents/services/parentService';
+// Servisi
+import { AttendanceService } from '../../school/features/attendance/services/attendanceService';
+import { ClassService } from '../../school/features/dashboard/services/classService';
+import { StudentsService } from '../../school/features/students/services/studentService';
+import GradingService from '../../school/features/grading/services/gradingService'; // DEFAULT IMPORT
+import { ScheduleService } from '../../school/features/schedule/services/scheduleService';
+import { TodoService } from '../../school/features/tasks/services/todoService';
+import { ParentService } from '../../school/features/parents/services/parentService';
 
 const AppContext = createContext(null);
 
 export const useApp = () => {
   const context = useContext(AppContext);
-  if (!context) {
-    throw new Error("useApp must be used within AppProvider");
-  }
+  if (!context) throw new Error('useApp must be used within AppProvider');
   return context;
 };
 
 export const AppProvider = ({ children }) => {
-  const [currentPage, setCurrentPage] = useState("home");
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState('home');
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [studentsDb, setStudentsDb] = useState({});
 
-  // ✅ USE REF instead of state to prevent re-renders
-  const servicesRef = useRef(null);
-  const studentsFetchInProgress = useRef(false);
-  const hasInitialized = useRef(false);
+  const [services] = useState(() => {
+    console.log('✅ Initializing services...');
+    const schoolId = getCurrentSchoolId();
+    if (schoolId) console.log('🏫 Services filtering by school_id:', schoolId);
+    
+    return {
+      attendance: new AttendanceService(supabase),
+      classes: new ClassService(supabase),
+      students: new StudentsService(supabase),
+      grading: new GradingService(),
+      schedule: new ScheduleService(supabase),
+      todos: new TodoService(supabase),
+      parents: new ParentService(supabase),
+    };
+  });
 
-  // ✅ Initialize services ONCE using useRef
-  if (!servicesRef.current) {
+  console.log('✅ App services initialized (including ParentService)');
+
+  const loadAllStudents = useCallback(async () => {
     try {
-      servicesRef.current = {
-        attendance: new AttendanceService(supabase),
-        class: new ClassService(supabase),
-        students: new StudentsService(supabase),
-        grading: new GradingService(),
-        schedule: new ScheduleService(supabase),
-        todo: new TodoService(supabase),
-        parent: new ParentService(supabase), // ✅ NEW SERVICE
-      };
-      console.log("✅ App services initialized (including ParentService)");
-    } catch (err) {
-      console.error("❌ Service initialization failed:", err);
-    }
-  }
-
-  const loadAllStudents = async () => {
-    if (studentsFetchInProgress.current || !servicesRef.current?.students) {
-      console.log("⏭️ Student fetch skipped");
-      return;
-    }
-
-    studentsFetchInProgress.current = true;
-
-    try {
-      console.log("📚 Loading all students...");
-      const allStudents = await servicesRef.current.students.getAllStudents();
-
-      const grouped = allStudents.reduce((acc, student) => {
-        if (!acc[student.class_name]) {
-          acc[student.class_name] = [];
-        }
-
-        acc[student.class_name].push({
-          id: student.id,
-          name: student.name,
-          student_no: student.student_no,
-          class: student.class_name,
-        });
-
-        return acc;
-      }, {});
-
-      setStudentsDb(grouped);
+      setLoading(true);
       setError(null);
-      console.log("✅ Students loaded:", Object.keys(grouped).length, "classes");
+      console.log('📚 Loading all students...');
+      const data = await services.students.getAllStudents();
+      console.log(`✅ Loaded ${data?.length || 0} students`);
+      setStudents(data || []);
     } catch (err) {
-      if (err?.name === "AbortError") {
-        console.warn("⚠️ Request aborted (safe to ignore)");
-        return;
-      }
-
-      console.error("❌ Error loading students:", err);
-      setError("Failed to load students");
+      console.error('❌ Error loading students:', err);
+      setError(err.message);
     } finally {
-      studentsFetchInProgress.current = false;
+      setLoading(false);
     }
-  };
+  }, [services]);
 
-  // ✅ Load students ONLY ONCE on mount
   useEffect(() => {
-    if (!hasInitialized.current && servicesRef.current) {
-      loadAllStudents();
-      hasInitialized.current = true;
+    const timer = setTimeout(() => loadAllStudents(), 100);
+    return () => clearTimeout(timer);
+  }, [loadAllStudents]);
+
+  const getStudentsByClass = useCallback(() => {
+    return students.reduce((acc, student) => {
+      const className = student.class_name || 'Unassigned';
+      if (!acc[className]) acc[className] = [];
+      acc[className].push(student);
+      return acc;
+    }, {});
+  }, [students]);
+
+  const getAllClasses = useCallback(() => {
+    return [...new Set(students.map(s => s.class_name).filter(Boolean))].sort();
+  }, [students]);
+
+  const refreshStudent = useCallback(async (studentId) => {
+    try {
+      const updated = await services.students.getStudentById(studentId);
+      if (updated) setStudents(prev => prev.map(s => s.id === studentId ? updated : s));
+    } catch (err) {
+      console.error('Error refreshing student:', err);
     }
-  }, []);
+  }, [services]);
 
-  // Date utilities
-  const getDateKey = (date) => {
-    const d = new Date(date);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  };
+  const addStudent = useCallback(async (studentData) => {
+    const newStudent = await services.students.addStudent(studentData);
+    setStudents(prev => [...prev, newStudent]);
+    return newStudent;
+  }, [services]);
 
-  const getDayName = (date) => {
-    const days = [
-      "Sunday",
-      "Monday",
-      "Tuesday",
-      "Wednesday",
-      "Thursday",
-      "Friday",
-      "Saturday",
-    ];
-    return days[new Date(date).getDay()];
-  };
+  const updateStudent = useCallback(async (studentId, studentData) => {
+    const updated = await services.students.updateStudent(studentId, studentData);
+    setStudents(prev => prev.map(s => s.id === studentId ? updated : s));
+    return updated;
+  }, [services]);
 
-  const formatDate = (date) => {
-    return new Date(date).toLocaleDateString("en-US", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  };
+  const deleteStudent = useCallback(async (studentId) => {
+    await services.students.deleteStudent(studentId);
+    setStudents(prev => prev.filter(s => s.id !== studentId));
+  }, [services]);
 
-  // ✅ Don't render loading screen - services are initialized synchronously
   const value = {
-    currentPage,
-    setCurrentPage,
-    selectedDate,
-    setSelectedDate,
-    loading,
-    setLoading,
-    error,
-    setError,
-    studentsDb,
-    supabase,
-
-    // ✅ Access services from ref
-    attendanceService: servicesRef.current?.attendance,
-    classService: servicesRef.current?.class,
-    studentsService: servicesRef.current?.students,
-    gradingService: servicesRef.current?.grading,
-    scheduleService: servicesRef.current?.schedule,
-    todoService: servicesRef.current?.todo,
-    parentService: servicesRef.current?.parent, // ✅ NEW SERVICE
-
-    loadAllStudents,
-    getDateKey,
-    getDayName,
-    formatDate,
+    currentPage, setCurrentPage,
+    students, setStudents, loadAllStudents, refreshStudent, addStudent, updateStudent, deleteStudent,
+    getStudentsByClass, getAllClasses,
+    services,
+    attendanceService: services.attendance,
+    classService: services.classes,
+    studentsService: services.students,
+    gradingService: services.grading,
+    scheduleService: services.schedule,
+    todoService: services.todos,
+    parentService: services.parents,
+    loading, error,
   };
 
-  return (
-    <AppContext.Provider value={value}>
-      {children}
-    </AppContext.Provider>
-  );
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
 
 export default AppContext;

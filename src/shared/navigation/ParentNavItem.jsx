@@ -1,5 +1,5 @@
 import React from 'react';
-import { useApp } from '../../../core/context/AppContext';
+import { useApp } from '../../../../core/context/AppContext';
 
 const ParentNavItem = ({ icon: Icon, label, page, badge = null }) => {
   const { currentPage, setCurrentPage } = useApp();

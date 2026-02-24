@@ -2,14 +2,22 @@ import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useApp } from '../../core/context/AppContext';
 
-
 const DateNavigator = () => {
-  const { selectedDate, setSelectedDate, formatDate } = useApp();
+  const { selectedDate, setSelectedDate } = useApp();
 
   const changeDate = (days) => {
     const newDate = new Date(selectedDate);
     newDate.setDate(newDate.getDate() + days);
     setSelectedDate(newDate);
+  };
+
+  const formatDate = (date) => {
+    if (!date) return '';
+    return new Intl.DateTimeFormat('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(new Date(date));
   };
 
   return (
@@ -21,6 +29,7 @@ const DateNavigator = () => {
         >
           <ChevronLeft size={24} className="text-emerald-600" />
         </button>
+
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-800">
             {formatDate(selectedDate)}
@@ -29,6 +38,7 @@ const DateNavigator = () => {
             Daily Classes & Attendance
           </p>
         </div>
+
         <button
           onClick={() => changeDate(1)}
           className="p-2 hover:bg-emerald-50 rounded-lg transition-colors"
