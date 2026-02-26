@@ -1,17 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import emailjs from '@emailjs/browser';
 
 // ============================================================================
 // AKIO — Modern Light Theme
-// Colors: #9812b4 (brand), #e1c3ef (soft lavender), #55046d (deep)
-// Font: Montserrat — 900 Italic for hero, 700 for headings, 300 for body
-// Bilingual: EN / SR
+// EmailJS: service_kdua8yu, template_m21km6g, XGJ_fnnjHMkDZU2UM
 // ============================================================================
+
+// Initialize EmailJS
+emailjs.init('XGJ_fnnjHMkDZU2UM');
 
 const copy = {
   en: {
     nav: ["Services", "Products", "Story", "About", "Contact"],
     cta: "Get in Touch",
-    eyebrow: "Custom Software Studio · Belgrade",
+    eyebrow: "Custom Software · Belgrade",
     h1a: "We don't just",
     h1b: "build software.",
     h1c: "We summon it.",
@@ -35,7 +37,7 @@ const copy = {
     fp_title: "SchoolHub",
     fp_desc: "Complete school management — grades, attendance, homework, parent portal, admissions. Cambridge curriculum ready and built to scale with your institution.",
     fp_feats: ["Multi-tenant SaaS architecture","Custom branding per school","Parent & Teacher portals","Cambridge grading system","Admissions management"],
-    fp_btn: "Learn More",
+    fp_btn: "Get Started",
     future: [
       { icon:"💃", tag:"Dance · Yoga · Fitness", name:"Studio Hub" },
       { icon:"🦷", tag:"Dental · Medical", name:"Clinic OS" },
@@ -55,9 +57,9 @@ const copy = {
     why_h: "Your partner,",
     why_em: "not just your vendor",
     why: [
-      { icon:"⚡", t:"Fast Delivery", d:"From idea to launch in weeks, not months." },
-      { icon:"🛡️", t:"Reliable", d:"Built to scale with your business." },
-      { icon:"🌙", t:"Always Available", d:"Ongoing support when you need it." },
+      { icon:"◈", t:"Fast Delivery", d:"From idea to launch in weeks, not months." },
+      { icon:"⬡", t:"Reliable", d:"Built to scale with your business." },
+      { icon:"⟡", t:"Always Available", d:"Ongoing support when you need it." },
       { icon:"✦", t:"Quality First", d:"Clean code, beautiful design." },
     ],
     abt_label: "The Maker",
@@ -73,9 +75,11 @@ const copy = {
     f_name:"Name", f_email:"Email", f_msg:"Message",
     f_ph_n:"Your name", f_ph_e:"you@example.com", f_ph_m:"Tell me about your project...",
     f_btn:"Send Message",
+    f_sending:"Sending...",
     f_or:"Or email directly:",
     f_ok_h:"Message Sent!", f_ok_s:"I'll get back to you within 24 hours.",
-    footer:"© 2026 Akio Studio. Crafted with 💜 in Belgrade.",
+    f_err:"Something went wrong. Please try again or email directly.",
+    footer:"© 2026 Akio. Crafted with 💜 in Belgrade.",
     flinks:["Privacy","Terms"],
     lang_switch:"SR",
     uptime: "Uptime this month",
@@ -111,7 +115,7 @@ const copy = {
     fp_title: "SchoolHub",
     fp_desc: "Kompletno upravljanje školom — ocene, prisustvo, domaći, portal za roditelje, upis. Spreman za Cambridge nastavni plan i program.",
     fp_feats: ["Multi-tenant SaaS arhitektura","Prilagođen brending po školi","Portali za roditelje i nastavnike","Cambridge sistem ocenjivanja","Upravljanje upisom"],
-    fp_btn: "Saznaj Više",
+    fp_btn: "Započni",
     future: [
       { icon:"💃", tag:"Ples · Joga · Fitnes", name:"Studio Hub" },
       { icon:"🦷", tag:"Stomatološki · Medicinski", name:"Clinic OS" },
@@ -131,9 +135,9 @@ const copy = {
     why_h: "Tvoj partner,",
     why_em: "ne samo prodavac",
     why: [
-      { icon:"⚡", t:"Brza Isporuka", d:"Od ideje do lansiranja za nedelje, ne mesece." },
-      { icon:"🛡️", t:"Pouzdanost", d:"Izgrađeno da raste sa tvojim biznisom." },
-      { icon:"🌙", t:"Uvek Dostupni", d:"Trajna podrška kada ti zatreba." },
+      { icon:"◈", t:"Brza Isporuka", d:"Od ideje do lansiranja za nedelje, ne mesece." },
+      { icon:"⬡", t:"Pouzdanost", d:"Izgrađeno da raste sa tvojim biznisom." },
+      { icon:"⟡", t:"Uvek Dostupni", d:"Trajna podrška kada ti zatreba." },
       { icon:"✦", t:"Kvalitet Prvo", d:"Čist kod, lep dizajn." },
     ],
     abt_label: "Osnivač",
@@ -149,9 +153,11 @@ const copy = {
     f_name:"Ime", f_email:"Imejl", f_msg:"Poruka",
     f_ph_n:"Tvoje ime", f_ph_e:"ti@primer.com", f_ph_m:"Ispričaj mi o svom projektu...",
     f_btn:"Pošalji Poruku",
+    f_sending:"Šaljem...",
     f_or:"Ili piši direktno:",
     f_ok_h:"Poruka Poslata!", f_ok_s:"Odgovorićemo u roku od 24 sata.",
-    footer:"© 2026 Akio Studio. Napravljeno sa 💜 u Beogradu.",
+    f_err:"Nešto nije u redu. Pokušaj ponovo ili piši direktno.",
+    footer:"© 2026 Akio. Napravljeno sa 💜 u Beogradu.",
     flinks:["Privatnost","Uslovi"],
     lang_switch:"EN",
     uptime: "Dostupnost ovog meseca",
@@ -184,8 +190,8 @@ body::after{content:'';position:fixed;inset:0;background-image:radial-gradient(v
 /* nav */
 nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(253,249,255,.88);backdrop-filter:blur(18px);border-bottom:1px solid var(--border);padding:0 48px;height:66px;display:flex;align-items:center;justify-content:space-between}
 .nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none}
-.logo-mark{width:36px;height:36px;background:var(--brand);border-radius:9px;display:flex;align-items:center;justify-content:center;font-family:var(--font);font-weight:900;font-style:italic;font-size:17px;color:#fff;box-shadow:0 4px 18px rgba(152,18,180,.35);transition:all .3s}
-.logo-mark:hover{box-shadow:0 6px 26px rgba(152,18,180,.55);transform:translateY(-1px)}
+.logo-img{height:38px;width:auto;transition:transform .3s}
+.logo-img:hover{transform:scale(1.05)}
 .logo-name{font-weight:800;font-style:italic;font-size:18px;letter-spacing:.04em;color:var(--deep)}
 .nav-right{display:flex;align-items:center;gap:28px}
 .nav-links{display:flex;gap:26px;list-style:none}
@@ -291,8 +297,8 @@ h2.sh em{font-style:italic;font-weight:900;color:var(--brand)}
 
 /* why */
 .wb{background:var(--bg2);border-top:1px solid var(--border)}
-.wg{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;background:var(--border);border-radius:14px;overflow:hidden;border:1px solid var(--border)}
-.wc{background:var(--surface);padding:38px 26px;text-align:center;transition:background .3s}
+.wg{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;border-radius:14px;border:1px solid var(--border)}
+.wc{background:var(--surface);padding:38px 26px;text-align:center;transition:background .3s;border-radius:12px;border:1px solid var(--border)}
 .wc:hover{background:var(--bg2)}
 .wi{font-size:26px;margin-bottom:14px;display:block}
 .wt{font-size:14.5px;font-weight:700;color:var(--deep);margin-bottom:7px}
@@ -306,9 +312,6 @@ h2.sh em{font-style:italic;font-weight:900;color:var(--brand)}
 .abbdg{position:absolute;bottom:-10px;right:-10px;background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:11px 14px}
 .bopen{font-size:11.5px;font-weight:700;color:#10b981;display:flex;align-items:center;gap:5px}
 .blbl{font-size:9.5px;font-weight:300;color:var(--text-lo);margin-bottom:3px;letter-spacing:.1em}
-.socs{display:flex;gap:9px;margin-top:26px}
-.sb{width:36px;height:36px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;text-decoration:none;color:var(--text-lo);transition:all .25s}
-.sb:hover{border-color:var(--brand);color:var(--brand);background:rgba(152,18,180,.05)}
 
 /* contact */
 .cbg{background:var(--bg);border-top:1px solid var(--border)}
@@ -322,11 +325,13 @@ h2.sh em{font-style:italic;font-weight:900;color:var(--brand)}
 .fi:focus{border-color:var(--brand);background:#fff;box-shadow:0 0 0 3px rgba(152,18,180,.08)}
 .fi::placeholder{color:var(--text-lo)}
 .fsub{width:100%;padding:13px;background:var(--brand);color:#fff;border:none;cursor:pointer;font-family:var(--font);font-size:12.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border-radius:8px;box-shadow:0 6px 22px rgba(152,18,180,.3);transition:all .3s;margin-top:8px}
-.fsub:hover{background:var(--deep);box-shadow:0 8px 28px rgba(85,4,109,.4);transform:translateY(-1px)}
+.fsub:hover:not(:disabled){background:var(--deep);box-shadow:0 8px 28px rgba(85,4,109,.4);transform:translateY(-1px)}
+.fsub:disabled{opacity:.7;cursor:not-allowed}
 .fsucc{text-align:center;padding:44px 0}
 .fsi{font-size:44px;margin-bottom:14px}
 .fsh{font-size:21px;font-weight:900;font-style:italic;color:var(--deep);margin-bottom:9px}
 .fss{font-size:14.5px;font-weight:300;color:var(--text-md)}
+.ferr{text-align:center;padding:14px;background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.2);border-radius:8px;color:#dc2626;font-size:13px;margin-bottom:14px}
 .for{text-align:center;margin-top:22px;font-size:12.5px;font-weight:300;color:var(--text-lo)}
 .for a{color:var(--brand);text-decoration:none;font-weight:700}
 .for a:hover{text-decoration:underline}
@@ -360,11 +365,47 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);padding:32
 }
 `;
 
-export default function App() {
+export default function AkioLanding() {
   const [lang, setLang] = useState("en");
-  const [sent, setSent] = useState(false);
+  const [formState, setFormState] = useState('idle'); // idle, sending, success, error
+  const [formData, setFormData] = useState({ name: '', email: '', message: '' });
   const t = copy[lang];
   const isEn = lang === "en";
+
+  // Set document title
+  useEffect(() => {
+    document.title = "Akio · Custom Software Studio";
+    
+    // Update favicon
+    const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
+    link.rel = 'icon';
+    link.href = '/Logo(1)_transparent.png';
+    document.head.appendChild(link);
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setFormState('sending');
+
+    try {
+      await emailjs.send(
+        'service_kdua8yu',
+        'template_z2w59yg',
+        
+        {
+          from_name: formData.name,
+          from_email: formData.email,
+          message: formData.message,
+          to_email: 'mia5ko@proton.me',
+        }
+      );
+      setFormState('success');
+      setFormData({ name: '', email: '', message: '' });
+    } catch (error) {
+      console.error('EmailJS error:', error);
+      setFormState('error');
+    }
+  };
 
   const mqItems = isEn
     ? ["Custom Software","School Management","React & Node.js","Multi-tenant SaaS","UI/UX Design","Belgrade Serbia","Fast Delivery","Cambridge Ready"]
@@ -379,8 +420,7 @@ export default function App() {
       {/* NAV */}
       <nav>
         <a href="#" className="nav-logo">
-          <div className="logo-mark">A</div>
-          <span className="logo-name">Akio</span>
+          <img src="/Logo(1)_transparent.png" alt="Akio" className="logo-img" />
         </a>
         <div className="nav-right">
           <ul className="nav-links">
@@ -576,9 +616,6 @@ export default function App() {
                 <span style={{width:6,height:6,background:"#10b981",borderRadius:"50%",display:"inline-block"}}/>
                 <span style={{fontSize:11.5,fontWeight:700,color:"#10b981"}}>{t.abt_open}</span>
               </div>
-              <div className="socs">
-                {["⌥","◈","→"].map((s,i)=><a key={i} href="#" className="sb">{s}</a>)}
-              </div>
             </div>
             <div style={{position:"relative"}}>
               <div className="afrm">
@@ -604,27 +641,63 @@ export default function App() {
           </div>
           <div className="cw">
             <div className="cf">
-              {sent ? (
+              {formState === 'success' ? (
                 <div className="fsucc">
                   <div className="fsi">✦</div>
                   <div className="fsh">{t.f_ok_h}</div>
                   <div className="fss">{t.f_ok_s}</div>
                 </div>
               ) : (
-                <form onSubmit={e=>{e.preventDefault();setSent(true)}}>
+                <form onSubmit={handleSubmit}>
+                  {formState === 'error' && (
+                    <div className="ferr">{t.f_err}</div>
+                  )}
                   <div className="fr2">
-                    <div><label className="fl">{t.f_name}</label><input className="fi" type="text" placeholder={t.f_ph_n} required/></div>
-                    <div><label className="fl">{t.f_email}</label><input className="fi" type="email" placeholder={t.f_ph_e} required/></div>
+                    <div>
+                      <label className="fl">{t.f_name}</label>
+                      <input 
+                        className="fi" 
+                        type="text" 
+                        placeholder={t.f_ph_n} 
+                        required
+                        value={formData.name}
+                        onChange={(e) => setFormData({...formData, name: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="fl">{t.f_email}</label>
+                      <input 
+                        className="fi" 
+                        type="email" 
+                        placeholder={t.f_ph_e} 
+                        required
+                        value={formData.email}
+                        onChange={(e) => setFormData({...formData, email: e.target.value})}
+                      />
+                    </div>
                   </div>
                   <div className="fg2">
                     <label className="fl">{t.f_msg}</label>
-                    <textarea className="fi" rows={5} placeholder={t.f_ph_m} required/>
+                    <textarea 
+                      className="fi" 
+                      rows={5} 
+                      placeholder={t.f_ph_m} 
+                      required
+                      value={formData.message}
+                      onChange={(e) => setFormData({...formData, message: e.target.value})}
+                    />
                   </div>
-                  <button type="submit" className="fsub">{t.f_btn} →</button>
+                  <button 
+                    type="submit" 
+                    className="fsub"
+                    disabled={formState === 'sending'}
+                  >
+                    {formState === 'sending' ? t.f_sending : `${t.f_btn} →`}
+                  </button>
                 </form>
               )}
             </div>
-            <p className="for">{t.f_or} <a href="mailto:hello@akio.dev">hello@akio.dev</a></p>
+            <p className="for">{t.f_or} <a href="mailto:mia5ko@proton.me">mia5ko@proton.me</a></p>
           </div>
         </div>
       </section>
@@ -632,12 +705,14 @@ export default function App() {
       {/* FOOTER */}
       <footer>
         <div className="fi2">
-          <div className="nav-logo" style={{gap:9}}>
-            <div className="logo-mark" style={{width:28,height:28,fontSize:14,borderRadius:7}}>A</div>
-            <span className="logo-name" style={{fontSize:16}}>Akio</span>
-          </div>
+          <a href="#" className="nav-logo" style={{gap:9}}>
+            <img src="/Logo(1)_transparent.pngg" alt="Akio" style={{height:28}} />
+          </a>
           <p className="fcopy">{t.footer}</p>
-          <div className="fll">{t.flinks.map((l,i)=><a key={i} href="#">{l}</a>)}</div>
+          <div className="fll">
+            <a href="/privacy">{t.flinks[0]}</a>
+            <a href="/terms">{t.flinks[1]}</a>
+          </div>
         </div>
       </footer>
     </>

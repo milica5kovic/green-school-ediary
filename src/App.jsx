@@ -1,22 +1,17 @@
 import React from 'react';
 import { TenantProvider, useTenant } from './core/context/TenantContext';
 import { AuthProvider, useAuth } from './core/context/AuthContext';
-import { supabase } from './core/infrastructure/supabaseClient';  // ← DODAJ IMPORT
-
-// Direktni importi
+import { supabase } from './core/infrastructure/supabaseClient';
 import SchoolApp from './school/SchoolApp';
 import OwnerDashboard from './owner/OwnerDashboard';
 import AkioLanding from './marketing/AkioLanding';
 import LoginPage from './auth/LoginPage';
-
-// ============================================================================
-// MAIN APP
-// ============================================================================
+import Privacy from './marketing/Privacy';
+import Terms from './marketing/Terms';
 
 function App() {
   return (
     <TenantProvider>
-      {/* PROSLEĐUJ supabase kao prop! */}
       <AuthProvider supabase={supabase}>
         <AppRouter />
       </AuthProvider>
@@ -24,43 +19,22 @@ function App() {
   );
 }
 
-// ============================================================================
-// APP ROUTER
-// ============================================================================
-
 const AppRouter = () => {
   const { isOwnerDashboard, isMarketing, isSchool, loading: tenantLoading, error } = useTenant();
   const { user, teacher, isParent, loading: authLoading } = useAuth();
 
-  console.log('AppRouter:', { 
-    tenantLoading, 
-    authLoading, 
-    isMarketing, 
-    isSchool, 
-    isOwnerDashboard,
-    hasUser: !!user,
-    hasTeacher: !!teacher,
-    isParent: isParent?.(),
-    error 
-  });
+  const path = window.location.pathname;
+  if (path === '/privacy') return <Privacy />;
+  if (path === '/terms') return <Terms />;
 
-  // Čekaj samo tenant loading
   if (tenantLoading) {
-    console.log('AppRouter: Waiting for tenant...');
     return <LoadingScreen message="Loading..." />;
   }
 
-  // ============================================================================
-  // MARKETING
-  // ============================================================================
   if (isMarketing) {
-    console.log('AppRouter: Rendering AkioLanding');
     return <AkioLanding />;
   }
 
-  // ============================================================================
-  // OWNER DASHBOARD
-  // ============================================================================
   if (isOwnerDashboard) {
     if (authLoading) {
       return <LoadingScreen message="Checking authentication..." />;
@@ -71,38 +45,21 @@ const AppRouter = () => {
     return <OwnerDashboard />;
   }
 
-  // ============================================================================
-  // SCHOOL APP
-  // ============================================================================
   if (isSchool) {
     if (error) {
       return <SchoolNotFound error={error} />;
     }
-    
-    // Čekaj auth
     if (authLoading) {
-      console.log('AppRouter: Waiting for auth...');
       return <LoadingScreen message="Checking authentication..." />;
     }
-    
-    // Nema korisnika - login
     if (!user) {
-      console.log('AppRouter: No user, showing login');
       return <LoginPage redirectTo="school" />;
     }
-    
-    // Imamo korisnika
-    console.log('AppRouter: Rendering SchoolApp');
     return <SchoolApp />;
   }
 
-  // Fallback
   return <AkioLanding />;
 };
-
-// ============================================================================
-// LOADING SCREEN
-// ============================================================================
 
 const LoadingScreen = ({ message = "Loading..." }) => (
   <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-violet-50 to-purple-50">
@@ -120,10 +77,6 @@ const LoadingScreen = ({ message = "Loading..." }) => (
     </div>
   </div>
 );
-
-// ============================================================================
-// SCHOOL NOT FOUND
-// ============================================================================
 
 const SchoolNotFound = ({ error }) => (
   <div className="min-h-screen flex items-center justify-center bg-gray-50">
