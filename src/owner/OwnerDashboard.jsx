@@ -1,318 +1,314 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../core/infrastructure/supabaseClient';
+import { useAuth } from '../core/context/AuthContext';
+
+import BrandingSettings from './BrandingSettings';
 import {
-  Sparkles, Plus, Search, MoreVertical, ExternalLink,
-  GraduationCap, Users, TrendingUp, DollarSign, Settings,
-  Building2, Mail, Phone, Calendar, CheckCircle, XCircle,
-  AlertCircle, Clock, Edit3, Trash2, Eye, Power, Palette,
-  ChevronDown, ArrowUpRight, ArrowDownRight, BarChart3,
-  Globe, CreditCard, Shield, Zap, X, Upload, Check,
-  ChevronRight, Copy, RefreshCw
+  Building2, Users, GraduationCap, TrendingUp,
+  Plus, Search, Filter, MoreVertical, Edit2, Trash2,
+  ExternalLink, CheckCircle, XCircle, Clock, AlertCircle,
+  DollarSign, Calendar, Mail, Phone, Globe, Palette,
+  ChevronRight, X, Upload, Eye, EyeOff, Sparkles,
+  BarChart3, Activity, ArrowUpRight, ArrowDownRight,
+  Settings
 } from 'lucide-react';
 
 // ============================================================================
-// SCHOOLHUB OWNER DASHBOARD
-// For Akio (Mia) to manage all school tenants
+// OWNER DASHBOARD - Upravljanje svim školama
 // ============================================================================
 
-const PLANS = {
-  basic: { name: 'Basic', price: 300, color: 'gray', students: 50, teachers: 5 },
-  pro: { name: 'Pro', price: 500, color: 'violet', students: 200, teachers: 15 },
-  enterprise: { name: 'Enterprise', price: 800, color: 'amber', students: 999, teachers: 999 },
-};
-
-const STATUS_CONFIG = {
-  active: { label: 'Active', color: 'emerald', icon: CheckCircle },
-  trial: { label: 'Trial', color: 'blue', icon: Clock },
-  suspended: { label: 'Suspended', color: 'red', icon: XCircle },
-  pending: { label: 'Pending Setup', color: 'amber', icon: AlertCircle },
-};
-
-// Mock data - would come from Supabase
-const MOCK_SCHOOLS = [
-  {
-    id: '1',
-    name: 'Green School by Chartwell',
-    slug: 'greenschool',
-    logo: null,
-    primaryColor: '#10b981',
-    plan: 'pro',
-    status: 'active',
-    students: 37,
-    teachers: 8,
-    adminEmail: 'admin@greenschool.rs',
-    adminName: 'Marko Petrović',
-    phone: '+381 11 234 5678',
-    createdAt: '2025-09-01',
-    lastActive: '2026-02-24',
-    mrr: 500,
-  },
-  {
-    id: '2',
-    name: 'Cambridge Academy Belgrade',
-    slug: 'cambridge-belgrade',
-    logo: null,
-    primaryColor: '#3b82f6',
-    plan: 'enterprise',
-    status: 'trial',
-    students: 124,
-    teachers: 18,
-    adminEmail: 'director@cambridgebelgrade.edu',
-    adminName: 'Ana Jovanović',
-    phone: '+381 11 876 5432',
-    createdAt: '2026-02-15',
-    lastActive: '2026-02-24',
-    mrr: 0, // trial
-    trialEnds: '2026-03-15',
-  },
-  {
-    id: '3',
-    name: 'Little Stars Preschool',
-    slug: 'littlestars',
-    logo: null,
-    primaryColor: '#f59e0b',
-    plan: 'basic',
-    status: 'pending',
-    students: 0,
-    teachers: 0,
-    adminEmail: 'info@littlestars.rs',
-    adminName: 'Jelena Nikolić',
-    phone: '+381 64 123 4567',
-    createdAt: '2026-02-22',
-    lastActive: null,
-    mrr: 300,
-  },
-];
-
 const OwnerDashboard = () => {
-  const [schools, setSchools] = useState(MOCK_SCHOOLS);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [planFilter, setPlanFilter] = useState('all');
+  const { user, signOut } = useAuth();
+  const [schools, setSchools] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterPlan, setFilterPlan] = useState('all');
+  
+  // Modals
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showBrandingModal, setShowBrandingModal] = useState(false);
   const [selectedSchool, setSelectedSchool] = useState(null);
-  const [showAddSchool, setShowAddSchool] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Load schools
+  useEffect(() => {
+    loadSchools();
+  }, []);
+
+  const loadSchools = async () => {
+    try {
+      setLoading(true);
+      
+      // Učitaj škole sa statistikama
+      const { data: schoolsData, error } = await supabase
+        .from('schools')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Za svaku školu učitaj broj učenika
+      const schoolsWithStats = await Promise.all(
+        (schoolsData || []).map(async (school) => {
+          const { count: studentCount } = await supabase
+            .from('students')
+            .select('*', { count: 'exact', head: true })
+            .eq('school_id', school.id);
+
+          const { count: teacherCount } = await supabase
+            .from('teachers')
+            .select('*', { count: 'exact', head: true })
+            .eq('school_id', school.id);
+
+          return {
+            ...school,
+            student_count: studentCount || 0,
+            teacher_count: teacherCount || 0
+          };
+        })
+      );
+
+      setSchools(schoolsWithStats);
+    } catch (err) {
+      console.error('Error loading schools:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Filter schools
+  const filteredSchools = schools.filter(school => {
+    const matchesSearch = school.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         school.slug.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = filterStatus === 'all' || school.status === filterStatus;
+    const matchesPlan = filterPlan === 'all' || school.plan === filterPlan;
+    return matchesSearch && matchesStatus && matchesPlan;
+  });
 
   // Stats
-  const stats = useMemo(() => ({
-    totalSchools: schools.length,
-    activeSchools: schools.filter(s => s.status === 'active').length,
-    totalStudents: schools.reduce((sum, s) => sum + s.students, 0),
-    totalTeachers: schools.reduce((sum, s) => sum + s.teachers, 0),
-    mrr: schools.reduce((sum, s) => sum + s.mrr, 0),
-    trials: schools.filter(s => s.status === 'trial').length,
-  }), [schools]);
-
-  // Filtered schools
-  const filteredSchools = useMemo(() => {
-    let result = schools;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(s => 
-        s.name.toLowerCase().includes(q) || 
-        s.slug.toLowerCase().includes(q) ||
-        s.adminEmail.toLowerCase().includes(q)
-      );
-    }
-    if (statusFilter !== 'all') result = result.filter(s => s.status === statusFilter);
-    if (planFilter !== 'all') result = result.filter(s => s.plan === planFilter);
-    return result;
-  }, [schools, searchQuery, statusFilter, planFilter]);
+  const stats = {
+    total: schools.length,
+    active: schools.filter(s => s.status === 'active').length,
+    trial: schools.filter(s => s.status === 'trial').length,
+    totalStudents: schools.reduce((sum, s) => sum + (s.student_count || 0), 0),
+    totalTeachers: schools.reduce((sum, s) => sum + (s.teacher_count || 0), 0),
+    mrr: schools.reduce((sum, s) => {
+      if (s.status !== 'active') return sum;
+      const prices = { basic: 300, pro: 500, enterprise: 800 };
+      return sum + (prices[s.plan] || 0);
+    }, 0)
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
+      <header className="bg-slate-800/50 backdrop-blur-xl border-b border-slate-700/50 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-200">
-                  <Sparkles className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h1 className="font-bold text-gray-900">SchoolHub</h1>
-                  <p className="text-xs text-gray-500">Owner Dashboard</p>
-                </div>
+              <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-500/25">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-white">SchoolHub</h1>
+                <p className="text-xs text-slate-400">Owner Dashboard</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <button 
-                onClick={() => setShowAddSchool(true)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-500 to-purple-600 text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-violet-200 transition-all"
-              >
-                <Plus size={18} />
-                Add School
-              </button>
-              <div className="w-10 h-10 bg-violet-100 rounded-full flex items-center justify-center">
-                <span className="text-sm font-bold text-violet-600">M</span>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-sm font-medium text-white">{user?.email}</p>
+                <p className="text-xs text-slate-400">Platform Owner</p>
               </div>
+              <button
+                onClick={signOut}
+                className="px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-all"
+              >
+                Sign Out
+              </button>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-6 py-8">
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-          <StatCard 
-            label="Total Schools" 
-            value={stats.totalSchools} 
+          <StatCard
             icon={Building2}
+            label="Total Schools"
+            value={stats.total}
             color="violet"
           />
-          <StatCard 
-            label="Active" 
-            value={stats.activeSchools} 
+          <StatCard
             icon={CheckCircle}
+            label="Active"
+            value={stats.active}
             color="emerald"
           />
-          <StatCard 
-            label="In Trial" 
-            value={stats.trials} 
+          <StatCard
             icon={Clock}
-            color="blue"
-          />
-          <StatCard 
-            label="Students" 
-            value={stats.totalStudents} 
-            icon={Users}
+            label="On Trial"
+            value={stats.trial}
             color="amber"
           />
-          <StatCard 
-            label="Teachers" 
-            value={stats.totalTeachers} 
+          <StatCard
             icon={GraduationCap}
-            color="pink"
+            label="Students"
+            value={stats.totalStudents}
+            color="blue"
           />
-          <StatCard 
-            label="MRR" 
-            value={`€${stats.mrr}`} 
+          <StatCard
+            icon={Users}
+            label="Teachers"
+            value={stats.totalTeachers}
+            color="cyan"
+          />
+          <StatCard
             icon={DollarSign}
+            label="MRR"
+            value={`€${stats.mrr}`}
             color="green"
             highlight
           />
         </div>
 
-        {/* Tabs */}
-        <div className="flex items-center gap-1 bg-white rounded-xl p-1 mb-6 w-fit border border-gray-200">
-          {[
-            { id: 'overview', label: 'All Schools', icon: Building2 },
-            { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-            { id: 'billing', label: 'Billing', icon: CreditCard },
-          ].map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                  isActive 
-                    ? 'bg-violet-100 text-violet-700' 
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <Icon size={16} />
-                {tab.label}
-              </button>
-            );
-          })}
+        {/* Toolbar */}
+        <div className="flex flex-col sm:flex-row gap-4 mb-6">
+          {/* Search */}
+          <div className="flex-1 relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search schools..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500"
+            />
+          </div>
+
+          {/* Filters */}
+          <div className="flex gap-3">
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="trial">Trial</option>
+              <option value="suspended">Suspended</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+
+            <select
+              value={filterPlan}
+              onChange={(e) => setFilterPlan(e.target.value)}
+              className="px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+            >
+              <option value="all">All Plans</option>
+              <option value="basic">Basic</option>
+              <option value="pro">Pro</option>
+              <option value="enterprise">Enterprise</option>
+            </select>
+
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="px-6 py-3 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-violet-500/25 transition-all flex items-center gap-2"
+            >
+              <Plus size={20} />
+              <span className="hidden sm:inline">Add School</span>
+            </button>
+          </div>
         </div>
 
-        {activeTab === 'overview' && (
-          <>
-            {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-3 mb-6">
-              <div className="relative flex-1">
-                <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search schools..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-white rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-400"
-                />
-              </div>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-4 py-3 bg-white rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
-              >
-                <option value="all">All Status</option>
-                {Object.entries(STATUS_CONFIG).map(([key, { label }]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </select>
-              <select
-                value={planFilter}
-                onChange={(e) => setPlanFilter(e.target.value)}
-                className="px-4 py-3 bg-white rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
-              >
-                <option value="all">All Plans</option>
-                {Object.entries(PLANS).map(([key, { name }]) => (
-                  <option key={key} value={key}>{name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Schools Grid */}
-            <div className="grid gap-4">
-              {filteredSchools.map(school => (
-                <SchoolCard 
-                  key={school.id}
-                  school={school}
-                  onClick={() => setSelectedSchool(school)}
-                />
-              ))}
-
-              {filteredSchools.length === 0 && (
-                <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
-                  <Building2 size={48} className="mx-auto text-gray-300 mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-700 mb-1">No schools found</h3>
-                  <p className="text-gray-500">Try adjusting your filters or add a new school</p>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-
-        {activeTab === 'analytics' && (
-          <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
-            <BarChart3 size={48} className="mx-auto text-gray-300 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-700 mb-1">Analytics Coming Soon</h3>
-            <p className="text-gray-500">Track growth, usage patterns, and more</p>
+        {/* Schools Grid */}
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="w-10 h-10 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : filteredSchools.length === 0 ? (
+          <div className="text-center py-20">
+            <Building2 className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-white mb-2">No schools found</h3>
+            <p className="text-slate-400 mb-6">
+              {searchTerm ? 'Try a different search term' : 'Add your first school to get started'}
+            </p>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-xl transition-all"
+            >
+              Add School
+            </button>
+          </div>
+        ) : (
+          <div className="grid gap-4">
+            {filteredSchools.map(school => (
+              <SchoolCard
+                key={school.id}
+                school={school}
+                onBranding={() => {
+                  setSelectedSchool(school);
+                  setShowBrandingModal(true);
+                }}
+                onDelete={() => {
+                  setSelectedSchool(school);
+                  setShowDeleteConfirm(true);
+                }}
+                onVisit={() => {
+                  window.open(`/?school=${school.slug}`, '_blank');
+                }}
+              />
+            ))}
           </div>
         )}
-
-        {activeTab === 'billing' && (
-          <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
-            <CreditCard size={48} className="mx-auto text-gray-300 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-700 mb-1">Billing Dashboard Coming Soon</h3>
-            <p className="text-gray-500">Manage subscriptions, invoices, and payments</p>
-          </div>
-        )}
-      </div>
-
-      {/* School Detail Modal */}
-      {selectedSchool && (
-        <SchoolDetailModal 
-          school={selectedSchool}
-          onClose={() => setSelectedSchool(null)}
-          onUpdate={(updated) => {
-            setSchools(prev => prev.map(s => s.id === updated.id ? updated : s));
-            setSelectedSchool(updated);
-          }}
-        />
-      )}
+      </main>
 
       {/* Add School Modal */}
-      {showAddSchool && (
-        <AddSchoolModal 
-          onClose={() => setShowAddSchool(false)}
-          onAdd={(newSchool) => {
-            setSchools(prev => [...prev, newSchool]);
-            setShowAddSchool(false);
+      {showAddModal && (
+        <AddSchoolModal
+          onClose={() => setShowAddModal(false)}
+          onSuccess={() => {
+            setShowAddModal(false);
+            loadSchools();
+          }}
+        />
+      )}
+
+      {/* Branding Settings Modal */}
+      {showBrandingModal && selectedSchool && (
+        <BrandingSettings
+          school={selectedSchool}
+          onClose={() => {
+            setShowBrandingModal(false);
+            setSelectedSchool(null);
+          }}
+          onSave={() => {
+            setShowBrandingModal(false);
+            setSelectedSchool(null);
+            loadSchools();
+          }}
+        />
+      )}
+
+      {/* Delete Confirmation */}
+      {showDeleteConfirm && selectedSchool && (
+        <DeleteConfirmModal
+          school={selectedSchool}
+          onClose={() => {
+            setShowDeleteConfirm(false);
+            setSelectedSchool(null);
+          }}
+          onConfirm={async () => {
+            try {
+              await supabase.from('schools').delete().eq('id', selectedSchool.id);
+              setShowDeleteConfirm(false);
+              setSelectedSchool(null);
+              loadSchools();
+            } catch (err) {
+              console.error('Error deleting school:', err);
+            }
           }}
         />
       )}
@@ -321,577 +317,542 @@ const OwnerDashboard = () => {
 };
 
 // ============================================================================
-// COMPONENTS
+// STAT CARD
 // ============================================================================
 
-const StatCard = ({ label, value, icon: Icon, color, highlight }) => {
-  const colorClasses = {
-    violet: 'bg-violet-50 text-violet-600',
-    emerald: 'bg-emerald-50 text-emerald-600',
-    blue: 'bg-blue-50 text-blue-600',
-    amber: 'bg-amber-50 text-amber-600',
-    pink: 'bg-pink-50 text-pink-600',
-    green: 'bg-green-50 text-green-600',
+const StatCard = ({ icon: Icon, label, value, color, highlight }) => {
+  const colors = {
+    violet: 'from-violet-500/20 to-violet-600/10 border-violet-500/30 text-violet-400',
+    emerald: 'from-emerald-500/20 to-emerald-600/10 border-emerald-500/30 text-emerald-400',
+    amber: 'from-amber-500/20 to-amber-600/10 border-amber-500/30 text-amber-400',
+    blue: 'from-blue-500/20 to-blue-600/10 border-blue-500/30 text-blue-400',
+    cyan: 'from-cyan-500/20 to-cyan-600/10 border-cyan-500/30 text-cyan-400',
+    green: 'from-green-500/20 to-green-600/10 border-green-500/30 text-green-400',
   };
 
   return (
-    <div className={`bg-white rounded-2xl p-4 border ${highlight ? 'border-violet-200 ring-2 ring-violet-100' : 'border-gray-200'}`}>
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${colorClasses[color]}`}>
-        <Icon size={20} />
-      </div>
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
-      <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+    <div className={`p-4 rounded-2xl bg-gradient-to-br ${colors[color]} border backdrop-blur-sm ${highlight ? 'ring-2 ring-green-500/50' : ''}`}>
+      <Icon className={`w-5 h-5 mb-2 ${colors[color].split(' ').pop()}`} />
+      <p className="text-2xl font-bold text-white">{value}</p>
+      <p className="text-xs text-slate-400">{label}</p>
     </div>
   );
 };
 
-const SchoolCard = ({ school, onClick }) => {
-  const plan = PLANS[school.plan];
-  const status = STATUS_CONFIG[school.status];
-  const StatusIcon = status.icon;
+// ============================================================================
+// SCHOOL CARD - Sa Settings dugmetom
+// ============================================================================
 
+const SchoolCard = ({ school, onBranding, onDelete, onVisit }) => {
   const statusColors = {
-    emerald: 'bg-emerald-100 text-emerald-700',
-    blue: 'bg-blue-100 text-blue-700',
-    red: 'bg-red-100 text-red-700',
-    amber: 'bg-amber-100 text-amber-700',
+    active: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    trial: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+    suspended: 'bg-red-500/20 text-red-400 border-red-500/30',
+    cancelled: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
   };
 
-  const planColors = {
-    gray: 'bg-gray-100 text-gray-700',
-    violet: 'bg-violet-100 text-violet-700',
-    amber: 'bg-amber-100 text-amber-700',
+  const planBadges = {
+    basic: 'bg-slate-600 text-slate-200',
+    pro: 'bg-violet-600 text-violet-100',
+    enterprise: 'bg-gradient-to-r from-amber-500 to-orange-500 text-white',
   };
+
+  const planPrices = { basic: 300, pro: 500, enterprise: 800 };
 
   return (
-    <div 
-      onClick={onClick}
-      className="bg-white rounded-2xl border border-gray-200 p-5 hover:shadow-lg hover:border-violet-200 cursor-pointer transition-all"
-    >
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-4">
-          {/* Logo/Color Badge */}
-          <div 
-            className="w-14 h-14 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-sm"
-            style={{ backgroundColor: school.primaryColor }}
-          >
-            {school.name.charAt(0)}
-          </div>
-
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <h3 className="text-lg font-semibold text-gray-900">{school.name}</h3>
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[status.color]}`}>
-                <StatusIcon size={12} />
-                {status.label}
-              </span>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${planColors[plan.color]}`}>
-                {plan.name}
-              </span>
-            </div>
-            
-            <p className="text-sm text-gray-500 mb-3">
-              {school.slug}.schoolhub.app
-            </p>
-
-            <div className="flex items-center gap-6 text-sm">
-              <div className="flex items-center gap-1.5 text-gray-600">
-                <Users size={14} className="text-gray-400" />
-                <span>{school.students} students</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-gray-600">
-                <GraduationCap size={14} className="text-gray-400" />
-                <span>{school.teachers} teachers</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-gray-600">
-                <Mail size={14} className="text-gray-400" />
-                <span>{school.adminEmail}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="text-right">
-          <p className="text-lg font-bold text-gray-900">€{school.mrr}/mo</p>
-          {school.status === 'trial' && school.trialEnds && (
-            <p className="text-xs text-blue-600">
-              Trial ends {new Date(school.trialEnds).toLocaleDateString()}
-            </p>
+    <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-6 hover:border-violet-500/30 transition-all group">
+      <div className="flex items-start gap-4">
+        {/* Logo */}
+        <div
+          className="w-14 h-14 rounded-xl flex items-center justify-center text-white font-bold text-xl flex-shrink-0 overflow-hidden"
+          style={{ backgroundColor: school.primary_color || '#6366f1' }}
+        >
+          {school.logo_url ? (
+            <img src={school.logo_url} alt={school.name} className="w-full h-full object-cover" />
+          ) : (
+            school.name.charAt(0)
           )}
         </div>
-      </div>
-    </div>
-  );
-};
 
-const SchoolDetailModal = ({ school, onClose, onUpdate }) => {
-  const [activeTab, setActiveTab] = useState('details');
-  const plan = PLANS[school.plan];
-  const status = STATUS_CONFIG[school.status];
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-white truncate">{school.name}</h3>
+              <p className="text-sm text-slate-400">{school.slug}.schoolhub.akio.rs</p>
+            </div>
 
-  const handleStatusChange = (newStatus) => {
-    onUpdate({ ...school, status: newStatus });
-  };
+            <div className="flex items-center gap-2">
+              <span className={`px-2.5 py-1 text-xs font-medium rounded-full border ${statusColors[school.status]}`}>
+                {school.status}
+              </span>
+              <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${planBadges[school.plan]}`}>
+                {school.plan}
+              </span>
+            </div>
+          </div>
 
-  const handlePlanChange = (newPlan) => {
-    onUpdate({ ...school, plan: newPlan, mrr: PLANS[newPlan].price });
-  };
+          {/* Stats Row */}
+          <div className="flex items-center gap-6 mt-4">
+            <div className="flex items-center gap-2 text-sm">
+              <GraduationCap size={16} className="text-slate-400" />
+              <span className="text-white font-medium">{school.student_count || 0}</span>
+              <span className="text-slate-400">students</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Users size={16} className="text-slate-400" />
+              <span className="text-white font-medium">{school.teacher_count || 0}</span>
+              <span className="text-slate-400">teachers</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <DollarSign size={16} className="text-slate-400" />
+              <span className="text-white font-medium">€{planPrices[school.plan]}</span>
+              <span className="text-slate-400">/mo</span>
+            </div>
+          </div>
+        </div>
 
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 overflow-y-auto" onClick={onClose}>
-      <div className="min-h-full flex items-start justify-center p-4 py-8">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl" onClick={e => e.stopPropagation()}>
-          {/* Header */}
-          <div 
-            className="rounded-t-2xl p-6 text-white relative overflow-hidden"
-            style={{ background: `linear-gradient(135deg, ${school.primaryColor}, ${school.primaryColor}dd)` }}
+        {/* Actions */}
+        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={onVisit}
+            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-all"
+            title="Visit School"
           >
-            <div className="absolute top-0 right-0 w-48 h-48 bg-white opacity-10 rounded-full -mr-24 -mt-24" />
-            
-            <div className="relative flex items-start justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center text-2xl font-bold backdrop-blur-sm">
-                  {school.name.charAt(0)}
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold">{school.name}</h2>
-                  <p className="text-white/80 text-sm flex items-center gap-1">
-                    <Globe size={14} />
-                    {school.slug}.schoolhub.app
-                    <button className="ml-2 p-1 hover:bg-white/20 rounded transition-colors">
-                      <ExternalLink size={14} />
-                    </button>
-                  </p>
-                </div>
-              </div>
-              <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
-                <X size={20} />
-              </button>
-            </div>
-          </div>
-
-          {/* Tabs */}
-          <div className="border-b border-gray-200 px-6">
-            <div className="flex gap-6">
-              {['details', 'branding', 'subscription', 'danger'].map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`py-4 text-sm font-medium border-b-2 transition-colors ${
-                    activeTab === tab
-                      ? 'border-violet-500 text-violet-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Content */}
-          <div className="p-6">
-            {activeTab === 'details' && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-6">
-                  <InfoBlock label="Admin Name" value={school.adminName} />
-                  <InfoBlock label="Admin Email" value={school.adminEmail} />
-                  <InfoBlock label="Phone" value={school.phone} />
-                  <InfoBlock label="Created" value={new Date(school.createdAt).toLocaleDateString()} />
-                  <InfoBlock label="Students" value={school.students} />
-                  <InfoBlock label="Teachers" value={school.teachers} />
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-2">Status</label>
-                  <div className="flex gap-2">
-                    {Object.entries(STATUS_CONFIG).map(([key, config]) => {
-                      const Icon = config.icon;
-                      const isActive = school.status === key;
-                      const colors = {
-                        emerald: isActive ? 'bg-emerald-500 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
-                        blue: isActive ? 'bg-blue-500 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100',
-                        red: isActive ? 'bg-red-500 text-white' : 'bg-red-50 text-red-700 hover:bg-red-100',
-                        amber: isActive ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100',
-                      };
-                      return (
-                        <button
-                          key={key}
-                          onClick={() => handleStatusChange(key)}
-                          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${colors[config.color]}`}
-                        >
-                          <Icon size={14} />
-                          {config.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'branding' && (
-              <div className="space-y-6">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-2">School Logo</label>
-                  <div className="flex items-center gap-4">
-                    <div 
-                      className="w-20 h-20 rounded-xl flex items-center justify-center text-white text-2xl font-bold"
-                      style={{ backgroundColor: school.primaryColor }}
-                    >
-                      {school.logo ? <img src={school.logo} alt="" className="w-full h-full object-cover rounded-xl" /> : school.name.charAt(0)}
-                    </div>
-                    <button className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                      <Upload size={16} />
-                      Upload Logo
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-2">Primary Color</label>
-                  <div className="flex items-center gap-3">
-                    <input 
-                      type="color" 
-                      value={school.primaryColor}
-                      onChange={(e) => onUpdate({ ...school, primaryColor: e.target.value })}
-                      className="w-12 h-12 rounded-lg cursor-pointer border-2 border-gray-200"
-                    />
-                    <input 
-                      type="text" 
-                      value={school.primaryColor}
-                      onChange={(e) => onUpdate({ ...school, primaryColor: e.target.value })}
-                      className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-mono"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-2">Subdomain</label>
-                  <div className="flex items-center">
-                    <input 
-                      type="text" 
-                      value={school.slug}
-                      className="flex-1 px-4 py-2.5 border border-gray-200 rounded-l-lg text-sm"
-                    />
-                    <span className="px-4 py-2.5 bg-gray-100 border border-l-0 border-gray-200 rounded-r-lg text-sm text-gray-500">
-                      .schoolhub.app
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'subscription' && (
-              <div className="space-y-6">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-3">Plan</label>
-                  <div className="grid grid-cols-3 gap-4">
-                    {Object.entries(PLANS).map(([key, planInfo]) => {
-                      const isActive = school.plan === key;
-                      return (
-                        <button
-                          key={key}
-                          onClick={() => handlePlanChange(key)}
-                          className={`p-4 rounded-xl border-2 text-left transition-all ${
-                            isActive 
-                              ? 'border-violet-500 bg-violet-50' 
-                              : 'border-gray-200 hover:border-violet-200'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-semibold text-gray-900">{planInfo.name}</span>
-                            {isActive && <Check size={18} className="text-violet-600" />}
-                          </div>
-                          <p className="text-2xl font-bold text-gray-900">€{planInfo.price}<span className="text-sm font-normal text-gray-500">/mo</span></p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Up to {planInfo.students === 999 ? '∞' : planInfo.students} students
-                          </p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 rounded-xl p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-gray-900">Monthly Revenue</p>
-                      <p className="text-sm text-gray-500">Current billing amount</p>
-                    </div>
-                    <p className="text-3xl font-bold text-gray-900">€{school.mrr}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'danger' && (
-              <div className="space-y-6">
-                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                  <h4 className="font-semibold text-red-800 mb-1">Danger Zone</h4>
-                  <p className="text-sm text-red-600 mb-4">These actions are irreversible. Please be careful.</p>
-                  
-                  <div className="space-y-3">
-                    <button className="w-full flex items-center justify-between px-4 py-3 bg-white border border-red-200 rounded-lg text-sm text-red-700 hover:bg-red-50 transition-colors">
-                      <div className="flex items-center gap-2">
-                        <Power size={16} />
-                        <span>Suspend School</span>
-                      </div>
-                      <ChevronRight size={16} />
-                    </button>
-                    <button className="w-full flex items-center justify-between px-4 py-3 bg-white border border-red-200 rounded-lg text-sm text-red-700 hover:bg-red-50 transition-colors">
-                      <div className="flex items-center gap-2">
-                        <Trash2 size={16} />
-                        <span>Delete School</span>
-                      </div>
-                      <ChevronRight size={16} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+            <ExternalLink size={18} />
+          </button>
+          <button
+            onClick={onBranding}
+            className="p-2 text-slate-400 hover:text-violet-400 hover:bg-violet-500/10 rounded-lg transition-all"
+            title="Branding & Settings"
+          >
+            <Settings size={18} />
+          </button>
+          <button
+            onClick={onDelete}
+            className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+            title="Delete School"
+          >
+            <Trash2 size={18} />
+          </button>
         </div>
       </div>
     </div>
   );
 };
 
-const InfoBlock = ({ label, value }) => (
-  <div>
-    <p className="text-xs text-gray-500 mb-1">{label}</p>
-    <p className="text-sm font-medium text-gray-900">{value || '—'}</p>
-  </div>
-);
+// ============================================================================
+// ADD SCHOOL MODAL
+// ============================================================================
 
-const AddSchoolModal = ({ onClose, onAdd }) => {
-  const [step, setStep] = useState(0);
-  const [form, setForm] = useState({
+const AddSchoolModal = ({ onClose, onSuccess }) => {
+  const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  
+  const [formData, setFormData] = useState({
     name: '',
     slug: '',
-    adminName: '',
-    adminEmail: '',
+    email: '',
     phone: '',
+    city: '',
+    address: '',
     plan: 'pro',
-    primaryColor: '#8b5cf6',
+    status: 'trial',
+    primary_color: '#10b981',
+    secondary_color: '#0d9488',
+    accent_color: '#f59e0b',
+    // Default features
+    features: {
+      homework: true,
+      attendance: true,
+      parent_portal: true,
+      admissions: true,
+      report_cards: true,
+      messaging: false,
+      calendar: true,
+      custom_branding: true,
+      pdf_branding: true,
+    }
   });
 
-  const updateField = (key, value) => {
-    setForm(prev => ({ ...prev, [key]: value }));
-    // Auto-generate slug from name
-    if (key === 'name') {
-      const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-      setForm(prev => ({ ...prev, slug }));
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value,
+      // Auto-generate slug from name
+      ...(name === 'name' ? { slug: value.toLowerCase().replace(/[^a-z0-9]/g, '') } : {})
+    }));
+  };
+
+  const handleSubmit = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Validate
+      if (!formData.name || !formData.slug || !formData.email) {
+        setError('Please fill in all required fields');
+        return;
+      }
+
+      // Check if slug is unique
+      const { data: existing } = await supabase
+        .from('schools')
+        .select('id')
+        .eq('slug', formData.slug)
+        .single();
+
+      if (existing) {
+        setError('This subdomain is already taken');
+        return;
+      }
+
+      // Create school with all fields
+      const { error: insertError } = await supabase
+        .from('schools')
+        .insert([{
+          ...formData,
+          pdf_header_text: formData.name,
+          grading_system: 'cambridge',
+          academic_year: '2025-26',
+          default_language: 'en',
+          show_logo_in_pdf: true,
+          created_at: new Date().toISOString()
+        }]);
+
+      if (insertError) throw insertError;
+
+      onSuccess();
+    } catch (err) {
+      console.error('Error creating school:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleCreate = () => {
-    const newSchool = {
-      id: Date.now().toString(),
-      ...form,
-      logo: null,
-      status: 'pending',
-      students: 0,
-      teachers: 0,
-      createdAt: new Date().toISOString().split('T')[0],
-      lastActive: null,
-      mrr: PLANS[form.plan].price,
-    };
-    onAdd(newSchool);
-  };
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-slate-700">
+          <div>
+            <h2 className="text-xl font-bold text-white">Add New School</h2>
+            <p className="text-sm text-slate-400">Step {step} of 3</p>
+          </div>
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg">
+            <X size={20} />
+          </button>
+        </div>
 
-  const steps = [
-    { title: 'School Info', icon: Building2 },
-    { title: 'Admin Account', icon: Users },
-    { title: 'Plan & Branding', icon: Palette },
-  ];
+        {/* Progress */}
+        <div className="flex gap-2 px-6 pt-4">
+          {[1, 2, 3].map(s => (
+            <div
+              key={s}
+              className={`h-1 flex-1 rounded-full transition-all ${
+                s <= step ? 'bg-violet-500' : 'bg-slate-700'
+              }`}
+            />
+          ))}
+        </div>
 
-  const canProceed = () => {
-    if (step === 0) return form.name && form.slug;
-    if (step === 1) return form.adminName && form.adminEmail;
-    return true;
+        {/* Content */}
+        <div className="p-6 overflow-y-auto max-h-[60vh]">
+          {error && (
+            <div className="mb-4 p-4 bg-red-500/20 border border-red-500/30 rounded-xl text-red-400 text-sm flex items-center gap-2">
+              <AlertCircle size={18} />
+              {error}
+            </div>
+          )}
+
+          {step === 1 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-white mb-4">School Information</h3>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">School Name *</label>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  placeholder="Green School by Chartwell"
+                  className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Subdomain *</label>
+                <div className="flex">
+                  <input
+                    type="text"
+                    name="slug"
+                    value={formData.slug}
+                    onChange={handleChange}
+                    placeholder="greenschool"
+                    className="flex-1 px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-l-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                  />
+                  <span className="px-4 py-3 bg-slate-700 border border-l-0 border-slate-600 rounded-r-xl text-slate-400 text-sm">
+                    .schoolhub.akio.rs
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Email *</label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  placeholder="admin@school.com"
+                  className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Phone</label>
+                  <input
+                    type="text"
+                    name="phone"
+                    value={formData.phone}
+                    onChange={handleChange}
+                    placeholder="+381 11 123 4567"
+                    className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">City</label>
+                  <input
+                    type="text"
+                    name="city"
+                    value={formData.city}
+                    onChange={handleChange}
+                    placeholder="Belgrade"
+                    className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-white mb-4">Plan & Status</h3>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-3">Select Plan</label>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { id: 'basic', name: 'Basic', price: '€300', features: '50 students' },
+                    { id: 'pro', name: 'Pro', price: '€500', features: '200 students' },
+                    { id: 'enterprise', name: 'Enterprise', price: '€800', features: 'Unlimited' },
+                  ].map(plan => (
+                    <button
+                      key={plan.id}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, plan: plan.id }))}
+                      className={`p-4 rounded-xl border-2 text-left transition-all ${
+                        formData.plan === plan.id
+                          ? 'border-violet-500 bg-violet-500/10'
+                          : 'border-slate-600 hover:border-slate-500'
+                      }`}
+                    >
+                      <p className="font-semibold text-white">{plan.name}</p>
+                      <p className="text-lg font-bold text-violet-400">{plan.price}</p>
+                      <p className="text-xs text-slate-400">{plan.features}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-3">Initial Status</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { id: 'trial', name: 'Trial', desc: '14-day free trial' },
+                    { id: 'active', name: 'Active', desc: 'Start billing now' },
+                  ].map(status => (
+                    <button
+                      key={status.id}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, status: status.id }))}
+                      className={`p-4 rounded-xl border-2 text-left transition-all ${
+                        formData.status === status.id
+                          ? 'border-violet-500 bg-violet-500/10'
+                          : 'border-slate-600 hover:border-slate-500'
+                      }`}
+                    >
+                      <p className="font-semibold text-white">{status.name}</p>
+                      <p className="text-xs text-slate-400">{status.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-white mb-4">Branding</h3>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Primary Color</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    name="primary_color"
+                    value={formData.primary_color}
+                    onChange={handleChange}
+                    className="w-12 h-12 rounded-lg border-0 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    name="primary_color"
+                    value={formData.primary_color}
+                    onChange={handleChange}
+                    className="flex-1 px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Secondary Color</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    name="secondary_color"
+                    value={formData.secondary_color}
+                    onChange={handleChange}
+                    className="w-12 h-12 rounded-lg border-0 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    name="secondary_color"
+                    value={formData.secondary_color}
+                    onChange={handleChange}
+                    className="flex-1 px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                  />
+                </div>
+              </div>
+
+              {/* Preview */}
+              <div className="mt-6 p-4 bg-slate-900/50 rounded-xl">
+                <p className="text-sm text-slate-400 mb-3">Preview</p>
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold"
+                    style={{ backgroundColor: formData.primary_color }}
+                  >
+                    {formData.name.charAt(0) || 'S'}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-white">{formData.name || 'School Name'}</p>
+                    <p className="text-sm text-slate-400">{formData.slug || 'subdomain'}.schoolhub.akio.rs</p>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-500 mt-4">
+                💡 You can customize logo, favicon, PDF branding, and more after creating the school.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between p-6 border-t border-slate-700">
+          <button
+            onClick={() => step > 1 ? setStep(step - 1) : onClose()}
+            className="px-6 py-2.5 text-slate-400 hover:text-white transition-all"
+          >
+            {step > 1 ? 'Back' : 'Cancel'}
+          </button>
+
+          <button
+            onClick={() => step < 3 ? setStep(step + 1) : handleSubmit()}
+            disabled={loading}
+            className="px-6 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-violet-500/25 transition-all disabled:opacity-50 flex items-center gap-2"
+          >
+            {loading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Creating...
+              </>
+            ) : step < 3 ? (
+              <>
+                Next
+                <ChevronRight size={18} />
+              </>
+            ) : (
+              'Create School'
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// DELETE CONFIRM MODAL
+// ============================================================================
+
+const DeleteConfirmModal = ({ school, onClose, onConfirm }) => {
+  const [confirmText, setConfirmText] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleConfirm = async () => {
+    setLoading(true);
+    await onConfirm();
+    setLoading(false);
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 overflow-y-auto" onClick={onClose}>
-      <div className="min-h-full flex items-start justify-center p-4 py-8">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
-          {/* Header */}
-          <div className="bg-gradient-to-r from-violet-500 to-purple-600 rounded-t-2xl p-6 text-white">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold">Add New School</h2>
-              <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Steps */}
-            <div className="flex items-center gap-2">
-              {steps.map((s, i) => {
-                const Icon = s.icon;
-                const isActive = i === step;
-                const isPast = i < step;
-                return (
-                  <React.Fragment key={i}>
-                    {i > 0 && <div className={`flex-1 h-0.5 ${isPast ? 'bg-white/60' : 'bg-white/20'}`} />}
-                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
-                      isActive ? 'bg-white/25' : isPast ? 'bg-white/15' : 'opacity-40'
-                    }`}>
-                      <Icon size={14} />
-                      {s.title}
-                    </div>
-                  </React.Fragment>
-                );
-              })}
-            </div>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md p-6">
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Trash2 className="w-8 h-8 text-red-500" />
           </div>
+          <h3 className="text-xl font-bold text-white mb-2">Delete School</h3>
+          <p className="text-slate-400">
+            Are you sure you want to delete <strong className="text-white">{school.name}</strong>?
+            This action cannot be undone.
+          </p>
+        </div>
 
-          {/* Content */}
-          <div className="p-6">
-            {step === 0 && (
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-1.5">School Name *</label>
-                  <input
-                    type="text"
-                    value={form.name}
-                    onChange={(e) => updateField('name', e.target.value)}
-                    placeholder="e.g. Cambridge Academy Belgrade"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-1.5">Subdomain *</label>
-                  <div className="flex items-center">
-                    <input
-                      type="text"
-                      value={form.slug}
-                      onChange={(e) => updateField('slug', e.target.value)}
-                      placeholder="cambridge-belgrade"
-                      className="flex-1 px-4 py-3 rounded-l-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
-                    />
-                    <span className="px-4 py-3 bg-gray-100 border border-l-0 border-gray-200 rounded-r-xl text-sm text-gray-500">
-                      .schoolhub.app
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-1.5">Phone</label>
-                  <input
-                    type="text"
-                    value={form.phone}
-                    onChange={(e) => updateField('phone', e.target.value)}
-                    placeholder="+381 11 123 4567"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
-                  />
-                </div>
-              </div>
-            )}
+        <div className="mb-6">
+          <label className="block text-sm text-slate-400 mb-2">
+            Type <strong className="text-white">{school.slug}</strong> to confirm:
+          </label>
+          <input
+            type="text"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-red-500/50"
+            placeholder={school.slug}
+          />
+        </div>
 
-            {step === 1 && (
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-1.5">Admin Name *</label>
-                  <input
-                    type="text"
-                    value={form.adminName}
-                    onChange={(e) => updateField('adminName', e.target.value)}
-                    placeholder="Full name"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-1.5">Admin Email *</label>
-                  <input
-                    type="email"
-                    value={form.adminEmail}
-                    onChange={(e) => updateField('adminEmail', e.target.value)}
-                    placeholder="admin@school.com"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">An invitation email will be sent to this address</p>
-                </div>
-              </div>
-            )}
-
-            {step === 2 && (
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-2">Plan</label>
-                  <div className="grid grid-cols-3 gap-3">
-                    {Object.entries(PLANS).map(([key, planInfo]) => (
-                      <button
-                        key={key}
-                        onClick={() => updateField('plan', key)}
-                        className={`p-3 rounded-xl border-2 text-center transition-all ${
-                          form.plan === key 
-                            ? 'border-violet-500 bg-violet-50' 
-                            : 'border-gray-200 hover:border-violet-200'
-                        }`}
-                      >
-                        <p className="font-semibold text-gray-900">{planInfo.name}</p>
-                        <p className="text-lg font-bold text-gray-900">€{planInfo.price}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-2">Brand Color</label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="color"
-                      value={form.primaryColor}
-                      onChange={(e) => updateField('primaryColor', e.target.value)}
-                      className="w-12 h-12 rounded-xl cursor-pointer border-2 border-gray-200"
-                    />
-                    <div className="flex gap-2">
-                      {['#8b5cf6', '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#ec4899'].map(color => (
-                        <button
-                          key={color}
-                          onClick={() => updateField('primaryColor', color)}
-                          className={`w-8 h-8 rounded-lg ${form.primaryColor === color ? 'ring-2 ring-offset-2 ring-violet-500' : ''}`}
-                          style={{ backgroundColor: color }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Navigation */}
-            <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
-              {step > 0 ? (
-                <button
-                  onClick={() => setStep(step - 1)}
-                  className="flex items-center gap-1 px-4 py-2.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <ChevronRight className="rotate-180" size={16} />
-                  Back
-                </button>
-              ) : <div />}
-
-              {step < 2 ? (
-                <button
-                  onClick={() => setStep(step + 1)}
-                  disabled={!canProceed()}
-                  className="flex items-center gap-1 px-5 py-2.5 bg-violet-500 text-white font-semibold rounded-xl hover:bg-violet-600 disabled:opacity-40 transition-colors"
-                >
-                  Next
-                  <ChevronRight size={16} />
-                </button>
-              ) : (
-                <button
-                  onClick={handleCreate}
-                  className="flex items-center gap-1 px-5 py-2.5 bg-violet-500 text-white font-semibold rounded-xl hover:bg-violet-600 transition-colors"
-                >
-                  <Check size={16} />
-                  Create School
-                </button>
-              )}
-            </div>
-          </div>
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-xl transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={confirmText !== school.slug || loading}
+            className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-medium rounded-xl transition-all"
+          >
+            {loading ? 'Deleting...' : 'Delete'}
+          </button>
         </div>
       </div>
     </div>

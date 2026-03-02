@@ -1,5 +1,5 @@
 // ============================================================================
-// SUPABASE CLIENT - KOMPLETNA VERZIJA SA SVIM FUNKCIJAMA
+// SUPABASE CLIENT - MULTI-TENANT VERSION
 // ============================================================================
 
 import { createClient } from '@supabase/supabase-js';
@@ -30,19 +30,13 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey);
 
 // ============================================================================
-// ADMIN FUNKCIJE (originalne iz tvog fajla)
+// ADMIN FUNKCIJE
 // ============================================================================
 
-/**
- * Proveri da li imamo admin/service key pristup
- */
 export const hasAdminAccess = () => {
   return !!supabaseServiceKey;
 };
 
-/**
- * Kreiraj korisnika sa admin API-jem
- */
 export const createUserWithAdmin = async (email, password, metadata = {}) => {
   if (!hasAdminAccess()) {
     throw new Error('Admin access required to create users');
@@ -64,9 +58,6 @@ export const createUserWithAdmin = async (email, password, metadata = {}) => {
   }
 };
 
-/**
- * Obriši korisnika sa admin API-jem
- */
 export const deleteUserWithAdmin = async (userId) => {
   if (!hasAdminAccess()) {
     throw new Error('Admin access required to delete users');
@@ -82,9 +73,6 @@ export const deleteUserWithAdmin = async (userId) => {
   }
 };
 
-/**
- * Ažuriraj korisnika sa admin API-jem
- */
 export const updateUserWithAdmin = async (userId, updates) => {
   if (!hasAdminAccess()) {
     throw new Error('Admin access required to update users');
@@ -120,31 +108,48 @@ export const clearCurrentSchoolId = () => {
 
 // ============================================================================
 // TABELE KOJE TREBA FILTRIRATI PO SCHOOL_ID
+// Dodaj sve tabele koje imaju school_id kolonu
 // ============================================================================
 
 const TENANT_TABLES = new Set([
+  // Core entities
   'students',
+  'teachers',
   'parents',
   'student_parents',
+  
+  // Classes & Subjects
   'custom_classes',
   'custom_subjects',
+  'classes',
+  'class_teachers',
+  
+  // Academic
   'academic_terms',
-  'attendance',
   'grades',
+  'attendance',
   'homework',
   'student_homework',
-  'classes',
-  'teacher_profile',
+  
+  // Schedule
   'teacher_schedule',
-  'class_teachers',
-  'teacher_todos',
   'scheduled_tests',
   'school_events',
+  
+  // Teacher data
+  'teacher_profile',
+  'teacher_todos',
+  
+  // Comments & Reports
   'subject_term_comments',
   'class_teacher_comments',
   'teacher_comments',
   'term_reports',
+  
+  // Admissions
   'enrollment_applications',
+  
+  // Archive
   'archive_history',
 ]);
 
@@ -166,7 +171,11 @@ class TenantQueryBuilder {
 
   _addTenantFilter(query) {
     if (this.shouldFilter && currentSchoolId) {
+      console.log(`🔒 Filtering ${this.tableName} by school_id: ${currentSchoolId}`);
       return query.eq('school_id', currentSchoolId);
+    }
+    if (this.shouldFilter && !currentSchoolId) {
+      console.warn(`⚠️ No school_id set for tenant table: ${this.tableName}`);
     }
     return query;
   }
@@ -188,6 +197,7 @@ class TenantQueryBuilder {
 
   insert(data) {
     const dataWithSchool = this._addSchoolIdToData(data);
+    console.log(`📝 Inserting into ${this.tableName} with school_id:`, currentSchoolId);
     this._query = this._getBaseQuery().insert(dataWithSchool);
     return this;
   }
@@ -202,9 +212,9 @@ class TenantQueryBuilder {
     return this;
   }
 
-  upsert(data) {
+  upsert(data, options) {
     const dataWithSchool = this._addSchoolIdToData(data);
-    this._query = this._getBaseQuery().upsert(dataWithSchool);
+    this._query = this._getBaseQuery().upsert(dataWithSchool, options);
     return this;
   }
 
@@ -219,32 +229,109 @@ class TenantQueryBuilder {
   }
 
   // Chainable filter methods
-  eq(column, value) { this._query = this._query.eq(column, value); return this; }
-  neq(column, value) { this._query = this._query.neq(column, value); return this; }
-  gt(column, value) { this._query = this._query.gt(column, value); return this; }
-  gte(column, value) { this._query = this._query.gte(column, value); return this; }
-  lt(column, value) { this._query = this._query.lt(column, value); return this; }
-  lte(column, value) { this._query = this._query.lte(column, value); return this; }
-  like(column, value) { this._query = this._query.like(column, value); return this; }
-  ilike(column, value) { this._query = this._query.ilike(column, value); return this; }
-  is(column, value) { this._query = this._query.is(column, value); return this; }
-  in(column, values) { this._query = this._query.in(column, values); return this; }
-  contains(column, value) { this._query = this._query.contains(column, value); return this; }
-  containedBy(column, value) { this._query = this._query.containedBy(column, value); return this; }
-  or(filters) { this._query = this._query.or(filters); return this; }
-  not(column, operator, value) { this._query = this._query.not(column, operator, value); return this; }
-  filter(column, operator, value) { this._query = this._query.filter(column, operator, value); return this; }
+  eq(column, value) { 
+    this._query = this._query.eq(column, value); 
+    return this; 
+  }
+  neq(column, value) { 
+    this._query = this._query.neq(column, value); 
+    return this; 
+  }
+  gt(column, value) { 
+    this._query = this._query.gt(column, value); 
+    return this; 
+  }
+  gte(column, value) { 
+    this._query = this._query.gte(column, value); 
+    return this; 
+  }
+  lt(column, value) { 
+    this._query = this._query.lt(column, value); 
+    return this; 
+  }
+  lte(column, value) { 
+    this._query = this._query.lte(column, value); 
+    return this; 
+  }
+  like(column, value) { 
+    this._query = this._query.like(column, value); 
+    return this; 
+  }
+  ilike(column, value) { 
+    this._query = this._query.ilike(column, value); 
+    return this; 
+  }
+  is(column, value) { 
+    this._query = this._query.is(column, value); 
+    return this; 
+  }
+  in(column, values) { 
+    this._query = this._query.in(column, values); 
+    return this; 
+  }
+  contains(column, value) { 
+    this._query = this._query.contains(column, value); 
+    return this; 
+  }
+  containedBy(column, value) { 
+    this._query = this._query.containedBy(column, value); 
+    return this; 
+  }
+  or(filters) { 
+    this._query = this._query.or(filters); 
+    return this; 
+  }
+  not(column, operator, value) { 
+    this._query = this._query.not(column, operator, value); 
+    return this; 
+  }
+  filter(column, operator, value) { 
+    this._query = this._query.filter(column, operator, value); 
+    return this; 
+  }
   
   // Ordering and pagination
-  order(column, options) { this._query = this._query.order(column, options); return this; }
-  limit(count) { this._query = this._query.limit(count); return this; }
-  range(from, to) { this._query = this._query.range(from, to); return this; }
+  order(column, options) { 
+    this._query = this._query.order(column, options); 
+    return this; 
+  }
+  limit(count) { 
+    this._query = this._query.limit(count); 
+    return this; 
+  }
+  range(from, to) { 
+    this._query = this._query.range(from, to); 
+    return this; 
+  }
   
   // Result modifiers
-  single() { this._query = this._query.single(); return this; }
-  maybeSingle() { this._query = this._query.maybeSingle(); return this; }
+  single() { 
+    this._query = this._query.single(); 
+    return this; 
+  }
+  maybeSingle() { 
+    this._query = this._query.maybeSingle(); 
+    return this; 
+  }
+
+  // Additional methods that might be needed
+  textSearch(column, query, options) {
+    this._query = this._query.textSearch(column, query, options);
+    return this;
+  }
+
+  match(query) {
+    this._query = this._query.match(query);
+    return this;
+  }
+
+  // CSV export
+  csv() {
+    this._query = this._query.csv();
+    return this;
+  }
   
-  // Execute
+  // Execute - these make the builder thenable
   then(resolve, reject) {
     return this._query.then(resolve, reject);
   }
@@ -272,11 +359,26 @@ class TenantSupabaseClient {
   }
 
   rpc(fn, params) {
-    return this._client.rpc(fn, params);
+    // For RPC calls, we might need to pass school_id as parameter
+    const paramsWithSchool = currentSchoolId 
+      ? { ...params, school_id: currentSchoolId }
+      : params;
+    return this._client.rpc(fn, paramsWithSchool);
   }
 
+  // Access raw client when needed (use sparingly!)
   get raw() {
     return this._client;
+  }
+
+  // Helper to check if tenant is set
+  get hasTenant() {
+    return !!currentSchoolId;
+  }
+
+  // Get current tenant ID
+  get tenantId() {
+    return currentSchoolId;
   }
 }
 
@@ -284,7 +386,7 @@ class TenantSupabaseClient {
 // EXPORTS
 // ============================================================================
 
-// Tenant-aware client
+// Tenant-aware client - USE THIS IN ALL SERVICES
 export const tenantSupabase = new TenantSupabaseClient(supabase);
 
 // Log
@@ -293,5 +395,5 @@ console.log('  URL: ✅');
 console.log('  Anon Key: ✅');
 console.log('  Service Key:', supabaseServiceKey ? '✅ (Admin API available)' : '❌ (Not set)');
 
-// Default export
+// Default export (raw client - avoid using directly)
 export default supabase;

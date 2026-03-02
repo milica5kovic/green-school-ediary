@@ -1,8 +1,13 @@
-import { supabase } from '../../../../core/infrastructure/supabaseClient';
+import { tenantSupabase } from '../../../../core/infrastructure/supabaseClient';
+
+// ============================================================================
+// ACADEMIC TERMS SERVICE - Tenant-aware version
+// ============================================================================
 
 // ─── FETCH ───────────────────────────────────────────────
 const fetchAcademicTerms = async (academicYear = null) => {
-  let query = supabase
+  // tenantSupabase automatically filters by school_id
+  let query = tenantSupabase
     .from('academic_terms')
     .select('*')
     .order('term_number', { ascending: true });
@@ -17,7 +22,7 @@ const fetchAcademicTerms = async (academicYear = null) => {
 };
 
 const fetchActiveTerm = async () => {
-  const { data, error } = await supabase
+  const { data, error } = await tenantSupabase
     .from('academic_terms')
     .select('*')
     .eq('is_active', true)
@@ -28,7 +33,7 @@ const fetchActiveTerm = async () => {
 };
 
 const fetchAcademicYears = async () => {
-  const { data, error } = await supabase
+  const { data, error } = await tenantSupabase
     .from('academic_terms')
     .select('academic_year')
     .order('academic_year', { ascending: false });
@@ -40,7 +45,8 @@ const fetchAcademicYears = async () => {
 
 // ─── CREATE ──────────────────────────────────────────────
 const createAcademicTerms = async (terms) => {
-  const { data, error } = await supabase
+  // tenantSupabase automatically adds school_id to each term
+  const { data, error } = await tenantSupabase
     .from('academic_terms')
     .insert(terms)
     .select();
@@ -51,7 +57,7 @@ const createAcademicTerms = async (terms) => {
 
 // ─── UPDATE ──────────────────────────────────────────────
 const updateAcademicTerm = async (termId, updates) => {
-  const { data, error } = await supabase
+  const { data, error } = await tenantSupabase
     .from('academic_terms')
     .update(updates)
     .eq('id', termId)
@@ -64,14 +70,16 @@ const updateAcademicTerm = async (termId, updates) => {
 
 // ─── ACTIVATE TERM ───────────────────────────────────────
 const setActiveTerm = async (termId, academicYear) => {
-  const { error: deactivateError } = await supabase
+  // First deactivate all terms for this academic year (within same school)
+  const { error: deactivateError } = await tenantSupabase
     .from('academic_terms')
     .update({ is_active: false })
     .eq('academic_year', academicYear);
 
   if (deactivateError) throw deactivateError;
 
-  const { data, error } = await supabase
+  // Then activate the selected term
+  const { data, error } = await tenantSupabase
     .from('academic_terms')
     .update({ is_active: true })
     .eq('id', termId)
@@ -84,7 +92,7 @@ const setActiveTerm = async (termId, academicYear) => {
 
 // ─── FINALIZE TERM ───────────────────────────────────────
 const finalizeTerm = async (termId) => {
-  const { data, error } = await supabase
+  const { data, error } = await tenantSupabase
     .from('academic_terms')
     .update({ is_finalized: true })
     .eq('id', termId)
@@ -97,7 +105,7 @@ const finalizeTerm = async (termId) => {
 
 // ─── DELETE ──────────────────────────────────────────────
 const deleteAcademicYear = async (academicYear) => {
-  const { error } = await supabase
+  const { error } = await tenantSupabase
     .from('academic_terms')
     .delete()
     .eq('academic_year', academicYear);

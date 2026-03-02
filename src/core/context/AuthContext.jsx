@@ -21,9 +21,8 @@ export const AuthProvider = ({ children, supabase }) => {
   const isSigningOut = useRef(false);
   const isMounted = useRef(true);
   const isLoadingAuth = useRef(false);
-  const hasLoadedInitialUser = useRef(false); // ✅ NEW - Prevent duplicate loads
+  const hasLoadedInitialUser = useRef(false);
 
-  // ✅ FIXED: Only update if data actually changed
   const loadProfile = useCallback(async (userId) => {
     if (!supabase || !userId || isSigningOut.current) return null;
     
@@ -47,7 +46,6 @@ export const AuthProvider = ({ children, supabase }) => {
     }
   }, [supabase]);
 
-  // ✅ FIXED: Only update if data actually changed
   const loadTeacher = useCallback(async (userId) => {
     if (!supabase || !userId || isSigningOut.current) return null;
     
@@ -99,7 +97,7 @@ export const AuthProvider = ({ children, supabase }) => {
 
         if (session?.user && mounted && !isSigningOut.current) {
           console.log('✅ Session found');
-          hasLoadedInitialUser.current = true; // ✅ Mark as loaded
+          hasLoadedInitialUser.current = true;
           setUser(session.user);
           
           const profileData = await loadProfile(session.user.id);
@@ -126,38 +124,33 @@ export const AuthProvider = ({ children, supabase }) => {
 
     initAuth();
 
-    // ✅ FIXED: Handle auth state changes with duplicate prevention
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('🔔 Auth event:', event);
       
       if (!mounted) return;
 
-      // Prevent concurrent auth loads
       if (isLoadingAuth.current && event !== 'SIGNED_OUT') {
         console.log('⚠️ Auth already loading, skipping');
         return;
       }
 
-      // If signing out, only clear state
       if (isSigningOut.current || event === 'SIGNED_OUT') {
         console.log('👋 Signed out');
         clearAuthState();
         setLoading(false);
         isSigningOut.current = false;
         isLoadingAuth.current = false;
-        hasLoadedInitialUser.current = false; // ✅ Reset flag
+        hasLoadedInitialUser.current = false;
         return;
       }
 
-      // ✅ FIXED: Only load on FIRST SIGNED_IN, ignore subsequent ones
       if (event === 'SIGNED_IN') {
-        // Skip if we already loaded user data
         if (hasLoadedInitialUser.current) {
           console.log('⚠️ Already loaded user, skipping duplicate SIGNED_IN event');
           return;
         }
         
-        hasLoadedInitialUser.current = true; // ✅ Mark as loaded
+        hasLoadedInitialUser.current = true;
         isLoadingAuth.current = true;
         
         if (session?.user) {
@@ -166,11 +159,10 @@ export const AuthProvider = ({ children, supabase }) => {
           
           const profileData = await loadProfile(session.user.id);
           
-          // ✅ Only update if data changed
           if (mounted) {
             setProfile(prev => {
               if (JSON.stringify(prev) === JSON.stringify(profileData)) {
-                return prev; // Same data, keep same reference
+                return prev;
               }
               return profileData;
             });
@@ -179,18 +171,16 @@ export const AuthProvider = ({ children, supabase }) => {
           if (profileData?.role === 'teacher' || profileData?.role === 'admin') {
             const teacherData = await loadTeacher(session.user.id);
             
-            // ✅ Only update if data changed
             if (mounted) {
               setTeacher(prev => {
                 if (!teacherData) return null;
                 
-                // Compare key fields to avoid unnecessary updates
                 if (prev && 
                     prev.user_id === teacherData.user_id && 
                     prev.full_name === teacherData.full_name &&
                     prev.email === teacherData.email &&
                     JSON.stringify(prev.subjects) === JSON.stringify(teacherData.subjects)) {
-                  return prev; // Same data, keep same reference!
+                  return prev;
                 }
                 
                 return teacherData;
@@ -202,11 +192,10 @@ export const AuthProvider = ({ children, supabase }) => {
         isLoadingAuth.current = false;
       }
       
-      // ✅ TOKEN_REFRESHED: Do NOT reload data, just update session
       if (event === 'TOKEN_REFRESHED') {
         console.log('🔄 Token refreshed (keeping existing data, no reload)');
         if (session?.user && mounted) {
-          setUser(session.user); // Update session only
+          setUser(session.user);
         }
       }
       
@@ -226,7 +215,7 @@ export const AuthProvider = ({ children, supabase }) => {
       setLoading(true);
       setError(null);
       isSigningOut.current = false;
-      hasLoadedInitialUser.current = false; // ✅ Reset on login
+      hasLoadedInitialUser.current = false;
 
       console.log('🔐 Signing in...');
 
@@ -247,12 +236,15 @@ export const AuthProvider = ({ children, supabase }) => {
     }
   };
 
+  // ============================================================================
+  // SIGN OUT - Fixed to preserve subdomain
+  // ============================================================================
   const signOut = async () => {
     try {
       console.log('🚪 Signing out...');
       
       isSigningOut.current = true;
-      hasLoadedInitialUser.current = false; // ✅ Reset flag
+      hasLoadedInitialUser.current = false;
       
       clearAuthState();
       
@@ -263,10 +255,18 @@ export const AuthProvider = ({ children, supabase }) => {
       }
       
       console.log('✅ Signed out');
-      window.location.href = '/';
+      
+      // ✅ FIX: Preserve subdomain on logout
+      // Instead of window.location.href = '/' which loses subdomain,
+      // redirect to current origin (which includes subdomain)
+      const currentOrigin = window.location.origin;
+      console.log('🔄 Redirecting to:', currentOrigin);
+      window.location.href = currentOrigin;
+      
     } catch (error) {
       console.error('❌ Sign out error:', error);
-      window.location.href = '/';
+      // Even on error, redirect to current origin
+      window.location.href = window.location.origin;
     }
   };
 

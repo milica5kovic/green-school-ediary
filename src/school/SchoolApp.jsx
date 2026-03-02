@@ -24,19 +24,19 @@ import {
   UserCog
 } from "lucide-react";
 
-// Core contexts - putanja iz src/school/ do src/core/
-import { AppProvider, useApp } from '../../src/core/context/AppContext';
-import { useAuth } from '../../src/core/context/AuthContext';
-import { useTenant } from '../../src/core/context/TenantContext';
+// Core contexts
+import { AppProvider, useApp } from '../core/context/AppContext';
+import { useAuth } from '../core/context/AuthContext';
+import { useTenant } from '../core/context/TenantContext';
+import { useBranding } from '../core/context/BrandingContext';
 
-// Shared components - putanja iz src/school/ do src/shared/
-import NavItem from '../../src/shared/navigation/NavItem';
-import LoadingSpinner from '../../src/shared/components/LoadingSpinner'
+// Shared components
+import NavItem from '../shared/navigation/NavItem';
+import LoadingSpinner from '../shared/components/LoadingSpinner';
+import ErrorMessage from '../shared/components/ErrorMessage';
+import UnauthorizedPage from '../shared/components/UnauthorizedPage';
 
-import ErrorMessage from '../../src/shared/components/ErrorMessage';
-import UnauthorizedPage from '../../src/shared/components/UnauthorizedPage';
-
-// Teacher/Admin Pages - putanja iz src/school/ do src/school/features/
+// Teacher/Admin Pages
 import HomePage from './features/dashboard/components/HomePage';
 import AdminDashboard from './features/admin/components/AdminDashboard';
 import SchedulePage from './features/schedule/components/SchedulePage';
@@ -49,7 +49,6 @@ import DailyOverviewPage from './features/attendance/components/DailyOverviewPag
 import TestMakerPage from './features/tests/components/TestMakerPage';
 import ManagementPage from './features/management/components/ManagementPage';
 import SettingsPage from './features/settings/components/SettingsPage';
-// NAPOMENA: promeni u 'componenets' ako ti folder ima typo
 import AdmissionsPortal from './features/admissions/components/AdmissionsPortal';
 
 // Parent Pages
@@ -76,8 +75,17 @@ const SchoolApp = () => {
 // SCHOOL APP CONTENT - Glavna komponenta
 // ============================================================================
 const SchoolAppContent = () => {
-  const { currentPage, loading, error, loadAllStudents } = useApp();
-  const { school, primaryColor, schoolName, logoUrl } = useTenant();
+  const { currentPage, setCurrentPage, loading, error, loadAllStudents } = useApp();
+  const { school } = useTenant();
+  const { 
+    primaryColor, 
+    name: schoolName, 
+    logoUrl, 
+    tagline,
+    features,
+    isLoading: brandingLoading 
+  } = useBranding();
+  
   const {
     user,
     profile,
@@ -90,24 +98,53 @@ const SchoolAppContent = () => {
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
-  if (authLoading) {
+  // Loading states
+  if (authLoading || brandingLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 flex items-center justify-center">
+      <div 
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: `linear-gradient(to bottom right, ${primaryColor}10, ${primaryColor}05)` }}
+      >
         <LoadingSpinner message="Loading..." />
       </div>
     );
   }
 
-  // ✅ ROLE DETECTION - pozivamo funkcije!
+  // Role detection
   const isSuperAdmin = profile?.role === 'admin' && teacher !== null;
   const isPureAdmin = profile?.role === 'admin' && teacher === null;
 
+  // ========== FEATURE CHECK HELPER ==========
+  // Returns true if feature is enabled (or not explicitly disabled)
+  const hasFeature = (featureKey) => {
+    // If features object doesn't exist, default to enabled
+    if (!features) return true;
+    // If feature key doesn't exist, default to enabled
+    if (features[featureKey] === undefined) return true;
+    // Otherwise return the actual value
+    return features[featureKey] === true;
+  };
+
+  // ========== PAGE RENDERER ==========
   const renderPage = () => {
     if (loading) return <LoadingSpinner message="Loading..." />;
     if (error) return <ErrorMessage message={error} onRetry={loadAllStudents} />;
 
     // ========== PARENT ROUTES ==========
     if (isParent()) {
+      // Check if parent portal is enabled at all
+      if (!hasFeature('parent_portal')) {
+        return (
+          <div className="text-center py-20">
+            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Users size={40} className="text-gray-400" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Parent Portal Unavailable</h2>
+            <p className="text-gray-600">The parent portal is not enabled for this school.</p>
+          </div>
+        );
+      }
+
       switch (currentPage) {
         case "home":
           return <ParentDashboard />;
@@ -115,16 +152,16 @@ const SchoolAppContent = () => {
           return <ParentMyChildPage />;
         case "grading":
         case "parent-grades":
-          return <ParentGradesPage />;
+          return hasFeature('parent_grades') ? <ParentGradesPage /> : <FeatureDisabled feature="Grades" />;
         case "parent-attendance":
-          return <ParentAttendancePage />;
+          return hasFeature('parent_attendance') ? <ParentAttendancePage /> : <FeatureDisabled feature="Attendance" />;
         case "parent-calendar":
-          return <ParentCalendarPage />;
+          return hasFeature('parent_calendar') ? <ParentCalendarPage /> : <FeatureDisabled feature="Calendar" />;
         case "parent-daily":
           return <ParentDailyViewPage />;
         case "homework":
         case "parent-homework":
-          return <ParentHomeworkPage />;
+          return hasFeature('parent_homework') ? <ParentHomeworkPage /> : <FeatureDisabled feature="Homework" />;
         case "settings":
           return <SettingsPage />;
         default:
@@ -141,40 +178,59 @@ const SchoolAppContent = () => {
         return isSuperAdmin ? <AdminDashboard /> : <UnauthorizedPage />;
       
       case "schedule":
-        return isPureAdmin ? <UnauthorizedPage /> : <SchedulePage />;
+        if (isPureAdmin) return <UnauthorizedPage />;
+        if (!hasFeature('schedule')) return <FeatureDisabled feature="Schedule" />;
+        return <SchedulePage />;
       
       case "teacher-calendar":
-        return isPureAdmin ? <UnauthorizedPage /> : <TeacherCalendarPage />;
+        if (isPureAdmin) return <UnauthorizedPage />;
+        if (!hasFeature('calendar')) return <FeatureDisabled feature="Calendar" />;
+        return <TeacherCalendarPage />;
       
       case "admin-calendar":
-        return isAdmin() ? <AdminCalendarPage /> : <UnauthorizedPage />;
+        if (!isAdmin()) return <UnauthorizedPage />;
+        if (!hasFeature('admin_calendar')) return <FeatureDisabled feature="School Calendar" />;
+        return <AdminCalendarPage />;
       
       case "tasks":
-        return isPureAdmin ? <UnauthorizedPage /> : <TodoPage />;
+        if (isPureAdmin) return <UnauthorizedPage />;
+        if (!hasFeature('tasks')) return <FeatureDisabled feature="Tasks" />;
+        return <TodoPage />;
       
       case "homework":
-        return isPureAdmin ? <UnauthorizedPage /> : <HomeworkPage />;
+        if (isPureAdmin) return <UnauthorizedPage />;
+        if (!hasFeature('homework')) return <FeatureDisabled feature="Homework" />;
+        return <HomeworkPage />;
       
       case "grading":
-        return isPureAdmin ? <UnauthorizedPage /> : <GradesPage />;
+        if (isPureAdmin) return <UnauthorizedPage />;
+        if (!hasFeature('grading')) return <FeatureDisabled feature="Grading" />;
+        return <GradesPage />;
       
       case "daily-overview":
-        if (!teacher?.class_teacher_for) {
-          return <UnauthorizedPage />;
-        }
+        if (!teacher?.class_teacher_for) return <UnauthorizedPage />;
+        if (!hasFeature('daily_overview')) return <FeatureDisabled feature="Daily Overview" />;
         return <DailyOverviewPage />;
       
       case "test-maker":
-        return isPureAdmin ? <UnauthorizedPage /> : <TestMakerPage />;
+        if (isPureAdmin) return <UnauthorizedPage />;
+        if (!hasFeature('test_maker')) return <FeatureDisabled feature="Test Maker" />;
+        return <TestMakerPage />;
       
       case "management":
-        return isAdmin() ? <ManagementPage /> : <UnauthorizedPage />;
+        if (!isAdmin()) return <UnauthorizedPage />;
+        if (!hasFeature('management')) return <FeatureDisabled feature="Management" />;
+        return <ManagementPage />;
       
       case "admissions":
-        return isAdmin() ? <AdmissionsPortal /> : <UnauthorizedPage />;
+        if (!isAdmin()) return <UnauthorizedPage />;
+        if (!hasFeature('admissions')) return <FeatureDisabled feature="Admissions" />;
+        return <AdmissionsPortal />;
       
       case "reports":
-        return isAdmin() ? <AdminDashboard /> : <UnauthorizedPage />;
+        if (!isAdmin()) return <UnauthorizedPage />;
+        if (!hasFeature('reports')) return <FeatureDisabled feature="Reports" />;
+        return <AdminDashboard />;
       
       case "settings":
         return <SettingsPage />;
@@ -213,20 +269,31 @@ const SchoolAppContent = () => {
       </span>
     );
     if (teacher) return (
-      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-xs font-semibold">
+      <span 
+        className="px-2 py-0.5 rounded-full text-xs font-semibold"
+        style={{ backgroundColor: `${primaryColor}20`, color: primaryColor }}
+      >
         Teacher
+      </span>
+    );
+    if (isParent()) return (
+      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+        Parent
       </span>
     );
     return null;
   };
 
-  // Dynamic styles based on school branding
-  const brandGradient = `linear-gradient(to bottom right, ${primaryColor || '#10b981'}, ${primaryColor || '#10b981'}dd)`;
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50">
+    <div 
+      className="min-h-screen"
+      style={{ background: `linear-gradient(to bottom right, ${primaryColor}08, ${primaryColor}03)` }}
+    >
       {/* ========== HEADER ========== */}
-      <header className="bg-white border-b-2 shadow-md" style={{ borderColor: primaryColor || '#10b981' }}>
+      <header 
+        className="bg-white border-b-2 shadow-md"
+        style={{ borderColor: primaryColor }}
+      >
         <div className="max-w-7xl mx-auto px-6 py-3">
           <div className="flex justify-between items-center">
             {/* Left: Logo + Title */}
@@ -236,12 +303,12 @@ const SchoolAppContent = () => {
                   <img 
                     src={logoUrl} 
                     alt={schoolName} 
-                    className="w-12 h-12 rounded-xl object-cover"
+                    className="w-12 h-12 rounded-xl object-contain bg-white shadow-sm"
                   />
                 ) : (
                   <div 
-                    className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg"
-                    style={{ background: brandGradient }}
+                    className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg"
+                    style={{ backgroundColor: primaryColor }}
                   >
                     {schoolName?.charAt(0) || 'S'}
                   </div>
@@ -251,8 +318,11 @@ const SchoolAppContent = () => {
                 <h1 className="text-lg font-bold text-gray-900 leading-tight">
                   {schoolName || 'School'} E-Diary
                 </h1>
-                <p className="text-xs font-medium" style={{ color: primaryColor || '#10b981' }}>
-                  Powered by SchoolHub
+                <p 
+                  className="text-xs font-medium"
+                  style={{ color: primaryColor }}
+                >
+                  {tagline || 'Digital Learning Management'}
                 </p>
               </div>
             </div>
@@ -270,7 +340,7 @@ const SchoolAppContent = () => {
                 <button
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
                   className="w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-md text-white"
-                  style={{ background: brandGradient }}
+                  style={{ backgroundColor: primaryColor }}
                 >
                   <User size={20} />
                 </button>
@@ -278,7 +348,10 @@ const SchoolAppContent = () => {
                 {/* Dropdown Menu */}
                 {profileMenuOpen && (
                   <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-50">
-                    <div className="p-3 border-b" style={{ background: `${primaryColor}10` }}>
+                    <div 
+                      className="p-3 border-b"
+                      style={{ backgroundColor: `${primaryColor}10` }}
+                    >
                       <p className="text-xs text-gray-600 font-medium">{getUserRole()}</p>
                       <p className="text-sm font-semibold text-gray-900 truncate">{user?.email}</p>
                     </div>
@@ -300,18 +373,29 @@ const SchoolAppContent = () => {
       {/* ========== LAYOUT ========== */}
       <div className="max-w-7xl mx-auto px-6 py-6 flex gap-6">
         {/* ========== SIDEBAR NAVIGATION ========== */}
-        <aside className="w-64 bg-white rounded-2xl shadow-lg p-6 h-fit sticky top-6 border" style={{ borderColor: `${primaryColor}30` }}>
-          <nav className="space-y-2">
+        <aside 
+          className="w-64 bg-white rounded-2xl shadow-lg p-6 h-fit sticky top-6 border"
+          style={{ borderColor: `${primaryColor}30` }}
+        >
+          <nav className="space-y-1">
             {isParent() ? (
               /* ========== PARENT NAVIGATION ========== */
               <>
                 <NavItem icon={LayoutDashboard} label="Dashboard" page="home" />
                 <NavItem icon={UserCircle} label="My Child" page="my-child" />
-                <NavItem icon={Award} label="Grades" page="grading" />
-                <NavItem icon={CalendarCheck} label="Attendance" page="parent-attendance" />
-                <NavItem icon={Calendar} label="Calendar" page="parent-calendar" />
+                {hasFeature('parent_grades') && (
+                  <NavItem icon={Award} label="Grades" page="grading" />
+                )}
+                {hasFeature('parent_attendance') && (
+                  <NavItem icon={CalendarCheck} label="Attendance" page="parent-attendance" />
+                )}
+                {hasFeature('parent_calendar') && (
+                  <NavItem icon={Calendar} label="Calendar" page="parent-calendar" />
+                )}
                 <NavItem icon={CalendarDays} label="Daily View" page="parent-daily" />
-                <NavItem icon={ClipboardList} label="Homework" page="homework" />
+                {hasFeature('parent_homework') && (
+                  <NavItem icon={ClipboardList} label="Homework" page="homework" />
+                )}
                 <NavItem icon={Settings} label="Settings" page="settings" />
               </>
             ) : isSuperAdmin ? (
@@ -319,49 +403,103 @@ const SchoolAppContent = () => {
               <>
                 <NavItem icon={Home} label="Teacher Home" page="home" />
                 <NavItem icon={LayoutDashboard} label="Admin Dashboard" page="admin-dashboard" />
-                <div className="border-t border-gray-200 my-2"></div>
-                <NavItem icon={Clock} label="My Schedule" page="schedule" />
-                <NavItem icon={Calendar} label="Calendar" page="teacher-calendar" />
-                <NavItem icon={CalendarDays} label="School Calendar" page="admin-calendar" />
-                <NavItem icon={CheckSquare} label="My Tasks" page="tasks" />
-                <NavItem icon={BookMarked} label="Homework" page="homework" />
-                <NavItem icon={GraduationCap} label="Grading" page="grading" />
-                {teacher?.class_teacher_for && (
+                
+                <div className="border-t border-gray-200 my-3" />
+                
+                {hasFeature('schedule') && (
+                  <NavItem icon={Clock} label="My Schedule" page="schedule" />
+                )}
+                {hasFeature('calendar') && (
+                  <NavItem icon={Calendar} label="Calendar" page="teacher-calendar" />
+                )}
+                {hasFeature('admin_calendar') && (
+                  <NavItem icon={CalendarDays} label="School Calendar" page="admin-calendar" />
+                )}
+                {hasFeature('tasks') && (
+                  <NavItem icon={CheckSquare} label="My Tasks" page="tasks" />
+                )}
+                {hasFeature('homework') && (
+                  <NavItem icon={BookMarked} label="Homework" page="homework" />
+                )}
+                {hasFeature('grading') && (
+                  <NavItem icon={GraduationCap} label="Grading" page="grading" />
+                )}
+                {teacher?.class_teacher_for && hasFeature('daily_overview') && (
                   <NavItem icon={ClipboardCheck} label="Daily Overview" page="daily-overview" />
                 )}
-                <NavItem icon={FileText} label="Test Maker" page="test-maker" />
-                <div className="border-t border-gray-200 my-2"></div>
-                <NavItem icon={Users} label="Management" page="management" />
-                <NavItem icon={UserPlus} label="Admissions" page="admissions" />
+                {hasFeature('test_maker') && (
+                  <NavItem icon={FileText} label="Test Maker" page="test-maker" />
+                )}
+                
+                <div className="border-t border-gray-200 my-3" />
+                
+                {hasFeature('management') && (
+                  <NavItem icon={Users} label="Management" page="management" />
+                )}
+                {hasFeature('admissions') && (
+                  <NavItem icon={UserPlus} label="Admissions" page="admissions" />
+                )}
                 <NavItem icon={Settings} label="Settings" page="settings" />
               </>
             ) : isPureAdmin ? (
               /* ========== PURE ADMIN NAVIGATION ========== */
               <>
                 <NavItem icon={LayoutDashboard} label="Dashboard" page="home" />
-                <NavItem icon={CalendarDays} label="School Calendar" page="admin-calendar" />
-                <NavItem icon={Users} label="Management" page="management" />
-                <NavItem icon={UserPlus} label="Admissions" page="admissions" />
-                <NavItem icon={BarChart3} label="Reports" page="reports" />
+                {hasFeature('admin_calendar') && (
+                  <NavItem icon={CalendarDays} label="School Calendar" page="admin-calendar" />
+                )}
+                {hasFeature('management') && (
+                  <NavItem icon={Users} label="Management" page="management" />
+                )}
+                {hasFeature('admissions') && (
+                  <NavItem icon={UserPlus} label="Admissions" page="admissions" />
+                )}
+                {hasFeature('reports') && (
+                  <NavItem icon={BarChart3} label="Reports" page="reports" />
+                )}
                 <NavItem icon={Settings} label="Settings" page="settings" />
               </>
             ) : (
               /* ========== TEACHER NAVIGATION ========== */
               <>
                 <NavItem icon={Home} label="Home" page="home" />
-                <NavItem icon={Clock} label="My Schedule" page="schedule" />
-                <NavItem icon={Calendar} label="Calendar" page="teacher-calendar" />
-                <NavItem icon={CheckSquare} label="My Tasks" page="tasks" />
-                <NavItem icon={BookMarked} label="Homework" page="homework" />
-                <NavItem icon={GraduationCap} label="Grading" page="grading" />
-                {teacher?.class_teacher_for && (
+                {hasFeature('schedule') && (
+                  <NavItem icon={Clock} label="My Schedule" page="schedule" />
+                )}
+                {hasFeature('calendar') && (
+                  <NavItem icon={Calendar} label="Calendar" page="teacher-calendar" />
+                )}
+                {hasFeature('tasks') && (
+                  <NavItem icon={CheckSquare} label="My Tasks" page="tasks" />
+                )}
+                {hasFeature('homework') && (
+                  <NavItem icon={BookMarked} label="Homework" page="homework" />
+                )}
+                {hasFeature('grading') && (
+                  <NavItem icon={GraduationCap} label="Grading" page="grading" />
+                )}
+                {teacher?.class_teacher_for && hasFeature('daily_overview') && (
                   <NavItem icon={ClipboardCheck} label="Daily Overview" page="daily-overview" />
                 )}
-                <NavItem icon={FileText} label="Test Maker" page="test-maker" />
+                {hasFeature('test_maker') && (
+                  <NavItem icon={FileText} label="Test Maker" page="test-maker" />
+                )}
                 <NavItem icon={Settings} label="Settings" page="settings" />
               </>
             )}
           </nav>
+
+          {/* Footer - Powered by Akio */}
+          <div className="mt-6 pt-4 border-t border-gray-200">
+            <a 
+              href="https://akio.rs" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-xs text-gray-400 text-center block hover:text-gray-600 transition-colors"
+            >
+              Powered by <span className="font-semibold">Akio</span>
+            </a>
+          </div>
         </aside>
 
         {/* ========== MAIN CONTENT ========== */}
@@ -375,6 +513,32 @@ const SchoolAppContent = () => {
           onClick={() => setProfileMenuOpen(false)}
         />
       )}
+    </div>
+  );
+};
+
+// ============================================================================
+// FEATURE DISABLED COMPONENT
+// ============================================================================
+const FeatureDisabled = ({ feature }) => {
+  const { primaryColor } = useBranding();
+  
+  return (
+    <div className="flex items-center justify-center py-20">
+      <div className="text-center max-w-md">
+        <div 
+          className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4"
+          style={{ backgroundColor: `${primaryColor}15` }}
+        >
+          <Settings size={40} style={{ color: primaryColor }} />
+        </div>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">
+          {feature} Not Available
+        </h2>
+        <p className="text-gray-600">
+          This feature is not enabled for your school. Please contact your administrator if you need access.
+        </p>
+      </div>
     </div>
   );
 };

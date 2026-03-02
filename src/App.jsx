@@ -1,6 +1,7 @@
 import React from 'react';
 import { TenantProvider, useTenant } from './core/context/TenantContext';
 import { AuthProvider, useAuth } from './core/context/AuthContext';
+import { BrandingProvider } from './core/context/BrandingContext';
 import { supabase } from './core/infrastructure/supabaseClient';
 import SchoolApp from './school/SchoolApp';
 import OwnerDashboard from './owner/OwnerDashboard';
@@ -13,7 +14,9 @@ function App() {
   return (
     <TenantProvider>
       <AuthProvider supabase={supabase}>
-        <AppRouter />
+        <BrandingProvider>
+          <AppRouter />
+        </BrandingProvider>
       </AuthProvider>
     </TenantProvider>
   );
@@ -22,19 +25,24 @@ function App() {
 const AppRouter = () => {
   const { isOwnerDashboard, isMarketing, isSchool, loading: tenantLoading, error } = useTenant();
   const { user, teacher, isParent, loading: authLoading } = useAuth();
-
+  
   const path = window.location.pathname;
+  
+  // Static pages
   if (path === '/privacy') return <Privacy />;
   if (path === '/terms') return <Terms />;
 
+  // Loading state
   if (tenantLoading) {
     return <LoadingScreen message="Loading..." />;
   }
 
+  // Marketing/Landing page
   if (isMarketing) {
     return <AkioLanding />;
   }
 
+  // Owner Dashboard
   if (isOwnerDashboard) {
     if (authLoading) {
       return <LoadingScreen message="Checking authentication..." />;
@@ -45,6 +53,7 @@ const AppRouter = () => {
     return <OwnerDashboard />;
   }
 
+  // School App
   if (isSchool) {
     if (error) {
       return <SchoolNotFound error={error} />;
@@ -58,6 +67,7 @@ const AppRouter = () => {
     return <SchoolApp />;
   }
 
+  // Default fallback
   return <AkioLanding />;
 };
 

@@ -1,10 +1,15 @@
-import Grade from "../entities/grade"
+import Grade from "../entities/grade";
 
-import { supabase } from "../../../../core/infrastructure/supabaseClient";
+// ============================================================================
+// GRADING SERVICE - Tenant-aware version
+// ============================================================================
 
 class GradingService {
-  constructor() {
+  constructor(supabaseClient) {
+    // Accept supabase client from constructor (tenantSupabase)
+    this.supabase = supabaseClient;
     this.gradesData = {}; // cache: { studentId: [Grade, ...] }
+    console.log('✅ GradingService initialized (tenant-aware)');
   }
 
   _cacheStudent(studentId) {
@@ -18,7 +23,8 @@ class GradingService {
 
     for (const [studentId, gradeValue] of Object.entries(studentScores)) {
       if (gradeValue !== undefined && gradeValue !== "") {
-        const { data, error } = await supabase
+        // tenantSupabase automatically adds school_id
+        const { data, error } = await this.supabase
           .from("grades")
           .insert({
             student_id: studentId,
@@ -61,7 +67,8 @@ class GradingService {
     this._cacheStudent(studentId);
 
     if (this.gradesData[studentId].length === 0) {
-      const { data, error } = await supabase
+      // tenantSupabase automatically filters by school_id
+      const { data, error } = await this.supabase
         .from("grades")
         .select("*")
         .eq("student_id", studentId)
@@ -89,7 +96,7 @@ class GradingService {
   }
 
   async deleteGrade(studentId, gradeId) {
-    const { error } = await supabase
+    const { error } = await this.supabase
       .from("grades")
       .delete()
       .eq("id", gradeId);
@@ -141,7 +148,8 @@ class GradingService {
   }
 
   async getClassGrades(className) {
-    const { data, error } = await supabase
+    // tenantSupabase automatically filters by school_id
+    const { data, error } = await this.supabase
       .from("grades")
       .select("*")
       .eq("class_name", className)
@@ -189,6 +197,12 @@ class GradingService {
       color: tempGrade.getColor(),
       range: tempGrade.getBandRange()
     };
+  }
+
+  // Clear cache (useful when switching schools)
+  clearCache() {
+    this.gradesData = {};
+    console.log('🧹 GradingService cache cleared');
   }
 }
 
