@@ -9,14 +9,80 @@ import {
   Upload,
   GripVertical,
   Edit2,
+  Clock,
+  Award,
+  BookOpen,
+  ChevronDown,
+  X,
+  Copy,
+  Check,
+  HelpCircle,
+  Calendar,
+  Users,
 } from "lucide-react";
 import { useAuth } from "../../../../core/context/AuthContext";
 import { useApp } from "../../../../core/context/AppContext";
-import {generateTestBundle} from "../../../../core/utils/pdfGenerator"
+import { useBranding } from "../../../../core/context/BrandingContext";
+import { generateTestBundle } from "../../../../core/utils/pdfGenerator";
+
+// ════════════════════════════════════════════════════════════════════════════
+// PREDEFINED INSTRUCTIONS
+// ════════════════════════════════════════════════════════════════════════════
+
+const INSTRUCTION_PRESETS = [
+  {
+    id: "standard",
+    label: "Standard Test",
+    text: "Read all questions carefully before answering. Write your answers clearly. Check your work before submitting.",
+  },
+  {
+    id: "no_calculator",
+    label: "No Calculator",
+    text: "Calculators are NOT allowed. Show all working for full credit. Read each question carefully.",
+  },
+  {
+    id: "calculator_allowed",
+    label: "Calculator Allowed",
+    text: "Calculators may be used. Show all working clearly. Label your answers with correct units where applicable.",
+  },
+  {
+    id: "open_book",
+    label: "Open Book",
+    text: "This is an open book examination. You may use your textbook and notes. No electronic devices allowed.",
+  },
+  {
+    id: "multiple_choice",
+    label: "Multiple Choice Only",
+    text: "Choose the best answer for each question. Mark your answers clearly. Only one answer per question.",
+  },
+  {
+    id: "essay",
+    label: "Essay/Extended Writing",
+    text: "Plan your answers before writing. Use paragraphs and proper structure. Support your points with evidence.",
+  },
+  {
+    id: "science_practical",
+    label: "Science Practical",
+    text: "Follow safety guidelines at all times. Record all observations accurately. Include units in measurements.",
+  },
+  {
+    id: "custom",
+    label: "Custom Instructions",
+    text: "",
+  },
+];
+
+// ════════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ════════════════════════════════════════════════════════════════════════════
 
 const TestMakerPage = () => {
   const { supabase } = useApp();
   const { teacher } = useAuth();
+  
+  // Get ALL branding data for PDF generation
+  const branding = useBranding();
+  const { primaryColor } = branding;
 
   const [subjects, setSubjects] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -29,8 +95,8 @@ const TestMakerPage = () => {
     date: new Date().toISOString().split("T")[0],
     duration: 45,
     totalPoints: 100,
-    instructions:
-      "Read all questions carefully. Show your work for full credit. No calculators allowed unless specified.",
+    instructionPreset: "standard",
+    instructions: INSTRUCTION_PRESETS[0].text,
     teacherName: teacher?.full_name || "",
   });
 
@@ -38,92 +104,94 @@ const TestMakerPage = () => {
   const [showAddQuestion, setShowAddQuestion] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [generating, setGenerating] = useState(false);
-
   const [uploadedTest, setUploadedTest] = useState(null);
-  const [showHelpGuide, setShowHelpGuide] = useState(null);
+  const [showAIGuide, setShowAIGuide] = useState(false);
 
-  // Load subjects and classes
+  // ══════════════════════════════════════════════════════════════════════════
+  // DATA LOADING
+  // ══════════════════════════════════════════════════════════════════════════
+
   useEffect(() => {
     loadSubjects();
     loadClasses();
   }, []);
 
-const loadSubjects = async () => {
-  try {
-    if (!teacher?.subjects || teacher.subjects.length === 0) {
-      console.log('No subjects found for teacher');
-      setSubjects([]);
-      return;
+  const loadSubjects = async () => {
+    try {
+      if (!teacher?.subjects || teacher.subjects.length === 0) {
+        setSubjects([]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("custom_subjects")
+        .select("*")
+        .eq("is_active", true)
+        .in("subject_name", teacher.subjects)
+        .order("subject_name");
+
+      if (error) throw error;
+      setSubjects(data || []);
+    } catch (error) {
+      console.error("Error loading subjects:", error);
     }
+  };
 
-    // ✅ Only show subjects this teacher teaches
-    const { data, error } = await supabase
-      .from("custom_subjects")
-      .select("*")
-      .eq("is_active", true)
-      .in("subject_name", teacher.subjects)
-      .order("subject_name");
+  const loadClasses = async () => {
+    try {
+      const { data: teacherClasses, error } = await supabase
+        .from("classes")
+        .select("class_name")
+        .eq("teacher_id", teacher?.id);
 
-    if (error) throw error;
-    
-    console.log('✅ Teacher subjects loaded:', data?.length || 0);
-    setSubjects(data || []);
-  } catch (error) {
-    console.error("Error loading subjects:", error);
-  }
-};
+      if (error) throw error;
 
-const loadClasses = async () => {
-  try {
-    // ✅ Load all classes this teacher teaches
-    const { data: teacherClasses, error } = await supabase
-      .from("classes")
-      .select("class_name")
-      .eq("teacher_id", teacher?.id);
+      const uniqueClasses = [...new Set(teacherClasses?.map((c) => c.class_name) || [])];
 
-    if (error) throw error;
+      if (teacher?.class_teacher_for && !uniqueClasses.includes(teacher.class_teacher_for)) {
+        uniqueClasses.push(teacher.class_teacher_for);
+      }
 
-    // ✅ Get unique class names
-    const uniqueClasses = [...new Set(teacherClasses?.map(c => c.class_name) || [])];
-    
-    // ✅ Add class_teacher_for if exists
-    if (teacher?.class_teacher_for && !uniqueClasses.includes(teacher.class_teacher_for)) {
-      uniqueClasses.push(teacher.class_teacher_for);
+      if (uniqueClasses.length === 0) {
+        setClasses([]);
+        return;
+      }
+
+      const { data, error: classError } = await supabase
+        .from("custom_classes")
+        .select("*")
+        .eq("is_active", true)
+        .in("class_name", uniqueClasses)
+        .order("class_name");
+
+      if (classError) throw classError;
+      setClasses(data || []);
+    } catch (error) {
+      console.error("Error loading classes:", error);
     }
+  };
 
-    if (uniqueClasses.length === 0) {
-      console.log('No classes found for teacher');
-      setClasses([]);
-      return;
-    }
+  // ══════════════════════════════════════════════════════════════════════════
+  // HANDLERS
+  // ══════════════════════════════════════════════════════════════════════════
 
-    // ✅ Load class details
-    const { data, error: classError } = await supabase
-      .from("custom_classes")
-      .select("*")
-      .eq("is_active", true)
-      .in("class_name", uniqueClasses)
-      .order("class_name");
-
-    if (classError) throw classError;
-
-    console.log('✅ Teacher classes loaded:', data?.length || 0);
-    setClasses(data || []);
-  } catch (error) {
-    console.error("Error loading classes:", error);
-  }
-};
-
-  // Auto-calculate points per question
   const calculatePointsPerQuestion = () => {
     if (questions.length === 0) return 0;
     return Math.floor(testInfo.totalPoints / questions.length);
   };
 
+  const handleInstructionPresetChange = (presetId) => {
+    const preset = INSTRUCTION_PRESETS.find((p) => p.id === presetId);
+    setTestInfo({
+      ...testInfo,
+      instructionPreset: presetId,
+      instructions: preset?.text || "",
+    });
+  };
+
   const addQuestion = (questionData) => {
     const pointsPerQuestion =
-      calculatePointsPerQuestion() ||
-      Math.floor(testInfo.totalPoints / (questions.length + 1));
+      calculatePointsPerQuestion() || Math.floor(testInfo.totalPoints / (questions.length + 1));
 
     const newQuestion = {
       id: Date.now(),
@@ -136,9 +204,7 @@ const loadClasses = async () => {
   };
 
   const updateQuestion = (id, updatedData) => {
-    setQuestions(
-      questions.map((q) => (q.id === id ? { ...q, ...updatedData } : q)),
-    );
+    setQuestions(questions.map((q) => (q.id === id ? { ...q, ...updatedData } : q)));
     setEditingQuestion(null);
   };
 
@@ -147,6 +213,7 @@ const loadClasses = async () => {
       setQuestions(questions.filter((q) => q.id !== id));
     }
   };
+
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -160,13 +227,11 @@ const loadClasses = async () => {
       const text = await file.text();
       const testData = JSON.parse(text);
 
-      // Validate structure
       if (!testData.title || !testData.questions) {
         alert("Invalid test file format");
         return;
       }
 
-      // Load test data
       setTestInfo({
         title: testData.title || "",
         subject: testData.subject || "",
@@ -174,30 +239,25 @@ const loadClasses = async () => {
         date: testData.date || new Date().toISOString().split("T")[0],
         duration: testData.duration || 45,
         totalPoints: testData.totalPoints || 100,
+        instructionPreset: "custom",
         instructions: testData.instructions || "",
         teacherName: teacher?.full_name || "",
       });
 
-      // Load questions with IDs
       const questionsWithIds = testData.questions.map((q, index) => ({
         ...q,
         id: Date.now() + index,
-        points: Math.floor(
-          (testData.totalPoints || 100) / testData.questions.length,
-        ),
+        points: Math.floor((testData.totalPoints || 100) / testData.questions.length),
       }));
 
       setQuestions(questionsWithIds);
       setUploadedTest(file.name);
-      alert(
-        `Successfully loaded test: ${testData.title} with ${questionsWithIds.length} questions!`,
-      );
+      alert(`Loaded: ${testData.title} with ${questionsWithIds.length} questions`);
     } catch (error) {
       console.error("Error loading test:", error);
       alert("Failed to load test file: " + error.message);
     }
 
-    // Reset input
     e.target.value = "";
   };
 
@@ -218,14 +278,23 @@ const loadClasses = async () => {
       const testData = {
         ...testInfo,
         questions: questions,
+        // Branding data for PDF - from useBranding() hook
+        schoolName: branding.name,
+        logoUrl: branding.logoUrl,
+        primaryColor: branding.primaryColor,
+        pdfHeaderText: branding.pdfHeaderText || branding.name,
+        pdfFooterText: branding.pdfFooterText || '',
+        tagline: branding.tagline || '',
+        showLogoInPdf: branding.showLogoInPdf !== false,
       };
 
-      const { studentTest, answerKey } = await generateTestBundle(
-        testData,
-        shuffleQuestions,
-      );
+      console.log('📄 Generating PDF with:', {
+        schoolName: testData.schoolName,
+        logoUrl: testData.logoUrl,
+        primaryColor: testData.primaryColor,
+      });
 
-
+      await generateTestBundle(testData, shuffleQuestions);
       alert("Test and Answer Key generated successfully!");
     } catch (error) {
       console.error("Error generating PDF:", error);
@@ -235,393 +304,429 @@ const loadClasses = async () => {
     }
   };
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // RENDER
+  // ══════════════════════════════════════════════════════════════════════════
+
   return (
     <div className="space-y-6">
-
-{/* Header */}
-<div className="relative overflow-hidden bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-600 rounded-2xl shadow-xl p-6">
-  {/* Decorative Elements */}
-  <div className="absolute top-0 right-0 w-40 h-40 bg-white opacity-5 rounded-full -mr-20 -mt-20"></div>
-  <div className="absolute bottom-0 left-0 w-32 h-32 bg-white opacity-5 rounded-full -ml-16 -mb-16"></div>
-  
-  <div className="relative">
-    <div className="flex items-center justify-between">
-      {/* Left: Title */}
-      <div className="flex items-center gap-3">
-        <div className="w-12 h-12 bg-white bg-opacity-20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white border-opacity-30">
-          <FileText size={24} className="text-white" />
-        </div>
+      {/* ═══ HEADER ═══════════════════════════════════════════════════════════ */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">Test Maker</h2>
-          <p className="text-sm text-emerald-100">Create professional assessments</p>
+          <h2 className="text-2xl font-bold text-gray-800">Test Maker</h2>
+          <p className="text-gray-500 text-sm mt-1">Create professional assessments with PDF export</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <label
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg cursor-pointer transition-colors"
+          >
+            <Upload size={16} />
+            Upload JSON
+            <input type="file" accept=".json" onChange={handleFileUpload} className="hidden" />
+          </label>
+
+          <button
+            onClick={() => setShowAIGuide(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg transition-colors"
+            style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}
+          >
+            <Sparkles size={16} />
+            AI Guide
+          </button>
+
+          <button
+            onClick={() => handleGeneratePDF(false)}
+            disabled={generating || questions.length === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-white text-sm font-medium rounded-lg shadow-sm hover:shadow-md transition-all disabled:opacity-50"
+            style={{ backgroundColor: primaryColor }}
+          >
+            <Download size={16} />
+            {generating ? "Generating..." : "Generate PDF"}
+          </button>
+
+          <button
+            onClick={() => handleGeneratePDF(true)}
+            disabled={generating || questions.length === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg shadow-sm hover:shadow-md transition-all disabled:opacity-50"
+          >
+            <Shuffle size={16} />
+            Shuffle & PDF
+          </button>
         </div>
       </div>
 
-      {/* Right: Actions */}
-      <div className="flex items-center gap-2">
-        <label className="group bg-white bg-opacity-20 backdrop-blur-sm text-white px-4 py-2.5 rounded-lg font-medium hover:bg-opacity-30 transition-all cursor-pointer flex items-center gap-2 border border-white border-opacity-30">
-          <Upload size={18} />
-          Upload
-          <input
-            type="file"
-            accept=".json"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-        </label>
-
-        <button
-          onClick={() => handleGeneratePDF(false)}
-          disabled={generating}
-          className="bg-white bg-opacity-20 backdrop-blur-sm text-white px-4 py-2.5 rounded-lg font-medium hover:bg-opacity-30 transition-all flex items-center gap-2 disabled:opacity-50 border border-white border-opacity-30"
+      {/* Uploaded file indicator */}
+      {uploadedTest && (
+        <div
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm"
+          style={{ backgroundColor: `${primaryColor}10`, color: primaryColor }}
         >
-          <Download size={18} />
-          {generating ? "..." : "PDF"}
-        </button>
-
-        <button
-          onClick={() => handleGeneratePDF(true)}
-          disabled={generating}
-          className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2.5 rounded-lg font-medium hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
-        >
-          <Shuffle size={18} />
-          Shuffle
-        </button>
-
-        <button
-          onClick={() => setShowHelpGuide(true)}
-          className="bg-white bg-opacity-20 backdrop-blur-sm text-white px-4 py-2.5 rounded-lg font-medium hover:bg-opacity-30 transition-all flex items-center gap-2 border border-white border-opacity-30"
-        >
-          <Sparkles size={18} />
-          AI
-        </button>
-      </div>
-    </div>
-
-    {uploadedTest && (
-      <div className="mt-3 bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-2 border border-white border-opacity-30">
-        <p className="text-white text-xs">
-          <strong>✓ Loaded:</strong> {uploadedTest}
-        </p>
-      </div>
-    )}
-  </div>
-</div>
-
-
-{/* Test Info */}
-<div className="bg-white rounded-3xl shadow-xl p-8 border-2 border-gray-100">
-  <div className="flex items-center gap-3 mb-6">
-    <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center">
-      <FileText size={20} className="text-white" />
-    </div>
-    <h3 className="text-2xl font-bold text-gray-900">Test Information</h3>
-  </div>
-
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-    <div>
-      <label className="block text-sm font-bold text-gray-700 mb-2">
-        Test Title <span className="text-red-500">*</span>
-      </label>
-      <input
-        type="text"
-        value={testInfo.title}
-        onChange={(e) => setTestInfo({ ...testInfo, title: e.target.value })}
-        className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
-        placeholder="e.g., Unit 3 Assessment"
-      />
-    </div>
-
-    <div>
-      <label className="block text-sm font-bold text-gray-700 mb-2">
-        Subject <span className="text-red-500">*</span>
-      </label>
-      <select
-        value={testInfo.subject}
-        onChange={(e) => setTestInfo({ ...testInfo, subject: e.target.value })}
-        className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all bg-white"
-      >
-        <option value="">Select subject...</option>
-        {subjects.map((s) => (
-          <option key={s.id} value={s.subject_name}>
-            {s.subject_name}
-          </option>
-        ))}
-      </select>
-      {subjects.length === 0 && (
-        <p className="text-xs text-gray-500 mt-1">No subjects assigned to you</p>
+          <Check size={16} />
+          <span>
+            Loaded: <strong>{uploadedTest}</strong>
+          </span>
+          <button
+            onClick={() => setUploadedTest(null)}
+            className="ml-auto p-1 hover:bg-white/50 rounded"
+          >
+            <X size={14} />
+          </button>
+        </div>
       )}
-    </div>
 
-    <div>
-      <label className="block text-sm font-bold text-gray-700 mb-2">
-        Class <span className="text-red-500">*</span>
-      </label>
-      <select
-        value={testInfo.className}
-        onChange={(e) => setTestInfo({ ...testInfo, className: e.target.value })}
-        className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all bg-white"
-      >
-        <option value="">Select class...</option>
-        {classes.map((c) => (
-          <option key={c.id} value={c.class_name}>
-            {c.class_name}
-          </option>
-        ))}
-      </select>
-      {classes.length === 0 && (
-        <p className="text-xs text-gray-500 mt-1">No classes assigned to you</p>
-      )}
-    </div>
-
-    <div>
-      <label className="block text-sm font-bold text-gray-700 mb-2">
-        Test Date
-      </label>
-      <input
-        type="date"
-        value={testInfo.date}
-        onChange={(e) => setTestInfo({ ...testInfo, date: e.target.value })}
-        className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
-      />
-    </div>
-
-    <div>
-      <label className="block text-sm font-bold text-gray-700 mb-2">
-        Duration (minutes)
-      </label>
-      <input
-        type="number"
-        value={testInfo.duration}
-        onChange={(e) => setTestInfo({ ...testInfo, duration: parseInt(e.target.value) })}
-        className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
-        min="15"
-        max="180"
-        step="5"
-      />
-    </div>
-
-    <div>
-      <label className="block text-sm font-bold text-gray-700 mb-2">
-        Total Points
-      </label>
-      <input
-        type="number"
-        value={testInfo.totalPoints}
-        onChange={(e) => setTestInfo({ ...testInfo, totalPoints: parseInt(e.target.value) })}
-        className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
-        min="10"
-        max="200"
-        step="5"
-      />
-    </div>
-  </div>
-
-  <div className="mt-6">
-    <label className="block text-sm font-bold text-gray-700 mb-2">
-      Test Instructions
-    </label>
-    <textarea
-      value={testInfo.instructions}
-      onChange={(e) => setTestInfo({ ...testInfo, instructions: e.target.value })}
-      className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all resize-none"
-      rows="4"
-      placeholder="Instructions for students taking this test..."
-    />
-  </div>
-
-  <div className="mt-6 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl p-5 border-2 border-blue-200">
-    <div className="flex items-start gap-3">
-      <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
-        <span className="text-white font-bold text-sm">ℹ</span>
-      </div>
-      <div>
-        <p className="text-sm font-semibold text-blue-900 mb-1">Auto-calculation Active</p>
-        <p className="text-sm text-blue-800">
-          With <strong>{questions.length} questions</strong> and <strong>{testInfo.totalPoints} total points</strong>, 
-          each question will be worth approximately <strong className="text-blue-900">{calculatePointsPerQuestion()} points</strong>.
-        </p>
-      </div>
-    </div>
-  </div>
-</div>
-{/* Questions List */}
-<div className="bg-white rounded-3xl shadow-xl p-8 border-2 border-gray-100">
-  <div className="flex justify-between items-center mb-6">
-    <div className="flex items-center gap-3">
-      <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
-        <FileText size={20} className="text-white" />
-      </div>
-      <div>
-        <h3 className="text-2xl font-bold text-gray-900">Questions</h3>
-        <p className="text-sm text-gray-600">{questions.length} question{questions.length !== 1 ? 's' : ''} added</p>
-      </div>
-    </div>
-
-    <div className="flex gap-3">
-      <button
-        onClick={() => setShowHelpGuide(true)}
-        className="bg-gradient-to-r from-purple-500 to-pink-600 text-white px-5 py-3 rounded-xl font-semibold hover:shadow-xl hover:scale-105 transition-all flex items-center gap-2"
-      >
-        <Sparkles size={18} />
-        AI Assistant
-      </button>
-
-      <button
-        onClick={() => setShowAddQuestion(true)}
-        className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-5 py-3 rounded-xl font-semibold hover:shadow-xl hover:scale-105 transition-all flex items-center gap-2"
-      >
-        <Plus size={20} />
-        Add Question
-      </button>
-    </div>
-  </div>
-
-  {questions.length === 0 ? (
-    <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl border-2 border-dashed border-gray-300">
-      <FileText size={64} className="mx-auto text-gray-300 mb-4" />
-      <p className="text-gray-600 font-semibold text-lg mb-2">No questions yet</p>
-      <p className="text-gray-500 text-sm mb-6">Start building your test by adding questions</p>
-      <div className="flex gap-3 justify-center">
-        <button
-          onClick={() => setShowAddQuestion(true)}
-          className="bg-emerald-500 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-emerald-600 transition-colors"
+      {/* ═══ TEST INFO CARD ═══════════════════════════════════════════════════ */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <div
+          className="px-5 py-4 border-b flex items-center gap-3"
+          style={{ backgroundColor: `${primaryColor}08`, borderColor: `${primaryColor}20` }}
         >
-          Add First Question
-        </button>
-        <button
-          onClick={() => setShowHelpGuide(true)}
-          className="bg-purple-500 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-purple-600 transition-colors"
-        >
-          Use AI Assistant
-        </button>
-      </div>
-    </div>
-  ) : (
-    <div className="space-y-3">
-      {questions.map((q, index) => (
-        <QuestionCard
-          key={q.id}
-          question={q}
-          index={index}
-          onEdit={() => setEditingQuestion(q)}
-          onDelete={() => deleteQuestion(q.id)}
-        />
-      ))}
-    </div>
-  )}
-</div>
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{ backgroundColor: `${primaryColor}15` }}
+          >
+            <FileText size={20} style={{ color: primaryColor }} />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-gray-800">Test Information</h3>
+            <p className="text-sm text-gray-500">Basic details for your assessment</p>
+          </div>
+        </div>
 
-      {/* Add Question Modal */}
+        <div className="p-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Title */}
+            <div className="lg:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Test Title <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={testInfo.title}
+                onChange={(e) => setTestInfo({ ...testInfo, title: e.target.value })}
+                placeholder="e.g., Unit 3 Assessment - Fractions"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none transition-shadow"
+                onFocus={(e) => (e.target.style.boxShadow = `0 0 0 2px ${primaryColor}30`)}
+                onBlur={(e) => (e.target.style.boxShadow = "none")}
+              />
+            </div>
+
+            {/* Date */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                <Calendar size={14} className="inline mr-1" />
+                Test Date
+              </label>
+              <input
+                type="date"
+                value={testInfo.date}
+                onChange={(e) => setTestInfo({ ...testInfo, date: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none"
+              />
+            </div>
+
+            {/* Subject */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                <BookOpen size={14} className="inline mr-1" />
+                Subject <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <select
+                  value={testInfo.subject}
+                  onChange={(e) => setTestInfo({ ...testInfo, subject: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none appearance-none bg-white"
+                >
+                  <option value="">Select subject...</option>
+                  {subjects.map((s) => (
+                    <option key={s.id} value={s.subject_name}>
+                      {s.subject_name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
+              {subjects.length === 0 && (
+                <p className="text-xs text-gray-400 mt-1">No subjects assigned</p>
+              )}
+            </div>
+
+            {/* Class */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                <Users size={14} className="inline mr-1" />
+                Class <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <select
+                  value={testInfo.className}
+                  onChange={(e) => setTestInfo({ ...testInfo, className: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none appearance-none bg-white"
+                >
+                  <option value="">Select class...</option>
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.class_name}>
+                      {c.class_name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
+              {classes.length === 0 && (
+                <p className="text-xs text-gray-400 mt-1">No classes assigned</p>
+              )}
+            </div>
+
+            {/* Duration */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                <Clock size={14} className="inline mr-1" />
+                Duration (min)
+              </label>
+              <input
+                type="number"
+                value={testInfo.duration}
+                onChange={(e) => setTestInfo({ ...testInfo, duration: parseInt(e.target.value) || 45 })}
+                min="15"
+                max="180"
+                step="5"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none"
+              />
+            </div>
+
+            {/* Total Points */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                <Award size={14} className="inline mr-1" />
+                Total Points
+              </label>
+              <input
+                type="number"
+                value={testInfo.totalPoints}
+                onChange={(e) => setTestInfo({ ...testInfo, totalPoints: parseInt(e.target.value) || 100 })}
+                min="10"
+                max="500"
+                step="5"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none"
+              />
+            </div>
+
+            {/* Instructions Preset */}
+            <div className="lg:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Instructions Template
+              </label>
+              <div className="relative">
+                <select
+                  value={testInfo.instructionPreset}
+                  onChange={(e) => handleInstructionPresetChange(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none appearance-none bg-white"
+                >
+                  {INSTRUCTION_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Custom Instructions */}
+            <div className="lg:col-span-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Instructions Text
+                {testInfo.instructionPreset !== "custom" && (
+                  <span className="text-gray-400 font-normal ml-2">(edit to customize)</span>
+                )}
+              </label>
+              <textarea
+                value={testInfo.instructions}
+                onChange={(e) =>
+                  setTestInfo({ ...testInfo, instructions: e.target.value, instructionPreset: "custom" })
+                }
+                rows={3}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none resize-none"
+                placeholder="Enter instructions for students..."
+              />
+            </div>
+          </div>
+
+          {/* Points Summary */}
+          {questions.length > 0 && (
+            <div
+              className="mt-4 flex items-center gap-3 px-4 py-3 rounded-xl"
+              style={{ backgroundColor: `${primaryColor}08`, border: `1px solid ${primaryColor}20` }}
+            >
+              <Award size={18} style={{ color: primaryColor }} />
+              <p className="text-sm" style={{ color: primaryColor }}>
+                <strong>{questions.length}</strong> questions × <strong>{calculatePointsPerQuestion()}</strong> points each = <strong>{testInfo.totalPoints}</strong> total
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ═══ QUESTIONS CARD ═══════════════════════════════════════════════════ */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+              <FileText size={20} className="text-purple-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-800">Questions</h3>
+              <p className="text-sm text-gray-500">{questions.length} question{questions.length !== 1 ? "s" : ""} added</p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setShowAddQuestion(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-white text-sm font-medium rounded-lg shadow-sm hover:shadow-md transition-all"
+            style={{ backgroundColor: primaryColor }}
+          >
+            <Plus size={16} />
+            Add Question
+          </button>
+        </div>
+
+        <div className="p-5">
+          {questions.length === 0 ? (
+            <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+              <FileText size={40} className="mx-auto text-gray-300 mb-3" />
+              <p className="text-gray-600 font-medium mb-1">No questions yet</p>
+              <p className="text-gray-400 text-sm mb-4">Add questions manually or use AI to generate them</p>
+              <div className="flex gap-2 justify-center">
+                <button
+                  onClick={() => setShowAddQuestion(true)}
+                  className="px-4 py-2 text-white text-sm font-medium rounded-lg"
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  Add Question
+                </button>
+                <button
+                  onClick={() => setShowAIGuide(true)}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg"
+                >
+                  Use AI Guide
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {questions.map((q, index) => (
+                <QuestionCard
+                  key={q.id}
+                  question={q}
+                  index={index}
+                  primaryColor={primaryColor}
+                  onEdit={() => setEditingQuestion(q)}
+                  onDelete={() => deleteQuestion(q.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ═══ MODALS ═══════════════════════════════════════════════════════════ */}
       {showAddQuestion && (
         <AddQuestionModal
+          primaryColor={primaryColor}
           onClose={() => setShowAddQuestion(false)}
           onSave={addQuestion}
         />
       )}
 
-      {/* Edit Question Modal */}
       {editingQuestion && (
         <AddQuestionModal
           question={editingQuestion}
+          primaryColor={primaryColor}
           onClose={() => setEditingQuestion(null)}
           onSave={(data) => updateQuestion(editingQuestion.id, data)}
         />
       )}
-      {/* Help Guide Modal */}
-      {showHelpGuide && (
-        <HelpGuideModal onClose={() => setShowHelpGuide(false)} />
+
+      {showAIGuide && (
+        <AIGuideModal primaryColor={primaryColor} onClose={() => setShowAIGuide(false)} />
       )}
     </div>
   );
 };
 
-// Question Card Component
-const QuestionCard = ({ question, index, onEdit, onDelete }) => {
-  const getTypeLabel = (type) => {
-    const labels = {
-      multiple_choice: "Multiple Choice",
-      true_false: "True/False",
-      short_answer: "Short Answer",
-      essay: "Essay",
-      fill_blank: "Fill in the Blank",
-    };
-    return labels[type] || type;
+// ════════════════════════════════════════════════════════════════════════════
+// QUESTION CARD
+// ════════════════════════════════════════════════════════════════════════════
+
+const QuestionCard = ({ question, index, primaryColor, onEdit, onDelete }) => {
+  const typeConfig = {
+    multiple_choice: { label: "Multiple Choice", bg: "bg-blue-50", text: "text-blue-700" },
+    true_false: { label: "True/False", bg: "bg-green-50", text: "text-green-700" },
+    short_answer: { label: "Short Answer", bg: "bg-amber-50", text: "text-amber-700" },
+    essay: { label: "Essay", bg: "bg-purple-50", text: "text-purple-700" },
+    fill_blank: { label: "Fill in Blank", bg: "bg-pink-50", text: "text-pink-700" },
   };
 
-  const getTypeColor = (type) => {
-    const colors = {
-      multiple_choice: "bg-blue-100 text-blue-700",
-      true_false: "bg-green-100 text-green-700",
-      short_answer: "bg-yellow-100 text-yellow-700",
-      essay: "bg-purple-100 text-purple-700",
-      fill_blank: "bg-pink-100 text-pink-700",
-    };
-    return colors[type] || "bg-gray-100 text-gray-700";
-  };
+  const config = typeConfig[question.type] || typeConfig.short_answer;
 
   return (
-    <div className="border border-gray-200 rounded-lg p-4 hover:border-emerald-300 transition-colors">
+    <div className="border border-gray-200 rounded-xl p-4 hover:border-gray-300 transition-colors group">
       <div className="flex items-start gap-3">
-        <div className="flex items-center gap-2 pt-1">
-          <GripVertical size={20} className="text-gray-400 cursor-move" />
-          <span className="font-bold text-gray-700">{index + 1}.</span>
+        <div className="flex items-center gap-2 pt-0.5">
+          <GripVertical size={16} className="text-gray-300 group-hover:text-gray-400 cursor-move" />
+          <span className="font-bold text-gray-500 text-sm w-6">{index + 1}.</span>
         </div>
 
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2">
-            <span
-              className={`px-2 py-1 rounded text-xs font-medium ${getTypeColor(question.type)}`}
-            >
-              {getTypeLabel(question.type)}
+            <span className={`px-2 py-0.5 rounded text-xs font-medium ${config.bg} ${config.text}`}>
+              {config.label}
             </span>
-            <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-medium">
+            <span
+              className="px-2 py-0.5 rounded text-xs font-medium"
+              style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}
+            >
               {question.points} pts
             </span>
           </div>
 
-          <p className="text-gray-900 mb-2">{question.question}</p>
+          <p className="text-gray-800 text-sm">{question.question}</p>
 
-          {question.type === "multiple_choice" && (
-            <div className="ml-4 space-y-1">
+          {question.type === "multiple_choice" && question.options && (
+            <div className="mt-2 ml-2 space-y-1">
               {["A", "B", "C", "D"].map(
                 (letter) =>
                   question.options[letter] && (
-                    <p key={letter} className="text-sm text-gray-600">
-                      {letter}) {question.options[letter]}
+                    <p key={letter} className="text-xs text-gray-600 flex items-center gap-1">
+                      <span className="font-medium">{letter})</span> {question.options[letter]}
                       {question.correctAnswer === letter && (
-                        <span className="ml-2 text-emerald-600 font-medium">
-                          ✓
-                        </span>
+                        <Check size={12} className="text-green-600 ml-1" />
                       )}
                     </p>
-                  ),
+                  )
               )}
             </div>
           )}
 
           {question.type === "true_false" && (
-            <p className="text-sm text-gray-600 ml-4">
-              Correct Answer:{" "}
-              <span className="font-medium text-emerald-600">
-                {question.correctAnswer}
-              </span>
+            <p className="text-xs text-gray-500 mt-1">
+              Answer: <span className="font-medium text-green-600">{question.correctAnswer}</span>
             </p>
           )}
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={onEdit}
-            className="p-2 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
+            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
           >
-            <Edit2 size={16} />
+            <Edit2 size={14} />
           </button>
           <button
             onClick={onDelete}
-            className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
+            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
           >
-            <Trash2 size={16} />
+            <Trash2 size={14} />
           </button>
         </div>
       </div>
@@ -629,18 +734,15 @@ const QuestionCard = ({ question, index, onEdit, onDelete }) => {
   );
 };
 
-// Add Question Modal Component (Part 1 - will continue in next message)
-const AddQuestionModal = ({ question, onClose, onSave }) => {
-  const [questionType, setQuestionType] = useState(
-    question?.type || "multiple_choice",
-  );
+// ════════════════════════════════════════════════════════════════════════════
+// ADD/EDIT QUESTION MODAL
+// ════════════════════════════════════════════════════════════════════════════
+
+const AddQuestionModal = ({ question, primaryColor, onClose, onSave }) => {
+  const [questionType, setQuestionType] = useState(question?.type || "multiple_choice");
   const [questionText, setQuestionText] = useState(question?.question || "");
-  const [options, setOptions] = useState(
-    question?.options || { A: "", B: "", C: "", D: "" },
-  );
-  const [correctAnswer, setCorrectAnswer] = useState(
-    question?.correctAnswer || "",
-  );
+  const [options, setOptions] = useState(question?.options || { A: "", B: "", C: "", D: "" });
+  const [correctAnswer, setCorrectAnswer] = useState(question?.correctAnswer || "");
 
   const handleSave = () => {
     if (!questionText.trim()) {
@@ -648,159 +750,148 @@ const AddQuestionModal = ({ question, onClose, onSave }) => {
       return;
     }
 
-    const questionData = {
+    onSave({
       type: questionType,
       question: questionText,
       options: questionType === "multiple_choice" ? options : null,
-      correctAnswer: correctAnswer,
-    };
-
-    onSave(questionData);
+      correctAnswer,
+    });
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-8 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-        <h3 className="text-2xl font-bold text-gray-800 mb-6">
-          {question ? "Edit Question" : "Add Question"}
-        </h3>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="text-lg font-bold text-gray-800">
+            {question ? "Edit Question" : "Add Question"}
+          </h3>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
+            <X size={20} />
+          </button>
+        </div>
 
-        <div className="space-y-4">
+        <div className="p-6 space-y-4">
+          {/* Type */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Question Type
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Question Type</label>
             <select
               value={questionType}
               onChange={(e) => setQuestionType(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none"
             >
               <option value="multiple_choice">Multiple Choice</option>
               <option value="true_false">True/False</option>
               <option value="short_answer">Short Answer</option>
-              <option value="essay">Essay/Long Answer</option>
+              <option value="essay">Essay</option>
               <option value="fill_blank">Fill in the Blank</option>
             </select>
           </div>
 
+          {/* Question Text */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Question *
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Question <span className="text-red-500">*</span>
             </label>
             <textarea
               value={questionText}
               onChange={(e) => setQuestionText(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              rows="3"
+              rows={3}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none resize-none"
               placeholder="Enter your question here..."
             />
           </div>
 
+          {/* Multiple Choice Options */}
           {questionType === "multiple_choice" && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Options
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Options</label>
               <div className="space-y-2">
                 {["A", "B", "C", "D"].map((letter) => (
                   <div key={letter} className="flex items-center gap-2">
-                    <span className="font-medium text-gray-700 w-6">
-                      {letter})
-                    </span>
+                    <span className="font-medium text-gray-500 w-6 text-sm">{letter})</span>
                     <input
                       type="text"
                       value={options[letter]}
-                      onChange={(e) =>
-                        setOptions({ ...options, [letter]: e.target.value })
-                      }
-                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                      onChange={(e) => setOptions({ ...options, [letter]: e.target.value })}
+                      className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none"
                       placeholder={`Option ${letter}`}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setCorrectAnswer(letter)}
+                      className={`p-2 rounded-lg transition-colors ${
+                        correctAnswer === letter
+                          ? "bg-green-100 text-green-600"
+                          : "hover:bg-gray-100 text-gray-400"
+                      }`}
+                      title="Mark as correct"
+                    >
+                      <Check size={16} />
+                    </button>
                   </div>
                 ))}
               </div>
-
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Correct Answer
-                </label>
-                <select
-                  value={correctAnswer}
-                  onChange={(e) => setCorrectAnswer(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                >
-                  <option value="">Select correct answer...</option>
-                  <option value="A">A</option>
-                  <option value="B">B</option>
-                  <option value="C">C</option>
-                  <option value="D">D</option>
-                </select>
-              </div>
+              {!correctAnswer && (
+                <p className="text-xs text-amber-600 mt-2">Click ✓ to mark the correct answer</p>
+              )}
             </div>
           )}
 
+          {/* True/False */}
           {questionType === "true_false" && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Correct Answer
-              </label>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="tfAnswer"
-                    value="True"
-                    checked={correctAnswer === "True"}
-                    onChange={(e) => setCorrectAnswer(e.target.value)}
-                    className="w-4 h-4 text-emerald-600"
-                  />
-                  <span>True</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="tfAnswer"
-                    value="False"
-                    checked={correctAnswer === "False"}
-                    onChange={(e) => setCorrectAnswer(e.target.value)}
-                    className="w-4 h-4 text-emerald-600"
-                  />
-                  <span>False</span>
-                </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Correct Answer</label>
+              <div className="flex gap-3">
+                {["True", "False"].map((val) => (
+                  <label key={val} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="tfAnswer"
+                      value={val}
+                      checked={correctAnswer === val}
+                      onChange={(e) => setCorrectAnswer(e.target.value)}
+                      style={{ accentColor: primaryColor }}
+                    />
+                    <span className="text-sm">{val}</span>
+                  </label>
+                ))}
               </div>
             </div>
           )}
 
-          {(questionType === "short_answer" ||
-            questionType === "essay" ||
-            questionType === "fill_blank") && (
+          {/* Short Answer / Essay */}
+          {(questionType === "short_answer" || questionType === "essay" || questionType === "fill_blank") && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Sample/Expected Answer (Optional - for answer key)
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Sample Answer <span className="text-gray-400 font-normal">(for answer key)</span>
               </label>
               <textarea
                 value={correctAnswer}
                 onChange={(e) => setCorrectAnswer(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                rows="3"
-                placeholder="Enter sample answer or key points..."
+                rows={3}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none resize-none"
+                placeholder="Enter expected answer or key points..."
               />
             </div>
           )}
         </div>
 
-        <div className="flex gap-3 mt-6">
-          <button
-            onClick={handleSave}
-            className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-3 rounded-lg font-medium hover:shadow-lg transition-all"
-          >
-            {question ? "Update Question" : "Add Question"}
-          </button>
+        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-300 transition-all"
+            className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg"
           >
             Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="flex-1 px-4 py-2.5 text-sm font-medium text-white rounded-lg"
+            style={{ backgroundColor: primaryColor }}
+          >
+            {question ? "Update" : "Add Question"}
           </button>
         </div>
       </div>
@@ -808,8 +899,13 @@ const AddQuestionModal = ({ question, onClose, onSave }) => {
   );
 };
 
-// Help Guide Modal
-const HelpGuideModal = ({ onClose }) => {
+// ════════════════════════════════════════════════════════════════════════════
+// AI GUIDE MODAL
+// ════════════════════════════════════════════════════════════════════════════
+
+const AIGuideModal = ({ primaryColor, onClose }) => {
+  const [copied, setCopied] = useState(false);
+
   const promptTemplate = `Create a 15-question test for [SUBJECT] aimed at [CLASS LEVEL] students about [TOPIC].
 
 Include:
@@ -826,38 +922,26 @@ Return ONLY valid JSON (no markdown, no backticks) in this exact format:
   "className": "Y5",
   "duration": 45,
   "totalPoints": 100,
-  "instructions": "Read all questions carefully. Show your work for full credit.",
+  "instructions": "Read all questions carefully.",
   "questions": [
     {
       "type": "multiple_choice",
-      "question": "What is the capital of France?",
-      "options": {
-        "A": "London",
-        "B": "Paris",
-        "C": "Berlin",
-        "D": "Madrid"
-      },
+      "question": "What is 2 + 2?",
+      "options": { "A": "3", "B": "4", "C": "5", "D": "6" },
       "correctAnswer": "B"
     },
     {
       "type": "true_false",
-      "question": "The Earth is flat.",
-      "correctAnswer": "False"
+      "question": "The sun rises in the east.",
+      "correctAnswer": "True"
     },
     {
       "type": "short_answer",
-      "question": "Explain photosynthesis in 2-3 sentences.",
-      "correctAnswer": "Photosynthesis is the process by which plants make food using sunlight, water, and carbon dioxide."
-    },
-    {
-      "type": "essay",
-      "question": "Describe the main causes of World War I.",
-      "correctAnswer": "Key causes include militarism, alliances, imperialism, and nationalism (MAIN). The assassination of Archduke Franz Ferdinand was the immediate trigger."
+      "question": "Explain photosynthesis briefly.",
+      "correctAnswer": "Plants convert sunlight to energy."
     }
   ]
 }`;
-
-  const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(promptTemplate);
@@ -865,172 +949,93 @@ Return ONLY valid JSON (no markdown, no backticks) in this exact format:
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const steps = [
+    { title: "Open ChatGPT", desc: "Go to chatgpt.com and log in" },
+    { title: "Copy the prompt below", desc: "Click the copy button" },
+    { title: "Customize it", desc: "Replace [SUBJECT], [CLASS LEVEL], [TOPIC]" },
+    { title: "Paste & generate", desc: "ChatGPT will create your test JSON" },
+    { title: "Save as .json", desc: "Copy output, save as test.json" },
+    { title: "Upload here", desc: "Use the Upload JSON button above" },
+  ];
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-8 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-pink-100 rounded-lg flex items-center justify-center">
-            <Sparkles size={28} className="text-purple-600" />
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+              <Sparkles size={20} className="text-purple-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-800">Generate Tests with AI</h3>
+              <p className="text-sm text-gray-500">Use ChatGPT to create test questions</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-2xl font-bold text-gray-800">
-              Create Tests with ChatGPT
-            </h3>
-            <p className="text-sm text-gray-600">
-              Follow these steps to generate test questions using AI
-            </p>
-          </div>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
+            <X size={20} />
+          </button>
         </div>
 
-        <div className="space-y-6">
-          {/* Step 1 */}
-          <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                1
-              </span>
-              <h4 className="font-semibold text-gray-800">Open ChatGPT</h4>
-            </div>
-            <p className="text-sm text-gray-700 ml-8">
-              Go to{" "}
-              <a
-                href="https://chatgpt.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-purple-600 underline"
-              >
-                chatgpt.com
-              </a>{" "}
-              and log in
-            </p>
+        <div className="p-6 space-y-5">
+          {/* Steps */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {steps.map((step, i) => (
+              <div key={i} className="bg-purple-50 rounded-xl p-3 border border-purple-100">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-5 h-5 bg-purple-600 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                    {i + 1}
+                  </span>
+                  <span className="font-medium text-purple-900 text-sm">{step.title}</span>
+                </div>
+                <p className="text-xs text-purple-700 ml-7">{step.desc}</p>
+              </div>
+            ))}
           </div>
 
-          {/* Step 2 */}
-          <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                2
-              </span>
-              <h4 className="font-semibold text-gray-800">
-                Copy This Prompt Template
-              </h4>
-            </div>
-            <div className="ml-8 bg-white rounded-lg p-4 border border-gray-300 relative">
-              <pre className="text-xs text-gray-800 whitespace-pre-wrap font-mono overflow-x-auto">
-                {promptTemplate}
-              </pre>
+          {/* Prompt */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-gray-700">Prompt Template</label>
               <button
                 onClick={handleCopy}
-                className={`absolute top-2 right-2 px-3 py-1 rounded text-xs font-medium transition-all ${
-                  copied
-                    ? "bg-emerald-500 text-white"
-                    : "bg-purple-600 text-white hover:bg-purple-700"
+                className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
+                  copied ? "bg-green-100 text-green-700" : "bg-purple-100 text-purple-700 hover:bg-purple-200"
                 }`}
               >
-                {copied ? "✓ Copied!" : "Copy"}
+                {copied ? <Check size={12} /> : <Copy size={12} />}
+                {copied ? "Copied!" : "Copy"}
               </button>
             </div>
-          </div>
-
-          {/* Step 3 */}
-          <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                3
-              </span>
-              <h4 className="font-semibold text-gray-800">
-                Customize the Prompt
-              </h4>
+            <div className="bg-gray-900 rounded-xl p-4 overflow-x-auto">
+              <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono">{promptTemplate}</pre>
             </div>
-            <p className="text-sm text-gray-700 ml-8">
-              Replace{" "}
-              <code className="bg-gray-200 px-1 rounded">[SUBJECT]</code>,{" "}
-              <code className="bg-gray-200 px-1 rounded">[CLASS LEVEL]</code>,
-              and <code className="bg-gray-200 px-1 rounded">[TOPIC]</code> with
-              your test details
-            </p>
-            <p className="text-xs text-gray-600 ml-8 mt-2">
-              Example: "Create a 15-question test for{" "}
-              <strong>Mathematics</strong> aimed at <strong>Year 6</strong>{" "}
-              students about <strong>fractions and decimals</strong>."
-            </p>
-          </div>
-
-          {/* Step 4 */}
-          <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                4
-              </span>
-              <h4 className="font-semibold text-gray-800">
-                Paste into ChatGPT & Generate
-              </h4>
-            </div>
-            <p className="text-sm text-gray-700 ml-8">
-              Paste your customized prompt and press Enter. ChatGPT will
-              generate a JSON test file.
-            </p>
-          </div>
-
-          {/* Step 5 */}
-          <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                5
-              </span>
-              <h4 className="font-semibold text-gray-800">Save the JSON</h4>
-            </div>
-            <p className="text-sm text-gray-700 ml-8">
-              Copy the JSON output from ChatGPT, paste it into a text editor
-              (Notepad, VS Code), and save as{" "}
-              <code className="bg-gray-200 px-1 rounded">test.json</code>
-            </p>
-          </div>
-
-          {/* Step 6 */}
-          <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-6 h-6 bg-emerald-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                6
-              </span>
-              <h4 className="font-semibold text-gray-800">
-                Upload to Test Maker
-              </h4>
-            </div>
-            <p className="text-sm text-gray-700 ml-8">
-              Click the <strong>"Upload Test"</strong> button above and select
-              your JSON file. Done! ✅
-            </p>
           </div>
 
           {/* Tips */}
-          <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
-            <p className="text-sm text-yellow-900">
-              <strong>💡 Tips:</strong>
-            </p>
-            <ul className="text-xs text-yellow-800 space-y-1 ml-4 mt-2 list-disc">
-              <li>Be specific about the topic and difficulty level</li>
-              <li>
-                If ChatGPT includes markdown (```json), remove the backticks
-                before saving
-              </li>
-              <li>
-                You can ask ChatGPT to regenerate specific questions if you
-                don't like them
-              </li>
-              <li>
-                Always review questions for accuracy before generating the PDF
-              </li>
-            </ul>
+          <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+            <div className="flex items-start gap-2">
+              <HelpCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-900 mb-1">Tips</p>
+                <ul className="text-xs text-amber-800 space-y-1 list-disc ml-4">
+                  <li>Be specific about topic and difficulty</li>
+                  <li>Remove any markdown backticks from ChatGPT output</li>
+                  <li>Review questions for accuracy before generating PDF</li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="flex gap-3 mt-6">
+        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50">
           <button
             onClick={onClose}
-            className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-300 transition-all"
+            className="w-full px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg"
           >
-            Close Guide
+            Close
           </button>
         </div>
       </div>
