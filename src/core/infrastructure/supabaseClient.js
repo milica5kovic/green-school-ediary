@@ -1,5 +1,5 @@
 // ============================================================================
-// SUPABASE CLIENT - MULTI-TENANT VERSION
+// SUPABASE CLIENT - MULTI-TENANT VERSION (COMPLETE)
 // ============================================================================
 
 import { createClient } from '@supabase/supabase-js';
@@ -108,7 +108,7 @@ export const clearCurrentSchoolId = () => {
 
 // ============================================================================
 // TABELE KOJE TREBA FILTRIRATI PO SCHOOL_ID
-// Dodaj sve tabele koje imaju school_id kolonu
+// COMPLETE LIST - all tables with school_id column
 // ============================================================================
 
 const TENANT_TABLES = new Set([
@@ -140,7 +140,7 @@ const TENANT_TABLES = new Set([
   'teacher_profile',
   'teacher_todos',
   
-  // Comments & Reports
+  // Comments & Reports (added in migration 07)
   'subject_term_comments',
   'class_teacher_comments',
   'teacher_comments',
@@ -314,7 +314,7 @@ class TenantQueryBuilder {
     return this; 
   }
 
-  // Additional methods that might be needed
+  // Additional methods
   textSearch(column, query, options) {
     this._query = this._query.textSearch(column, query, options);
     return this;
@@ -325,13 +325,12 @@ class TenantQueryBuilder {
     return this;
   }
 
-  // CSV export
   csv() {
     this._query = this._query.csv();
     return this;
   }
   
-  // Execute - these make the builder thenable
+  // Execute
   then(resolve, reject) {
     return this._query.then(resolve, reject);
   }
@@ -359,24 +358,20 @@ class TenantSupabaseClient {
   }
 
   rpc(fn, params) {
-    // For RPC calls, we might need to pass school_id as parameter
     const paramsWithSchool = currentSchoolId 
       ? { ...params, school_id: currentSchoolId }
       : params;
     return this._client.rpc(fn, paramsWithSchool);
   }
 
-  // Access raw client when needed (use sparingly!)
   get raw() {
     return this._client;
   }
 
-  // Helper to check if tenant is set
   get hasTenant() {
     return !!currentSchoolId;
   }
 
-  // Get current tenant ID
   get tenantId() {
     return currentSchoolId;
   }
@@ -386,14 +381,11 @@ class TenantSupabaseClient {
 // EXPORTS
 // ============================================================================
 
-// Tenant-aware client - USE THIS IN ALL SERVICES
 export const tenantSupabase = new TenantSupabaseClient(supabase);
 
-// Log
 console.log('🔐 Supabase initialized (single client)');
 console.log('  URL: ✅');
 console.log('  Anon Key: ✅');
 console.log('  Service Key:', supabaseServiceKey ? '✅ (Admin API available)' : '❌ (Not set)');
 
-// Default export (raw client - avoid using directly)
 export default supabase;

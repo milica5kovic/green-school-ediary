@@ -10,6 +10,37 @@ export const useAuth = () => {
   return context;
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Helper: Extract subdomain from current URL
+// ═══════════════════════════════════════════════════════════════════════════
+const getSubdomain = () => {
+  const hostname = window.location.hostname;
+  
+  // Check URL params first (for development)
+  const params = new URLSearchParams(window.location.search);
+  const schoolParam = params.get('school');
+  if (schoolParam) return schoolParam;
+  
+  // For xxx.localhost format
+  if (hostname.includes('.localhost')) {
+    const parts = hostname.split('.');
+    if (parts.length >= 2 && parts[parts.length - 1] === 'localhost') {
+      return parts[0]; // e.g., "greenschool" from "greenschool.localhost"
+    }
+  }
+  
+  // For production domains (xxx.schoolhub.com)
+  const parts = hostname.split('.');
+  if (parts.length >= 3) {
+    const sub = parts[0];
+    if (sub !== 'www' && sub !== 'app') {
+      return sub;
+    }
+  }
+  
+  return null;
+};
+
 export const AuthProvider = ({ children, supabase }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -17,11 +48,13 @@ export const AuthProvider = ({ children, supabase }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // Refs for state management
   const isSigningOut = useRef(false);
   const isMounted = useRef(true);
   const isLoadingAuth = useRef(false);
   const hasLoadedInitialUser = useRef(false);
+  
+  // ✅ Store subdomain on mount (before any logout can happen)
+  const initialSubdomain = useRef(getSubdomain());
 
   const loadProfile = useCallback(async (userId) => {
     if (!supabase || !userId || isSigningOut.current) return null;
@@ -79,12 +112,15 @@ export const AuthProvider = ({ children, supabase }) => {
     setError(null);
   }, []);
 
-  // Initialize auth on mount
   useEffect(() => {
     if (!supabase) return;
 
     let mounted = true;
     isMounted.current = true;
+    
+    // Update subdomain ref on mount
+    initialSubdomain.current = getSubdomain();
+    console.log('🏫 Stored subdomain:', initialSubdomain.current);
 
     const initAuth = async () => {
       try {
@@ -161,9 +197,7 @@ export const AuthProvider = ({ children, supabase }) => {
           
           if (mounted) {
             setProfile(prev => {
-              if (JSON.stringify(prev) === JSON.stringify(profileData)) {
-                return prev;
-              }
+              if (JSON.stringify(prev) === JSON.stringify(profileData)) return prev;
               return profileData;
             });
           }
@@ -174,7 +208,6 @@ export const AuthProvider = ({ children, supabase }) => {
             if (mounted) {
               setTeacher(prev => {
                 if (!teacherData) return null;
-                
                 if (prev && 
                     prev.user_id === teacherData.user_id && 
                     prev.full_name === teacherData.full_name &&
@@ -182,7 +215,6 @@ export const AuthProvider = ({ children, supabase }) => {
                     JSON.stringify(prev.subjects) === JSON.stringify(teacherData.subjects)) {
                   return prev;
                 }
-                
                 return teacherData;
               });
             }
@@ -237,11 +269,15 @@ export const AuthProvider = ({ children, supabase }) => {
   };
 
   // ============================================================================
-  // SIGN OUT - Fixed to preserve subdomain
+  // SIGN OUT - Preserves subdomain for localhost
   // ============================================================================
   const signOut = async () => {
     try {
       console.log('🚪 Signing out...');
+      
+      // ✅ Get subdomain BEFORE clearing anything
+      const subdomain = initialSubdomain.current || getSubdomain();
+      console.log('🏫 Subdomain to preserve:', subdomain);
       
       isSigningOut.current = true;
       hasLoadedInitialUser.current = false;
@@ -256,17 +292,36 @@ export const AuthProvider = ({ children, supabase }) => {
       
       console.log('✅ Signed out');
       
-      // ✅ FIX: Preserve subdomain on logout
-      // Instead of window.location.href = '/' which loses subdomain,
-      // redirect to current origin (which includes subdomain)
-      const currentOrigin = window.location.origin;
-      console.log('🔄 Redirecting to:', currentOrigin);
-      window.location.href = currentOrigin;
+      // ═══════════════════════════════════════════════════════════════════════
+      // Reconstruct the correct URL with subdomain
+      // ═══════════════════════════════════════════════════════════════════════
+      
+      const protocol = window.location.protocol; // "http:" or "https:"
+      const port = window.location.port; // "3000" or ""
+      
+      let redirectUrl;
+      
+      if (subdomain) {
+        // For localhost with subdomain: greenschool.localhost:3000
+        if (window.location.hostname.includes('localhost') || window.location.hostname === 'localhost') {
+          redirectUrl = `${protocol}//${subdomain}.localhost${port ? ':' + port : ''}/`;
+        } else {
+          // For production: greenschool.schoolhub.com
+          const baseDomain = window.location.hostname.split('.').slice(-2).join('.');
+          redirectUrl = `${protocol}//${subdomain}.${baseDomain}${port ? ':' + port : ''}/`;
+        }
+      } else {
+        // No subdomain - just go to current origin
+        redirectUrl = `${protocol}//${window.location.hostname}${port ? ':' + port : ''}/`;
+      }
+      
+      console.log('🔄 Redirecting to:', redirectUrl);
+      window.location.href = redirectUrl;
       
     } catch (error) {
       console.error('❌ Sign out error:', error);
-      // Even on error, redirect to current origin
-      window.location.href = window.location.origin;
+      // Fallback: just reload
+      window.location.reload();
     }
   };
 

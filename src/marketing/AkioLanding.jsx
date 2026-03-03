@@ -408,8 +408,8 @@ export default function AkioLanding() {
   };
 
   const mqItems = isEn
-    ? ["Custom Software","School Management","React & Node.js","Multi-tenant SaaS","UI/UX Design","Belgrade Serbia","Fast Delivery","Cambridge Ready"]
-    : ["Custom Softver","Upravljanje Školom","React & Node.js","Multi-tenant SaaS","UI/UX Dizajn","Beograd Srbija","Brza Isporuka","Cambridge Spreman"];
+    ? ["Custom Software","School Management","React & Node.js","Multi-tenant SaaS","UI/UX Design","Belgrade Serbia","Fast Delivery"]
+    : ["Custom Softver","Upravljanje Školom","React & Node.js","Multi-tenant SaaS","UI/UX Dizajn","Beograd Srbija","Brza Isporuka"];
 
   return (
     <>
