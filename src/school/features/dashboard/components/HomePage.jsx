@@ -7,11 +7,43 @@ import AddClassModal from './AddClassModal';
 import { useAuth } from '../../../../core/context/AuthContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
 
+// ════════════════════════════════════════════════════════════════════════════
+// SEASONAL TERM COLORS - Winter, Spring, Summer
+// ════════════════════════════════════════════════════════════════════════════
+
 const TERM_CONFIG = {
-  1: { name: 'Winter', icon: Snowflake, bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
-  2: { name: 'Spring', icon: Flower2, bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
-  3: { name: 'Summer', icon: Sun, bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' }
+  1: { 
+    name: 'Winter', 
+    icon: Snowflake, 
+    gradient: 'from-blue-500 to-cyan-600',
+    bg: 'bg-blue-50', 
+    text: 'text-blue-700', 
+    border: 'border-blue-200',
+    buttonGradient: 'from-blue-500 to-cyan-600'
+  },
+  2: { 
+    name: 'Spring', 
+    icon: Flower2, 
+    gradient: 'from-pink-500 to-rose-600',
+    bg: 'bg-pink-50', 
+    text: 'text-pink-700', 
+    border: 'border-pink-200',
+    buttonGradient: 'from-pink-500 to-rose-600'
+  },
+  3: { 
+    name: 'Summer', 
+    icon: Sun, 
+    gradient: 'from-amber-500 to-orange-600',
+    bg: 'bg-amber-50', 
+    text: 'text-amber-700', 
+    border: 'border-amber-200',
+    buttonGradient: 'from-amber-500 to-orange-600'
+  }
 };
+
+// ════════════════════════════════════════════════════════════════════════════
+// HOMEPAGE - Teacher's Daily Class Management
+// ════════════════════════════════════════════════════════════════════════════
 
 const HomePage = () => {
   const { getDateKey, selectedDate, classService, scheduleService } = useApp();
@@ -25,14 +57,13 @@ const HomePage = () => {
   const termConfig = activeTerm ? TERM_CONFIG[activeTerm.term_number] : null;
   const TermIcon = termConfig?.icon || Calendar;
 
-  // Local pure helper — no context dependency
+  // Get day name helper
   const getDayName = (date) => {
     if (!date) return '';
-    return new Intl.DateTimeFormat('en-US', {
-      weekday: 'long',
-    }).format(new Date(date));
+    return new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date(date));
   };
 
+  // Load schedule and classes
   useEffect(() => {
     let isMounted = true;
 
@@ -74,6 +105,7 @@ const HomePage = () => {
     return () => { isMounted = false; };
   }, [selectedDate, teacher?.user_id, scheduleService, classService, getDateKey]);
 
+  // Add class handler
   const addClass = async (scheduleClass, title, comment) => {
     if (!classService || !teacher?.user_id) {
       alert('You need a teacher profile to add classes');
@@ -114,6 +146,7 @@ const HomePage = () => {
     }
   };
 
+  // Remove class handler
   const removeClass = async (classId) => {
     if (!classService || !teacher?.user_id) return;
 
@@ -144,8 +177,17 @@ const HomePage = () => {
   const hasSchedule = todaySchedule.length > 0;
   const showAdminMessage = profile?.role === 'admin' && !teacher?.user_id;
 
+  // Calculate days remaining
+  const getDaysRemaining = () => {
+    if (!activeTerm) return 0;
+    const end = new Date(activeTerm.end_date + 'T00:00:00');
+    const now = new Date();
+    return Math.max(0, Math.ceil((end - now) / (1000 * 60 * 60 * 24)));
+  };
+
   return (
     <div className="space-y-5">
+      {/* ═══ TERM BANNER - Seasonal Colors ═══ */}
       {activeTerm && termConfig && (
         <div className={`${termConfig.bg} border ${termConfig.border} rounded-xl px-4 py-2.5 flex items-center justify-between`}>
           <div className="flex items-center gap-2">
@@ -162,22 +204,15 @@ const HomePage = () => {
             </span>
           </div>
           <span className={`text-xs font-medium ${termConfig.text}`}>
-            {(() => {
-              const remaining = Math.max(
-                0,
-                Math.ceil(
-                  (new Date(activeTerm.end_date + 'T00:00:00') - new Date()) /
-                  (1000 * 60 * 60 * 24)
-                )
-              );
-              return `${remaining} days left`;
-            })()}
+            {getDaysRemaining()} days left
           </span>
         </div>
       )}
 
+      {/* ═══ DATE NAVIGATOR ═══ */}
       <DateNavigator />
 
+      {/* ═══ ADMIN MESSAGE ═══ */}
       {showAdminMessage && (
         <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6">
           <h3 className="font-semibold text-blue-900 mb-2">Admin Dashboard</h3>
@@ -192,20 +227,22 @@ const HomePage = () => {
         </div>
       )}
 
+      {/* ═══ ADD CLASS BUTTON - Seasonal Gradient ═══ */}
       {!showAdminMessage && (
         <button
           onClick={() => setShowAddClass(true)}
           disabled={localLoading || !hasSchedule}
-          className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-4 rounded-2xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className={`w-full bg-gradient-to-r ${termConfig?.buttonGradient || 'from-emerald-500 to-teal-600'} text-white py-4 rounded-2xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           <Plus size={20} />
           {!hasSchedule ? 'No classes scheduled for this day' : 'Add Class for Today'}
         </button>
       )}
 
+      {/* ═══ CLASSES LIST ═══ */}
       {dailyClasses.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow-lg p-12 text-center border border-emerald-100">
-          <Clock size={48} className="mx-auto text-emerald-300 mb-4" />
+        <div className={`bg-white rounded-2xl shadow-lg p-12 text-center border ${termConfig?.border || 'border-emerald-100'}`}>
+          <Clock size={48} className={`mx-auto mb-4 ${termConfig?.text || 'text-emerald-300'}`} style={{ opacity: 0.5 }} />
           <p className="text-gray-500">No classes added for this day yet</p>
           {hasSchedule && !showAdminMessage && (
             <p className="text-sm text-gray-400 mt-2">
@@ -221,6 +258,7 @@ const HomePage = () => {
         </div>
       )}
 
+      {/* ═══ ADD CLASS MODAL ═══ */}
       {showAddClass && (
         <AddClassModal
           onClose={() => setShowAddClass(false)}

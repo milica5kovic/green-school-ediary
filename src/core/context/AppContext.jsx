@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { tenantSupabase, getCurrentSchoolId } from '../infrastructure/supabaseClient';
+import { useTenant } from './TenantContext';
 
 // Servisi
 import { AttendanceService } from '../../school/features/attendance/services/attendanceService';
@@ -20,12 +21,18 @@ export const useApp = () => {
 
 export const AppProvider = ({ children }) => {
   // ============================================================================
+  // GET TENANT INFO - This ensures we wait for school to load
+  // ============================================================================
+  const { school, schoolId, loading: tenantLoading, isSchool } = useTenant();
+  
+  // ============================================================================
   // STATE
   // ============================================================================
   const [currentPage, setCurrentPage] = useState('home');
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [dataLoaded, setDataLoaded] = useState(false);
   
   // Date state za HomePage i druge komponente
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -34,9 +41,6 @@ export const AppProvider = ({ children }) => {
   // DATE HELPERS
   // ============================================================================
   
-  /**
-   * Convert Date to string key format: YYYY-MM-DD
-   */
   const getDateKey = useCallback((date) => {
     if (!date) return '';
     const d = new Date(date);
@@ -46,9 +50,6 @@ export const AppProvider = ({ children }) => {
     return `${year}-${month}-${day}`;
   }, []);
 
-  /**
-   * Get day name from date
-   */
   const getDayName = useCallback((date) => {
     if (!date) return '';
     return new Intl.DateTimeFormat('en-US', {
@@ -56,9 +57,6 @@ export const AppProvider = ({ children }) => {
     }).format(new Date(date));
   }, []);
 
-  /**
-   * Navigate to previous day
-   */
   const goToPreviousDay = useCallback(() => {
     setSelectedDate(prev => {
       const newDate = new Date(prev);
@@ -67,9 +65,6 @@ export const AppProvider = ({ children }) => {
     });
   }, []);
 
-  /**
-   * Navigate to next day
-   */
   const goToNextDay = useCallback(() => {
     setSelectedDate(prev => {
       const newDate = new Date(prev);
@@ -78,28 +73,19 @@ export const AppProvider = ({ children }) => {
     });
   }, []);
 
-  /**
-   * Go to today
-   */
   const goToToday = useCallback(() => {
     setSelectedDate(new Date());
   }, []);
 
   // ============================================================================
-  // SERVICES - Using tenantSupabase for automatic school_id filtering
+  // SERVICES - Recreate when schoolId changes
   // ============================================================================
   
-  const [services] = useState(() => {
-    console.log('✅ Initializing services with tenant-aware client...');
-    const schoolId = getCurrentSchoolId();
-    if (schoolId) {
-      console.log('🏫 Services will filter by school_id:', schoolId);
-    } else {
-      console.log('⚠️ No school_id set yet - services will filter when tenant is set');
-    }
+  const services = useMemo(() => {
+    console.log('🔧 Creating services with schoolId:', schoolId || 'none');
     
-    // CRITICAL: Pass tenantSupabase to all services
-    // This ensures all queries automatically include school_id filter
+    // Pass tenantSupabase to all services
+    // tenantSupabase will automatically filter by currentSchoolId
     return {
       attendance: new AttendanceService(tenantSupabase),
       classes: new ClassService(tenantSupabase),
@@ -109,45 +95,63 @@ export const AppProvider = ({ children }) => {
       todos: new TodoService(tenantSupabase),
       parents: new ParentService(tenantSupabase),
     };
-  });
-
-  console.log('✅ App services initialized (tenant-aware)');
+  }, [schoolId]); // Recreate services when schoolId changes
 
   // ============================================================================
   // STUDENT OPERATIONS
   // ============================================================================
 
   const loadAllStudents = useCallback(async () => {
+    // Don't load if tenant is still loading or no school
+    if (tenantLoading) {
+      console.log('⏳ Waiting for tenant to load...');
+      return;
+    }
+    
+    if (!schoolId && isSchool) {
+      console.log('⚠️ No schoolId yet, waiting...');
+      return;
+    }
+    
     try {
       setLoading(true);
       setError(null);
       
-      const schoolId = getCurrentSchoolId();
-      console.log('📚 Loading students for school:', schoolId || 'NO SCHOOL SET');
-      
-      if (!schoolId) {
-        console.log('⚠️ No school_id, skipping student load');
-        setStudents([]);
-        setLoading(false);
-        return;
-      }
+      console.log('📚 Loading students for school:', schoolId);
       
       const data = await services.students.getAllStudents();
       console.log(`✅ Loaded ${data?.length || 0} students`);
       setStudents(data || []);
+      setDataLoaded(true);
     } catch (err) {
       console.error('❌ Error loading students:', err);
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [services]);
+  }, [services, schoolId, tenantLoading, isSchool]);
 
-  // Load students when component mounts
+  // Load students when schoolId becomes available
   useEffect(() => {
-    const timer = setTimeout(() => loadAllStudents(), 100);
-    return () => clearTimeout(timer);
-  }, [loadAllStudents]);
+    // Only load when:
+    // 1. Tenant is done loading
+    // 2. We have a schoolId (for school tenants)
+    // 3. Data hasn't been loaded yet
+    if (!tenantLoading && schoolId && !dataLoaded) {
+      console.log('🚀 SchoolId ready, loading students...');
+      loadAllStudents();
+    }
+    
+    // For non-school contexts (owner dashboard, marketing), just set loading to false
+    if (!tenantLoading && !isSchool) {
+      setLoading(false);
+    }
+  }, [tenantLoading, schoolId, dataLoaded, loadAllStudents, isSchool]);
+
+  // Reset dataLoaded when schoolId changes (e.g., switching schools)
+  useEffect(() => {
+    setDataLoaded(false);
+  }, [schoolId]);
 
   const getStudentsByClass = useCallback(() => {
     return students.reduce((acc, student) => {
@@ -193,8 +197,12 @@ export const AppProvider = ({ children }) => {
   // ============================================================================
 
   const value = {
-    // ⭐ SUPABASE CLIENT - tenant-aware, for components that need direct access
+    // ⭐ SUPABASE CLIENT - tenant-aware
     supabase: tenantSupabase,
+    
+    // School info (from TenantContext)
+    school,
+    schoolId,
     
     // Page navigation
     currentPage, 
@@ -231,7 +239,7 @@ export const AppProvider = ({ children }) => {
     parentService: services.parents,
     
     // Loading state
-    loading, 
+    loading: loading || tenantLoading, 
     error,
   };
 

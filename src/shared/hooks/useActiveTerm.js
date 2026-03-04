@@ -1,102 +1,109 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../../core/infrastructure/supabaseClient';
+import { useState, useEffect, useCallback } from 'react';
+import { useApp } from '../../core/context/AppContext';
 
-const getTodayStr = () => {
-  const today = new Date();
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-};
-
+/**
+ * useActiveTerm - Multi-tenant aware hook for academic terms
+ * 
+ * Returns:
+ * - activeTerm: Current active term (is_current = true)
+ * - allTerms: All terms for current academic year
+ * - loading: Loading state
+ * - error: Error state
+ * - refetch: Function to refetch terms
+ * 
+ * @example
+ * const { activeTerm, allTerms, loading } = useActiveTerm();
+ * 
+ * if (activeTerm) {
+ *   console.log(`Current term: ${activeTerm.term_number}`);
+ * }
+ */
 const useActiveTerm = () => {
+  const { supabase } = useApp();
+  
   const [activeTerm, setActiveTerm] = useState(null);
   const [allTerms, setAllTerms] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchTerms = useCallback(async () => {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Get current academic year (August to July)
+      const now = new Date();
+      const currentMonth = now.getMonth(); // 0-11
+      const currentYear = now.getFullYear();
+      
+      // Academic year starts in August (month 7)
+      // If we're in Aug-Dec, academic year is currentYear-nextYear
+      // If we're in Jan-Jul, academic year is prevYear-currentYear
+      let academicYear;
+      if (currentMonth >= 7) { // August onwards
+        academicYear = `${currentYear}-${(currentYear + 1).toString().slice(-2)}`;
+      } else {
+        academicYear = `${currentYear - 1}-${currentYear.toString().slice(-2)}`;
+      }
+
+      // Fetch all terms for this academic year
+      // Note: supabase from useApp() is already tenant-filtered via RLS
+      const { data: terms, error: termsError } = await supabase
+        .from('academic_terms')
+        .select('*')
+        .eq('academic_year', academicYear)
+        .order('term_number');
+
+      if (termsError) throw termsError;
+
+      setAllTerms(terms || []);
+
+      // Find active term (is_current = true)
+      const active = terms?.find(t => t.is_current);
+      
+      if (active) {
+        setActiveTerm(active);
+      } else {
+        // Fallback: find term that contains today's date
+        const today = now.toISOString().split('T')[0];
+        const currentByDate = terms?.find(t => 
+          t.start_date <= today && t.end_date >= today
+        );
+        
+        if (currentByDate) {
+          setActiveTerm(currentByDate);
+        } else {
+          // No current term found
+          setActiveTerm(null);
+        }
+      }
+
+    } catch (err) {
+      console.error('Error fetching terms:', err);
+      setError(err.message);
+      setActiveTerm(null);
+      setAllTerms([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase]);
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        // Get all terms, most recent year first
-        const { data: terms, error } = await supabase
-          .from('academic_terms')
-          .select('*')
-          .order('academic_year', { ascending: false })
-          .order('term_number', { ascending: true });
+    fetchTerms();
+  }, [fetchTerms]);
 
-        if (error) throw error;
-        if (!terms || terms.length === 0) {
-          setAllTerms([]);
-          setActiveTerm(null);
-          setLoading(false);
-          return;
-        }
-
-        // Find the current academic year (the one with an active term, or the most recent)
-        const activeRow = terms.find(t => t.is_active);
-        const currentYear = activeRow?.academic_year || terms[0]?.academic_year;
-        const yearTerms = terms
-          .filter(t => t.academic_year === currentYear)
-          .sort((a, b) => a.term_number - b.term_number);
-
-        // Auto-activate: check if the right term is active based on today's date
-        const today = getTodayStr();
-        let correctTerm = null;
-
-        for (const term of yearTerms) {
-          if (today >= term.start_date && today <= term.end_date) {
-            correctTerm = term;
-            break;
-          }
-        }
-
-        // If no term covers today, find the next upcoming one
-        if (!correctTerm) {
-          const upcoming = yearTerms.filter(t => t.start_date > today);
-          correctTerm = upcoming[0] || yearTerms[yearTerms.length - 1];
-        }
-
-        // Auto-activate if the wrong term is active
-        if (correctTerm && (!activeRow || activeRow.id !== correctTerm.id)) {
-          console.log(`🔄 Auto-activating Term ${correctTerm.term_number} (${correctTerm.term_name})`);
-
-          // Deactivate all terms for this year
-          await supabase
-            .from('academic_terms')
-            .update({ is_active: false })
-            .eq('academic_year', currentYear);
-
-          // Activate the correct term
-          await supabase
-            .from('academic_terms')
-            .update({ is_active: true })
-            .eq('id', correctTerm.id);
-
-          correctTerm.is_active = true;
-
-          // Auto-finalize past terms that aren't finalized yet
-          for (const term of yearTerms) {
-            if (term.end_date < today && !term.is_finalized && term.id !== correctTerm.id) {
-              console.log(`🔒 Auto-finalizing Term ${term.term_number} (${term.term_name})`);
-              await supabase
-                .from('academic_terms')
-                .update({ is_finalized: true })
-                .eq('id', term.id);
-              term.is_finalized = true;
-            }
-          }
-        }
-
-        setAllTerms(yearTerms);
-        setActiveTerm(correctTerm);
-      } catch (err) {
-        console.error('Failed to load active term:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    load();
-  }, []);
-
-  return { activeTerm, allTerms, loading };
+  return {
+    activeTerm,
+    allTerms,
+    loading,
+    error,
+    refetch: fetchTerms,
+  };
 };
 
 export default useActiveTerm;

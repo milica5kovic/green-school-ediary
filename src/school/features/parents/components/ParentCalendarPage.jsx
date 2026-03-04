@@ -1,26 +1,24 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown,
-  BookOpen, FileText, Clock, Award, X, Snowflake, Flower2, Sun, AlertCircle
+  FileText, Award, X
 } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
-import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
+import useTermTheme from '../../../../shared/hooks/useTermTheme';
 
-const TERM_CONFIG = {
-  1: { name: 'Winter', icon: Snowflake, gradient: 'from-blue-500 to-cyan-600', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
-  2: { name: 'Spring', icon: Flower2, gradient: 'from-pink-500 to-rose-600', bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
-  3: { name: 'Summer', icon: Sun, gradient: 'from-amber-500 to-orange-600', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
-};
+// ════════════════════════════════════════════════════════════════════════════
+// PARENT CALENDAR PAGE - Uses useTermTheme for dynamic colors
+// ════════════════════════════════════════════════════════════════════════════
 
 const EVENT_COLORS = {
   holiday: { bg: 'bg-gray-200', text: 'text-gray-700', dot: 'bg-gray-500' },
   break: { bg: 'bg-gray-200', text: 'text-gray-700', dot: 'bg-gray-500' },
+  Holiday: { bg: 'bg-gray-200', text: 'text-gray-700', dot: 'bg-gray-500' },
   Assembly: { bg: 'bg-blue-100', text: 'text-blue-700', dot: 'bg-blue-500' },
   Trip: { bg: 'bg-teal-100', text: 'text-teal-700', dot: 'bg-teal-500' },
   Sports: { bg: 'bg-amber-100', text: 'text-amber-700', dot: 'bg-amber-500' },
   Meeting: { bg: 'bg-violet-100', text: 'text-violet-700', dot: 'bg-violet-500' },
   Performance: { bg: 'bg-pink-100', text: 'text-pink-700', dot: 'bg-pink-500' },
-  Holiday: { bg: 'bg-gray-200', text: 'text-gray-700', dot: 'bg-gray-500' },
   exam_period: { bg: 'bg-orange-100', text: 'text-orange-700', dot: 'bg-orange-500' },
 };
 
@@ -28,7 +26,8 @@ const getEventStyle = (type) => EVENT_COLORS[type] || { bg: 'bg-blue-100', text:
 
 const ParentCalendarPage = () => {
   const { supabase } = useApp();
-  const { activeTerm } = useActiveTerm();
+  const theme = useTermTheme();
+  const TermIcon = theme.icon;
 
   const [children, setChildren] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
@@ -39,10 +38,10 @@ const ParentCalendarPage = () => {
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState(null);
 
-  const termConfig = activeTerm ? TERM_CONFIG[activeTerm.term_number] : null;
-  const TermIcon = termConfig?.icon || CalendarIcon;
+  // ══════════════════════════════════════════════════════════════════════════
+  // LOAD CHILDREN
+  // ══════════════════════════════════════════════════════════════════════════
 
-  // ─── Load children ────────────────────────────────────
   useEffect(() => {
     (async () => {
       if (!supabase) return;
@@ -50,44 +49,79 @@ const ParentCalendarPage = () => {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-        const { data: parent } = await supabase.from('parents').select('id').eq('user_id', user.id).single();
+        
+        const { data: parent } = await supabase
+          .from('parents')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
+        
         if (!parent) return;
-        const { data: links } = await supabase.from('student_parents').select('students(*)').eq('parent_id', parent.id);
+        
+        const { data: links } = await supabase
+          .from('student_parents')
+          .select('students(*)')
+          .eq('parent_id', parent.id);
+        
         const list = links?.map(l => l.students).filter(Boolean) || [];
         setChildren(list);
         if (list.length > 0) setSelectedChild(list[0]);
-      } catch (err) { console.error(err); }
-      finally { setLoading(false); }
+      } catch (err) { 
+        console.error(err); 
+      } finally { 
+        setLoading(false); 
+      }
     })();
   }, [supabase]);
 
-  // ─── Load calendar data ───────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // LOAD CALENDAR DATA
+  // ══════════════════════════════════════════════════════════════════════════
+
   const loadCalendarData = useCallback(async () => {
     if (!supabase || !selectedChild) return;
     try {
       const className = selectedChild.class_name;
 
-      // Events
-      const { data: events } = await supabase.from('school_events').select('*').order('start_date');
+      const { data: events } = await supabase
+        .from('school_events')
+        .select('*')
+        .order('start_date');
+      
       const relevant = (events || []).filter(e => {
-        const affected = Array.isArray(e.affects_classes) ? e.affects_classes : JSON.parse(e.affects_classes || '["All"]');
+        const affected = Array.isArray(e.affects_classes) 
+          ? e.affects_classes 
+          : JSON.parse(e.affects_classes || '["All"]');
         return affected.includes('All') || affected.includes(className);
       });
       setSchoolEvents(relevant);
 
-      // Tests
-      const { data: tests } = await supabase.from('scheduled_tests').select('*').eq('class_name', className).order('test_date');
+      const { data: tests } = await supabase
+        .from('scheduled_tests')
+        .select('*')
+        .eq('class_name', className)
+        .order('test_date');
       setScheduledTests(tests || []);
 
-      // Homework
-      const { data: hw } = await supabase.from('homework').select('*').eq('class_name', className).order('due_date');
+      const { data: hw } = await supabase
+        .from('homework')
+        .select('*')
+        .eq('class_name', className)
+        .order('due_date');
       setHomeworkDue(hw || []);
-    } catch (err) { console.error(err); }
+    } catch (err) { 
+      console.error(err); 
+    }
   }, [supabase, selectedChild]);
 
-  useEffect(() => { if (selectedChild) loadCalendarData(); }, [selectedChild, loadCalendarData]);
+  useEffect(() => { 
+    if (selectedChild) loadCalendarData(); 
+  }, [selectedChild, loadCalendarData]);
 
-  // ─── Calendar helpers ─────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // CALENDAR HELPERS
+  // ══════════════════════════════════════════════════════════════════════════
+
   const getDaysInMonth = (date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -129,7 +163,6 @@ const ParentCalendarPage = () => {
   const prevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));
   const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1));
 
-  // ─── Upcoming items for sidebar ───────────────────────
   const today = new Date().toISOString().split('T')[0];
   const upcomingTests = scheduledTests.filter(t => t.test_date >= today).slice(0, 5);
   const upcomingEvents = schoolEvents.filter(e => e.start_date >= today).slice(0, 5);
@@ -142,11 +175,15 @@ const ParentCalendarPage = () => {
     return `${diff}d`;
   };
 
-  // ─── Loading / Empty ──────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // LOADING / EMPTY
+  // ══════════════════════════════════════════════════════════════════════════
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-12 h-12 border-4 rounded-full animate-spin"
+          style={{ borderColor: theme.withAlpha(0.3), borderTopColor: 'transparent' }}></div>
       </div>
     );
   }
@@ -164,11 +201,15 @@ const ParentCalendarPage = () => {
   const daysInMonth = getDaysInMonth(currentMonth);
   const monthName = currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // RENDER
+  // ══════════════════════════════════════════════════════════════════════════
+
   return (
     <div className="space-y-6">
-
-      {/* ═══ HEADER ═══════════════════════════════════════ */}
-      <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-lg p-6 md:p-8 text-white relative overflow-hidden">
+      {/* ═══ HEADER - Dynamic Gradient ═══ */}
+      <div className="rounded-2xl shadow-lg p-6 md:p-8 text-white relative overflow-hidden"
+        style={theme.gradientStyle}>
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32" />
 
         <div className="relative z-10 flex items-center justify-between">
@@ -178,22 +219,29 @@ const ParentCalendarPage = () => {
             </div>
             <div>
               <h1 className="text-2xl md:text-3xl font-bold">School Calendar</h1>
-              <p className="text-emerald-100 text-sm">Events, tests, homework & holidays</p>
+              <p className="text-white/80 text-sm">Events, tests, homework & holidays</p>
             </div>
           </div>
+          
           <div className="flex items-center gap-3">
-            {activeTerm && termConfig && (
+            {theme.hasActiveTerm && (
               <div className="hidden sm:flex bg-white/15 backdrop-blur px-3 py-1.5 rounded-lg items-center gap-1.5">
                 <TermIcon size={14} />
-                <span className="text-xs font-medium">{termConfig.name} Term</span>
+                <span className="text-xs font-medium">{theme.name} Term</span>
               </div>
             )}
             {children.length > 1 && (
               <div className="relative">
-                <select value={selectedChild?.id || ''}
+                <select 
+                  value={selectedChild?.id || ''}
                   onChange={(e) => setSelectedChild(children.find(c => c.id === e.target.value))}
-                  className="appearance-none bg-white/20 backdrop-blur border border-white/30 rounded-xl px-4 py-2.5 pr-10 text-sm font-medium text-white focus:outline-none cursor-pointer">
-                  {children.map(c => <option key={c.id} value={c.id} className="text-gray-900">{c.name} — {c.class_name}</option>)}
+                  className="appearance-none bg-white/20 backdrop-blur border border-white/30 rounded-xl px-4 py-2.5 pr-10 text-sm font-medium text-white focus:outline-none cursor-pointer"
+                >
+                  {children.map(c => (
+                    <option key={c.id} value={c.id} className="text-gray-900">
+                      {c.full_name || c.name} — {c.class_name}
+                    </option>
+                  ))}
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none" size={14} />
               </div>
@@ -202,22 +250,23 @@ const ParentCalendarPage = () => {
         </div>
       </div>
 
-      {/* ═══ CALENDAR + SIDEBAR ══════════════════════════ */}
+      {/* ═══ CALENDAR + SIDEBAR ═══ */}
       <div className="grid lg:grid-cols-3 gap-6">
-
         {/* Calendar */}
         <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
           <div className="flex justify-between items-center mb-5">
             <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <CalendarIcon size={20} className="text-emerald-600" />
+              <CalendarIcon size={20} style={theme.textStyle} />
               {monthName}
             </h3>
             <div className="flex gap-1.5">
-              <button onClick={prevMonth} className="p-2 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">
-                <ChevronLeft size={18} className="text-gray-600" />
+              <button onClick={prevMonth} className="p-2 rounded-xl transition-colors"
+                style={{ backgroundColor: theme.withAlpha(0.1) }}>
+                <ChevronLeft size={18} style={theme.textStyle} />
               </button>
-              <button onClick={nextMonth} className="p-2 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">
-                <ChevronRight size={18} className="text-gray-600" />
+              <button onClick={nextMonth} className="p-2 rounded-xl transition-colors"
+                style={{ backgroundColor: theme.withAlpha(0.1) }}>
+                <ChevronRight size={18} style={theme.textStyle} />
               </button>
             </div>
           </div>
@@ -235,18 +284,23 @@ const ParentCalendarPage = () => {
               if (!date) return <div key={'e-' + idx} className="aspect-square md:min-h-[80px]" />;
 
               const { events, tests, homework } = getEventsForDate(date);
-              const today = isToday(date);
+              const todayFlag = isToday(date);
               const weekend = isWeekend(date);
               const hasItems = events.length > 0 || tests.length > 0 || homework.length > 0;
               const isBreak = events.some(e => e.event_type === 'Holiday' || e.event_type === 'holiday' || e.event_type === 'break');
 
               return (
-                <div key={idx}
+                <div 
+                  key={idx}
                   onClick={() => hasItems && setSelectedDay({ date, events, tests, homework })}
                   className={`aspect-square md:aspect-auto md:min-h-[80px] rounded-xl border p-1 md:p-1.5 transition-all flex flex-col
-                    ${isBreak ? 'bg-gray-100 border-gray-300' : today ? 'border-emerald-400 bg-emerald-50 shadow-sm' : weekend ? 'bg-gray-50 border-gray-100' : hasItems ? 'border-gray-200 hover:border-emerald-300 hover:shadow-sm cursor-pointer' : 'border-gray-200'}
-                  `}>
-                  <span className={`text-xs font-semibold ${today ? 'text-emerald-600' : isBreak ? 'text-gray-400' : weekend ? 'text-gray-400' : 'text-gray-700'}`}>
+                    ${isBreak ? 'bg-gray-100 border-gray-300' : 
+                      weekend ? 'bg-gray-50 border-gray-100' : 
+                      hasItems ? 'border-gray-200 hover:border-gray-300 hover:shadow-sm cursor-pointer' : 'border-gray-200'}`}
+                  style={todayFlag ? { borderColor: theme.color, backgroundColor: theme.withAlpha(0.05) } : {}}
+                >
+                  <span className={`text-xs font-semibold ${isBreak ? 'text-gray-400' : weekend ? 'text-gray-400' : 'text-gray-700'}`}
+                    style={todayFlag ? theme.textStyle : {}}>
                     {date.getDate()}
                   </span>
 
@@ -340,7 +394,7 @@ const ParentCalendarPage = () => {
           {/* Upcoming Events */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
             <h3 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
-              <CalendarIcon size={16} className="text-blue-600" />
+              <CalendarIcon size={16} style={theme.textStyle} />
               Upcoming Events
             </h3>
             {upcomingEvents.length > 0 ? (
@@ -348,11 +402,11 @@ const ParentCalendarPage = () => {
                 {upcomingEvents.map(e => (
                   <div key={e.id} className="flex items-center gap-2.5 p-2.5 bg-gray-50 rounded-xl">
                     <div className="w-9 h-9 rounded-lg flex flex-col items-center justify-center flex-shrink-0 border"
-                      style={{ backgroundColor: (e.color || '#3b82f6') + '15', borderColor: (e.color || '#3b82f6') + '40' }}>
-                      <span className="text-[7px] font-medium leading-none" style={{ color: e.color || '#3b82f6' }}>
+                      style={{ backgroundColor: (e.color || theme.color) + '15', borderColor: (e.color || theme.color) + '40' }}>
+                      <span className="text-[7px] font-medium leading-none" style={{ color: e.color || theme.color }}>
                         {new Date(e.start_date + 'T00:00:00').toLocaleDateString('en-GB', { month: 'short' }).toUpperCase()}
                       </span>
-                      <span className="text-[11px] font-bold leading-none" style={{ color: e.color || '#3b82f6' }}>
+                      <span className="text-[11px] font-bold leading-none" style={{ color: e.color || theme.color }}>
                         {new Date(e.start_date + 'T00:00:00').getDate()}
                       </span>
                     </div>
@@ -360,7 +414,8 @@ const ParentCalendarPage = () => {
                       <p className="text-xs font-medium text-gray-800 truncate">{e.title}</p>
                       <p className="text-[10px] text-gray-500">{e.event_type}{e.location ? ` · ${e.location}` : ''}</p>
                     </div>
-                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 flex-shrink-0">
+                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: theme.withAlpha(0.1), color: theme.color }}>
                       {daysUntil(e.start_date)}
                     </span>
                   </div>
@@ -393,9 +448,10 @@ const ParentCalendarPage = () => {
                       <p className="text-xs font-medium text-gray-800 truncate">{h.title}</p>
                       <p className="text-[10px] text-gray-500">{h.subject}</p>
                     </div>
-                    <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
-                      daysUntil(h.due_date) === 'Today' ? 'bg-red-100 text-red-600' : 'bg-amber-50 text-amber-600'
-                    }`}>{daysUntil(h.due_date)}</span>
+                    <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 
+                      ${daysUntil(h.due_date) === 'Today' ? 'bg-red-100 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
+                      {daysUntil(h.due_date)}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -406,38 +462,39 @@ const ParentCalendarPage = () => {
         </div>
       </div>
 
-      {/* ═══ DAY DETAIL MODAL ════════════════════════════ */}
+      {/* ═══ DAY DETAIL MODAL ═══ */}
       {selectedDay && (
         <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={() => setSelectedDay(null)}>
           <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            {/* Modal Header */}
-            <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-4 rounded-t-2xl flex items-center justify-between">
+            {/* Modal Header - Dynamic */}
+            <div className="px-5 py-4 rounded-t-2xl flex items-center justify-between text-white"
+              style={theme.gradientStyle}>
               <div>
-                <h3 className="text-lg font-bold text-white">
+                <h3 className="text-lg font-bold">
                   {selectedDay.date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                 </h3>
-                <p className="text-emerald-100 text-xs mt-0.5">
+                <p className="text-white/80 text-xs mt-0.5">
                   {selectedDay.events.length + selectedDay.tests.length + selectedDay.homework.length} items
                 </p>
               </div>
-              <button onClick={() => setSelectedDay(null)} className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white">
+              <button onClick={() => setSelectedDay(null)} className="p-1.5 hover:bg-white/20 rounded-lg transition-colors">
                 <X size={18} />
               </button>
             </div>
 
             {/* Modal Content */}
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              {/* Events */}
               {selectedDay.events.length > 0 && (
                 <div>
                   <h4 className="font-bold text-gray-800 text-sm mb-2 flex items-center gap-2">
-                    <CalendarIcon size={14} className="text-blue-600" /> School Events
+                    <CalendarIcon size={14} style={theme.textStyle} /> School Events
                   </h4>
                   <div className="space-y-2">
                     {selectedDay.events.map((e, i) => (
-                      <div key={i} className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                      <div key={i} className="p-3 rounded-xl border"
+                        style={{ backgroundColor: theme.withAlpha(0.05), borderColor: theme.withAlpha(0.2) }}>
                         <p className="font-semibold text-gray-800 text-sm">{e.title}</p>
-                        <p className="text-xs text-blue-600 mt-0.5">{e.event_type}{e.location ? ` · ${e.location}` : ''}</p>
+                        <p className="text-xs mt-0.5" style={theme.textStyle}>{e.event_type}{e.location ? ` · ${e.location}` : ''}</p>
                         {e.description && <p className="text-xs text-gray-600 mt-1.5">{e.description}</p>}
                       </div>
                     ))}
@@ -445,7 +502,6 @@ const ParentCalendarPage = () => {
                 </div>
               )}
 
-              {/* Tests */}
               {selectedDay.tests.length > 0 && (
                 <div>
                   <h4 className="font-bold text-gray-800 text-sm mb-2 flex items-center gap-2">
@@ -466,7 +522,6 @@ const ParentCalendarPage = () => {
                 </div>
               )}
 
-              {/* Homework */}
               {selectedDay.homework.length > 0 && (
                 <div>
                   <h4 className="font-bold text-gray-800 text-sm mb-2 flex items-center gap-2">
@@ -490,7 +545,8 @@ const ParentCalendarPage = () => {
             {/* Modal footer */}
             <div className="border-t px-5 py-3">
               <button onClick={() => setSelectedDay(null)}
-                className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-2.5 rounded-xl hover:shadow-lg transition-all font-semibold text-sm">
+                className="w-full text-white py-2.5 rounded-xl hover:shadow-lg transition-all font-semibold text-sm"
+                style={theme.gradientStyle}>
                 Close
               </button>
             </div>
@@ -498,15 +554,16 @@ const ParentCalendarPage = () => {
         </div>
       )}
 
-      {/* ═══ TERM FOOTER ═════════════════════════════════ */}
-      {activeTerm && termConfig && (
-        <div className={`${termConfig.bg} border ${termConfig.border} rounded-xl px-4 py-3 flex items-center justify-between`}>
+      {/* ═══ TERM FOOTER ═══ */}
+      {theme.hasActiveTerm && (
+        <div className="rounded-xl px-4 py-3 flex items-center justify-between"
+          style={{ backgroundColor: theme.withAlpha(0.1), borderWidth: '1px', borderColor: theme.withAlpha(0.2) }}>
           <div className="flex items-center gap-2">
-            <TermIcon size={14} className={termConfig.text} />
-            <span className={`text-xs font-semibold ${termConfig.text}`}>{termConfig.name} Term {activeTerm.academic_year}</span>
+            <TermIcon size={14} style={theme.textStyle} />
+            <span className="text-xs font-semibold" style={theme.textStyle}>{theme.name} Term {theme.activeTerm.academic_year}</span>
           </div>
-          <span className={`text-[10px] font-medium ${termConfig.text}`}>
-            {Math.max(0, Math.ceil((new Date(activeTerm.end_date + 'T00:00:00') - new Date()) / 86400000))}d left
+          <span className="text-[10px] font-medium" style={theme.textStyle}>
+            {theme.daysRemaining}d left
           </span>
         </div>
       )}

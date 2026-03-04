@@ -20,6 +20,16 @@ const DEFAULT_BRANDING = {
   secondaryColor: '#0d9488',
   accentColor: '#f59e0b',
   
+  // Term Colors (NEW)
+  term1Color: '#3b82f6',   // Winter - Blue
+  term2Color: '#ec4899',   // Spring - Pink
+  term3Color: '#f59e0b',   // Summer - Amber
+  
+  // Term Names (NEW)
+  term1Name: 'Winter',
+  term2Name: 'Spring',
+  term3Name: 'Summer',
+  
   // Computed colors (will be calculated)
   primaryRgb: { r: 16, g: 185, b: 129 },
   secondaryRgb: { r: 13, g: 148, b: 136 },
@@ -105,6 +115,16 @@ export const BrandingProvider = ({ children }) => {
       secondaryColor: school.secondary_color || DEFAULT_BRANDING.secondaryColor,
       accentColor: school.accent_color || DEFAULT_BRANDING.accentColor,
       
+      // ═══ TERM COLORS (NEW) ═══
+      term1Color: school.term1_color || DEFAULT_BRANDING.term1Color,
+      term2Color: school.term2_color || DEFAULT_BRANDING.term2Color,
+      term3Color: school.term3_color || DEFAULT_BRANDING.term3Color,
+      
+      // ═══ TERM NAMES (NEW) ═══
+      term1Name: school.term1_name || DEFAULT_BRANDING.term1Name,
+      term2Name: school.term2_name || DEFAULT_BRANDING.term2Name,
+      term3Name: school.term3_name || DEFAULT_BRANDING.term3Name,
+      
       // Computed RGB (for PDF, canvas, etc.)
       primaryRgb: hexToRgb(school.primary_color || DEFAULT_BRANDING.primaryColor),
       secondaryRgb: hexToRgb(school.secondary_color || DEFAULT_BRANDING.secondaryColor),
@@ -153,8 +173,40 @@ export const BrandingProvider = ({ children }) => {
     
   }, [school, schoolId, isSchool, tenantLoading]);
 
+  // ═══ UPDATE BRANDING (for real-time preview in settings) ═══
+  const updateBranding = (updates) => {
+    setBranding(prev => {
+      const updated = { ...prev, ...updates };
+      
+      // Update CSS variables for preview
+      const root = document.documentElement;
+      if (updates.primaryColor) {
+        root.style.setProperty('--school-primary', updates.primaryColor);
+      }
+      if (updates.secondaryColor) {
+        root.style.setProperty('--school-secondary', updates.secondaryColor);
+      }
+      if (updates.term1Color) {
+        root.style.setProperty('--school-term1', updates.term1Color);
+      }
+      if (updates.term2Color) {
+        root.style.setProperty('--school-term2', updates.term2Color);
+      }
+      if (updates.term3Color) {
+        root.style.setProperty('--school-term3', updates.term3Color);
+      }
+      
+      return updated;
+    });
+  };
+
+  const value = {
+    ...branding,
+    updateBranding,
+  };
+
   return (
-    <BrandingContext.Provider value={branding}>
+    <BrandingContext.Provider value={value}>
       {children}
     </BrandingContext.Provider>
   );
@@ -185,6 +237,11 @@ const applyBrandingToDocument = (branding) => {
   root.style.setProperty('--school-primary-light', branding.primaryLight);
   root.style.setProperty('--school-primary-dark', branding.primaryDark);
   root.style.setProperty('--school-primary-rgb', `${branding.primaryRgb.r}, ${branding.primaryRgb.g}, ${branding.primaryRgb.b}`);
+  
+  // ═══ TERM COLOR CSS VARIABLES (NEW) ═══
+  root.style.setProperty('--school-term1', branding.term1Color);
+  root.style.setProperty('--school-term2', branding.term2Color);
+  root.style.setProperty('--school-term3', branding.term3Color);
   
   // Set meta theme color (for mobile browsers)
   let metaTheme = document.querySelector("meta[name='theme-color']");
@@ -221,8 +278,16 @@ export const useFeature = (featureName) => {
 
 // Get colors for inline styles
 export const useBrandColors = () => {
-  const { primaryColor, secondaryColor, accentColor, primaryRgb, primaryLight, primaryDark } = useBranding();
-  return { primaryColor, secondaryColor, accentColor, primaryRgb, primaryLight, primaryDark };
+  const { 
+    primaryColor, secondaryColor, accentColor, 
+    primaryRgb, primaryLight, primaryDark,
+    term1Color, term2Color, term3Color
+  } = useBranding();
+  return { 
+    primaryColor, secondaryColor, accentColor, 
+    primaryRgb, primaryLight, primaryDark,
+    term1Color, term2Color, term3Color
+  };
 };
 
 // Get PDF branding
@@ -241,6 +306,20 @@ export const usePdfBranding = () => {
     primaryRgb,
     secondaryRgb,
     contact: { email, phone, website, address },
+  };
+};
+
+// ═══ NEW: Get term colors ═══
+export const useTermColors = () => {
+  const { 
+    term1Color, term2Color, term3Color,
+    term1Name, term2Name, term3Name
+  } = useBranding();
+  
+  return {
+    term1: { color: term1Color, name: term1Name },
+    term2: { color: term2Color, name: term2Name },
+    term3: { color: term3Color, name: term3Name },
   };
 };
 

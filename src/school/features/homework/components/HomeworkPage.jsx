@@ -1,297 +1,346 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ClipboardList, Plus, Trash2, Edit2, CheckCircle, Clock, XCircle, Snowflake, Flower2, Sun, BookOpen, AlertCircle, Search, Filter } from 'lucide-react';
+import { BookOpen, Plus, Trash2, Filter, AlertCircle } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import { useAuth } from '../../../../core/context/AuthContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
+import useTermTheme from '../../../../shared/hooks/useTermTheme';
+import { useBranding } from '../../../../core/context/BrandingContext';
+import { getGrade, getPercentageColor } from '../../../../core/utils/gradingSystem';
 
-const TERM_CONFIG = {
-  1: { name: 'Winter', icon: Snowflake, bgActive: 'bg-blue-100 text-blue-700 border-blue-300', bgInactive: 'text-gray-500 hover:bg-gray-100' },
-  2: { name: 'Spring', icon: Flower2, bgActive: 'bg-pink-100 text-pink-700 border-pink-300', bgInactive: 'text-gray-500 hover:bg-gray-100' },
-  3: { name: 'Summer', icon: Sun, bgActive: 'bg-amber-100 text-amber-700 border-amber-300', bgInactive: 'text-gray-500 hover:bg-gray-100' }
-};
-
-const STATUS_CONFIG = {
-  done: { label: 'Done', bg: 'bg-emerald-100 text-emerald-700 border-emerald-300', icon: CheckCircle },
-  partially_done: { label: 'Partial', bg: 'bg-orange-100 text-orange-700 border-orange-300', icon: Clock },
-  not_done: { label: 'Not Done', bg: 'bg-red-100 text-red-700 border-red-300', icon: XCircle }
-};
+// ════════════════════════════════════════════════════════════════════════════
+// HOMEWORK PAGE - Uses useTermTheme for dynamic colors
+// ════════════════════════════════════════════════════════════════════════════
 
 const HomeworkPage = () => {
-  const { supabase, studentsService } = useApp();
+  const { supabase } = useApp();                                   // ✂ removed unused studentsDb
   const { teacher } = useAuth();
   const { activeTerm, allTerms, loading: termsLoading } = useActiveTerm();
+  const { gradingSystem } = useBranding();
+
+  // ═══ TERM THEMES FOR TABS ═══
+  const theme = useTermTheme();
+
+  // ✅ FIX: call useBranding at component level, not inside getTermTheme
+  const branding = useBranding();
+  const getTermTheme = useCallback((termNumber) => {
+    const colorKey = `term${termNumber}Color`;
+    const nameKey  = `term${termNumber}Name`;
+    const color = branding[colorKey] || ['#3b82f6', '#ec4899', '#f59e0b'][termNumber - 1];
+    const name  = branding[nameKey]  || ['Winter', 'Spring', 'Summer'][termNumber - 1];
+    return { color, name };
+  }, [branding]);
 
   const [classes, setClasses] = useState([]);
   const [selectedClass, setSelectedClass] = useState('');
-  const [selectedTermNumber, setSelectedTermNumber] = useState(null);
-  const [selectedSubject, setSelectedSubject] = useState('all');
-  const [homework, setHomework] = useState([]);
   const [students, setStudents] = useState([]);
-  const [studentHomework, setStudentHomework] = useState({});
+  const [grades, setGrades] = useState([]);
   const [subjects, setSubjects] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [selectedSubject, setSelectedSubject] = useState('all');
+  const [selectedTermNumber, setSelectedTermNumber] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showStatusModal, setShowStatusModal] = useState(null); // homework item
-  const [editingHomework, setEditingHomework] = useState(null);
+  const [formData, setFormData] = useState({
+    assessmentTitle: '',
+    subject: '',
+    assessmentType: 'Homework',
+    maxGrade: 100,
+    date: new Date().toISOString().split('T')[0]
+  });
+  const [studentScores, setStudentScores] = useState({});
 
   const mySubjects = teacher?.subjects || [];
 
-  // Init term
+  // Set selected term to active term on load
   useEffect(() => {
-    if (activeTerm && !selectedTermNumber) setSelectedTermNumber(activeTerm.term_number);
+    if (activeTerm && !selectedTermNumber) {
+      setSelectedTermNumber(activeTerm.term_number);
+    }
   }, [activeTerm, selectedTermNumber]);
 
-  useEffect(() => { loadClasses(); loadSubjects(); }, []);
-
-  useEffect(() => {
-    if (selectedClass) loadStudents();
-    else { setStudents([]); setHomework([]); }
-  }, [selectedClass]);
-
-  useEffect(() => {
-    if (selectedClass && selectedTermNumber) loadHomework();
-  }, [selectedClass, selectedTermNumber]);
-
-  const loadClasses = async () => {
+  // ✅ FIX: wrap loaders in useCallback so they can be stable deps
+  const loadClasses = useCallback(async () => {
     try {
-      const { data } = await supabase.from('custom_classes').select('*').eq('is_active', true).order('class_name');
+      const { data, error } = await supabase
+        .from('custom_classes').select('*').eq('is_active', true).order('class_name');
+      if (error) throw error;
       setClasses(data || []);
-    } catch (err) { console.error(err); }
-  };
+    } catch (err) { console.error('Error loading classes:', err); }
+  }, [supabase]);
 
-  const loadSubjects = async () => {
+  const loadSubjects = useCallback(async () => {
     try {
-      const { data } = await supabase.from('custom_subjects').select('*').eq('is_active', true).order('subject_name');
+      const { data, error } = await supabase
+        .from('custom_subjects').select('*').eq('is_active', true).order('subject_name');
+      if (error) throw error;
       setSubjects((data || []).filter(s => mySubjects.includes(s.subject_name)));
-    } catch (err) { console.error(err); }
-  };
+    } catch (err) { console.error('Error loading subjects:', err); }
+  }, [supabase, mySubjects]);
 
-  const loadStudents = async () => {
+  const loadStudents = useCallback(async () => {
     try {
-      const { data } = await supabase.from('students').select('*').eq('class_name', selectedClass).eq('status', 'active').order('student_no');
+      const { data, error } = await supabase
+        .from('students').select('*')
+        .eq('class_name', selectedClass).eq('status', 'active').order('student_no');
+      if (error) throw error;
       setStudents(data || []);
-    } catch (err) { console.error(err); }
-  };
+    } catch (err) { console.error('Error loading students:', err); }
+  }, [supabase, selectedClass]);
 
-  const loadHomework = async () => {
+  const loadGrades = useCallback(async () => {
     if (!selectedClass || !selectedTermNumber) return;
-    setLoading(true);
     try {
-      // Fetch homework WITH this term_number OR with NULL term_number (legacy)
       const { data: termData, error: e1 } = await supabase
-        .from('homework')
+        .from('grades')
         .select('*')
         .eq('class_name', selectedClass)
         .eq('term_number', selectedTermNumber)
+        .eq('assessment_type', 'Homework')
         .in('subject', mySubjects)
-        .order('due_date', { ascending: false });
-
+        .order('date', { ascending: true });
       if (e1) throw e1;
 
-      // Also fetch legacy homework without term_number
       const { data: legacyData, error: e2 } = await supabase
-        .from('homework')
+        .from('grades')
         .select('*')
         .eq('class_name', selectedClass)
         .is('term_number', null)
+        .eq('assessment_type', 'Homework')
         .in('subject', mySubjects)
-        .order('due_date', { ascending: false });
-
+        .order('date', { ascending: true });
       if (e2) throw e2;
 
-      // Assign legacy homework to terms by date
       const currentTermData = allTerms.find(t => t.term_number === selectedTermNumber);
-      const legacyForThisTerm = (legacyData || []).filter(h => {
-        if (!currentTermData) return selectedTermNumber === 1; // default to winter
-        return h.due_date >= currentTermData.start_date && h.due_date <= currentTermData.end_date;
+      const legacyForThisTerm = (legacyData || []).filter(g => {
+        if (!currentTermData) return selectedTermNumber === 1;
+        return g.date >= currentTermData.start_date && g.date <= currentTermData.end_date;
       });
 
-      // Backfill term_number for legacy homework (fire-and-forget)
-      legacyForThisTerm.forEach(h => {
-        supabase.from('homework').update({ term_number: selectedTermNumber }).eq('id', h.id).then(() => {});
+      legacyForThisTerm.forEach(g => {
+        supabase.from('grades').update({ term_number: selectedTermNumber }).eq('id', g.id).then(() => {});
       });
 
-      const hw = [...(termData || []), ...legacyForThisTerm];
-      setHomework(hw);
+      setGrades([...(termData || []), ...legacyForThisTerm]);
+    } catch (err) { console.error('Error loading grades:', err); }
+  }, [supabase, selectedClass, selectedTermNumber, mySubjects, allTerms]);
 
-      // Load student_homework for all these
-      if (hw.length > 0) {
-        const ids = hw.map(h => h.id);
-        const { data: shData } = await supabase
-          .from('student_homework')
-          .select('*')
-          .in('homework_id', ids);
+  // ✅ FIX: proper deps arrays
+  useEffect(() => { loadClasses(); loadSubjects(); }, [loadClasses, loadSubjects]);
 
-        const map = {};
-        (shData || []).forEach(sh => {
-          if (!map[sh.homework_id]) map[sh.homework_id] = {};
-          map[sh.homework_id][sh.student_id] = sh;
-        });
-        setStudentHomework(map);
-      } else {
-        setStudentHomework({});
-      }
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  };
+  useEffect(() => {
+    if (selectedClass) {
+      loadStudents();
+    } else {
+      setStudents([]);
+      setGrades([]);
+    }
+  }, [selectedClass, loadStudents]);
 
-  const handleAddHomework = async (formData) => {
-    if (!activeTerm) { alert('No active term set.'); return; }
+  useEffect(() => {
+    if (selectedClass && selectedTermNumber) {
+      loadGrades();
+    }
+  }, [selectedClass, selectedTermNumber, loadGrades]);
+
+  const handleAddGrades = async () => {
+    if (!activeTerm) { alert('No active term. Configure academic terms first.'); return; }
+
     try {
-      // Generate unique homework_id (required NOT NULL UNIQUE varchar)
-      const hwId = `HW-${selectedClass}-${Date.now()}`;
-
-      const record = {
-        ...formData,
-        homework_id: editingHomework ? editingHomework.homework_id : hwId,
-        class_name: selectedClass,
-        term_number: activeTerm.term_number,
-        teacher_id: teacher?.user_id || null,
-        created_at: new Date().toISOString()
-      };
-
-      if (editingHomework) {
-        const { error } = await supabase.from('homework').update(record).eq('id', editingHomework.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from('homework').insert([record]);
-        if (error) throw error;
+      const gradeRecords = [];
+      for (const [studentId, score] of Object.entries(studentScores)) {
+        if (score === '' || score === undefined || score === null) continue;
+        gradeRecords.push({
+          student_id: studentId,
+          class_name: selectedClass,
+          subject: formData.subject,
+          assessment_type: formData.assessmentType,
+          assessment_title: formData.assessmentTitle,
+          grade: parseFloat(score),
+          max_grade: parseFloat(formData.maxGrade),
+          date: formData.date,
+          term_number: activeTerm.term_number,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
       }
+
+      if (gradeRecords.length === 0) { alert('Please enter at least one grade.'); return; }
+
+      const { error } = await supabase.from('grades').insert(gradeRecords);
+      if (error) throw error;
 
       setShowAddModal(false);
-      setEditingHomework(null);
-      await loadHomework();
+      setStudentScores({});
+      setFormData({ assessmentTitle: '', subject: '', assessmentType: 'Homework', maxGrade: 100, date: new Date().toISOString().split('T')[0] });
+      setSelectedTermNumber(activeTerm.term_number);
+      setSelectedSubject('all');
+      await loadGrades();
     } catch (err) {
-      alert('Failed to save: ' + err.message);
+      console.error('Error adding grades:', err);
+      alert('Failed to add grades: ' + err.message);
     }
   };
 
-  const handleDeleteHomework = async (id) => {
-    if (!window.confirm('Delete this homework?')) return;
+  const handleDeleteGrade = async (gradeId) => {
+    if (!window.confirm('Delete this homework grade?')) return;
     try {
-      await supabase.from('student_homework').delete().eq('homework_id', id);
-      await supabase.from('homework').delete().eq('id', id);
-      await loadHomework();
-    } catch (err) { alert('Failed to delete'); }
+      const { error } = await supabase.from('grades').delete().eq('id', gradeId);
+      if (error) throw error;
+      await loadGrades();
+    } catch (err) { alert('Failed to delete grade'); }
   };
 
-  const handleUpdateStudentStatus = async (homeworkId, studentId, status) => {
-    try {
-      const existing = studentHomework[homeworkId]?.[studentId];
-      if (existing) {
-        await supabase.from('student_homework').update({ status, submitted_at: status === 'done' ? new Date().toISOString() : null }).eq('id', existing.id);
-      } else {
-        await supabase.from('student_homework').insert([{
-          homework_id: homeworkId, student_id: studentId, status,
-          submitted_at: status === 'done' ? new Date().toISOString() : null
-        }]);
-      }
-      await loadHomework();
-    } catch (err) { alert('Failed to update status'); }
+  // ─── DERIVED DATA ──────────────────────────────────────
+  const filteredGrades = selectedSubject === 'all'
+    ? grades
+    : grades.filter(g => g.subject === selectedSubject);
+
+  const gradeSubjects = [...new Set(grades.map(g => g.subject))];
+
+  const assessments = [];
+  const seen = new Set();
+  for (const g of filteredGrades) {
+    const key = `${g.assessment_title}__${g.subject}__${g.date}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      assessments.push({
+        key,
+        title: g.assessment_title,
+        subject: g.subject,
+        type: g.assessment_type,
+        date: g.date,
+        maxGrade: g.max_grade
+      });
+    }
+  }
+
+  const gradebook = {};
+  for (const student of students) {
+    gradebook[student.id] = {};
+  }
+  for (const g of filteredGrades) {
+    const key = `${g.assessment_title}__${g.subject}__${g.date}`;
+    if (gradebook[g.student_id]) {
+      gradebook[g.student_id][key] = g;
+    }
+  }
+
+  const getStudentAverage = (studentId) => {
+    const studentGrades = filteredGrades.filter(g => g.student_id === studentId);
+    if (studentGrades.length === 0) return null;
+    const avg = studentGrades.reduce((sum, g) => sum + (g.grade / g.max_grade * 100), 0) / studentGrades.length;
+    return avg;
   };
 
-  // Filtered homework
-  const filteredHomework = selectedSubject === 'all' ? homework : homework.filter(h => h.subject === selectedSubject);
-  const hwSubjects = [...new Set(homework.map(h => h.subject))];
   const selectedTermData = allTerms.find(t => t.term_number === selectedTermNumber);
   const isActiveTerm = selectedTermNumber === activeTerm?.term_number;
   const isFinalized = selectedTermData?.is_finalized;
 
-  const getInitials = (name) => name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-
-  const getCompletionStats = (hwId) => {
-    const shMap = studentHomework[hwId] || {};
-    const total = students.length;
-    const done = Object.values(shMap).filter(s => s.status === 'done').length;
-    const partial = Object.values(shMap).filter(s => s.status === 'partially_done').length;
-    const notDone = total - done - partial;
-    return { total, done, partial, notDone, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
-  };
+  // ─── RENDER ────────────────────────────────────────────
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white rounded-2xl shadow-lg p-5 border border-emerald-100">
+      <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            <ClipboardList size={22} className="text-emerald-600" />
+          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <BookOpen size={24} style={theme.textStyle} />
             Homework
           </h2>
           {activeTerm && (
-            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${TERM_CONFIG[activeTerm.term_number]?.bgActive}`}>
-              {React.createElement(TERM_CONFIG[activeTerm.term_number]?.icon || BookOpen, { size: 14 })}
-              Active: {TERM_CONFIG[activeTerm.term_number]?.name} Term
+            <div 
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
+              style={{ backgroundColor: theme.withAlpha(0.15), color: theme.color }}
+            >
+              <theme.icon size={14} />
+              Active: {theme.name} Term
             </div>
           )}
         </div>
 
-        <div className="flex gap-3 items-end">
+        <div className="flex gap-4 items-end">
           <div className="flex-1">
-            <label className="block text-[11px] font-medium text-gray-500 mb-1">Class</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Class</label>
             <select value={selectedClass} onChange={(e) => { setSelectedClass(e.target.value); setSelectedSubject('all'); }}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none text-sm"
+              style={{ '--tw-ring-color': theme.color }}>
               <option value="">Choose a class...</option>
-              {classes.map(c => <option key={c.id} value={c.class_name}>{c.class_name}</option>)}
+              {classes.map(cls => (<option key={cls.id} value={cls.class_name}>{cls.class_name}</option>))}
             </select>
           </div>
-          <button onClick={() => { setEditingHomework(null); setShowAddModal(true); }}
+
+          <button onClick={() => setShowAddModal(true)}
             disabled={!selectedClass || subjects.length === 0 || !activeTerm || isFinalized}
-            className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg transition-all">
-            <Plus size={16} /> Assign
+            className="text-white px-5 py-2.5 rounded-lg flex items-center gap-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg transition-all"
+            style={theme.gradientStyle}>
+            <Plus size={18} /> Add Homework
           </button>
         </div>
 
         {!termsLoading && !activeTerm && (
-          <div className="mt-3 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
-            <AlertCircle size={14} />
-            No active term. Go to Management → Academic Terms.
+          <div className="mt-4 flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <AlertCircle size={16} />
+            <span>No active term. Go to <strong>Management → Academic Terms</strong> to set one up.</span>
           </div>
         )}
       </div>
 
       {/* Term Tabs + Content */}
       {selectedClass && allTerms.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-lg border border-emerald-100 overflow-hidden">
-          {/* Term Tabs */}
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+          {/* Term Tabs - Dynamic Colors */}
           <div className="flex border-b border-gray-200 bg-gray-50">
             {allTerms.map(term => {
-              const config = TERM_CONFIG[term.term_number];
-              const Icon = config?.icon || BookOpen;
+              const termTheme = getTermTheme(term.term_number);
               const isSelected = selectedTermNumber === term.term_number;
               const isActive = activeTerm?.term_number === term.term_number;
+              
               return (
                 <button key={term.id} onClick={() => setSelectedTermNumber(term.term_number)}
-                  className={`flex-1 px-4 py-3 flex items-center justify-center gap-2 text-sm font-medium transition-colors border-b-2 ${
-                    isSelected ? `${config?.bgActive} border-current` : `${config?.bgInactive} border-transparent`
-                  }`}>
-                  <Icon size={16} />
-                  <span className="hidden sm:inline">Term {term.term_number}:</span> {config?.name}
-                  {isActive && <span className="text-[10px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-bold ml-1">ACTIVE</span>}
-                  {term.is_finalized && <span className="text-[10px] bg-gray-400 text-white px-1.5 py-0.5 rounded-full font-bold ml-1">LOCKED</span>}
+                  className="flex-1 px-4 py-3 flex items-center justify-center gap-2 text-sm font-medium transition-colors border-b-2"
+                  style={{
+                    backgroundColor: isSelected ? `${termTheme.color}15` : 'transparent',
+                    color: isSelected ? termTheme.color : '#6b7280',
+                    borderBottomColor: isSelected ? termTheme.color : 'transparent'
+                  }}>
+                  <span className="hidden sm:inline">Term {term.term_number}:</span> {termTheme.name}
+                  {isActive && (
+                    <span className="text-[10px] text-white px-1.5 py-0.5 rounded-full font-bold"
+                      style={{ backgroundColor: theme.color }}>ACTIVE</span>
+                  )}
+                  {term.is_finalized && (
+                    <span className="text-[10px] bg-gray-400 text-white px-1.5 py-0.5 rounded-full font-bold">LOCKED</span>
+                  )}
                 </button>
               );
             })}
           </div>
 
           {/* Subject Filter */}
-          {hwSubjects.length > 0 && (
-            <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2 flex-wrap">
-              <Filter size={13} className="text-gray-400" />
+          {gradeSubjects.length > 0 && (
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2 flex-wrap">
+              <Filter size={14} className="text-gray-400" />
               <button onClick={() => setSelectedSubject('all')}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${selectedSubject === 'all' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                All
+                className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
+                style={{
+                  backgroundColor: selectedSubject === 'all' ? `${theme.color}20` : '#f3f4f6',
+                  color: selectedSubject === 'all' ? theme.color : '#6b7280'
+                }}>
+                All Subjects
               </button>
-              {hwSubjects.map(s => (
-                <button key={s} onClick={() => setSelectedSubject(s)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${selectedSubject === s ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                  {s}
+              {gradeSubjects.map(subj => (
+                <button key={subj} onClick={() => setSelectedSubject(subj)}
+                  className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
+                  style={{
+                    backgroundColor: selectedSubject === subj ? `${theme.color}20` : '#f3f4f6',
+                    color: selectedSubject === subj ? theme.color : '#6b7280'
+                  }}>
+                  {subj}
                 </button>
               ))}
             </div>
           )}
 
-          {/* Term info */}
-          <div className="px-4 py-2 bg-gray-50/50 border-b border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
+          {/* Term Info */}
+          <div className="px-4 py-2 bg-gray-50/50 border-b border-gray-100 flex items-center justify-between text-xs text-gray-500">
             <span>
               {selectedTermData && (
                 <>
@@ -301,267 +350,245 @@ const HomeworkPage = () => {
                 </>
               )}
             </span>
-            <span>{filteredHomework.length} assignment{filteredHomework.length !== 1 ? 's' : ''}</span>
+            <span>{filteredGrades.length} grade{filteredGrades.length !== 1 ? 's' : ''} • {assessments.length} assignment{assessments.length !== 1 ? 's' : ''}</span>
           </div>
 
-          {/* Homework List */}
+          {isFinalized && (
+            <div className="mx-4 mt-3 flex items-center gap-2 text-xs text-gray-600 bg-gray-100 rounded-lg p-2.5">
+              <AlertCircle size={14} />
+              This term is finalized. Grades are locked.
+            </div>
+          )}
+
+          {/* Gradebook Table */}
           <div className="p-4">
-            {loading ? (
-              <div className="flex justify-center py-12">
-                <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            ) : filteredHomework.length === 0 ? (
-              <div className="text-center py-16 bg-gray-50 rounded-xl">
-                <ClipboardList size={40} className="mx-auto text-gray-300 mb-3" />
-                <p className="text-gray-400 text-sm">No homework for {TERM_CONFIG[selectedTermNumber]?.name} Term{selectedSubject !== 'all' ? ` (${selectedSubject})` : ''}</p>
-                {isActiveTerm && <p className="text-xs text-gray-400 mt-1">Click "Assign" to create one</p>}
+            {assessments.length === 0 ? (
+              <div className="text-center py-12 bg-gray-50 rounded-lg">
+                <BookOpen size={48} className="mx-auto text-gray-300 mb-4" />
+                <p className="text-gray-500">No homework for {getTermTheme(selectedTermNumber).name} Term{selectedSubject !== 'all' ? ` (${selectedSubject})` : ''}</p>
+                {isActiveTerm && <p className="text-sm text-gray-400 mt-2">Click "Add Homework" to get started</p>}
               </div>
             ) : (
-              <div className="space-y-3">
-                {filteredHomework.map(hw => {
-                  const stats = getCompletionStats(hw.id);
-                  const isOverdue = new Date(hw.due_date) < new Date();
-                  const pctColor = stats.pct >= 80 ? 'bg-emerald-500' : stats.pct >= 50 ? 'bg-amber-500' : 'bg-red-500';
-
-                  return (
-                    <div key={hw.id} className="border border-gray-200 rounded-xl overflow-hidden hover:shadow-sm transition-shadow">
-                      {/* HW Header */}
-                      <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[11px] font-semibold">{hw.subject}</span>
-                            <span className="font-semibold text-gray-800 text-sm truncate">{hw.title}</span>
-                            {isOverdue && <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-[10px] font-bold">OVERDUE</span>}
+              <div className="overflow-x-auto rounded-xl border border-gray-200">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      <th className="text-left px-3 py-2.5 font-semibold text-gray-700 border-b border-r border-gray-200 sticky left-0 bg-gray-50 min-w-[160px]">
+                        Student
+                      </th>
+                      {assessments.map(a => (
+                        <th key={a.key} className="px-2 py-2 border-b border-gray-200 min-w-[110px] text-center">
+                          <div className="font-semibold text-gray-700 text-xs">{a.title}</div>
+                          <div className="text-[10px] text-gray-400 font-normal mt-0.5">
+                            {a.subject} • {new Date(a.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                           </div>
-                          <div className="flex items-center gap-3 text-[11px] text-gray-500">
-                            <span>Assigned: {new Date(hw.assigned_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
-                            <span className={isOverdue ? 'text-red-600 font-semibold' : 'font-medium'}>Due: {new Date(hw.due_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
-                          </div>
-                          {hw.description && <p className="text-xs text-gray-500 mt-1 line-clamp-1">{hw.description}</p>}
-                        </div>
+                        </th>
+                      ))}
+                      <th className="px-3 py-2.5 border-b border-l border-gray-200 text-center min-w-[90px]"
+                        style={{ backgroundColor: `${theme.color}10` }}>
+                        <div className="font-semibold text-xs" style={{ color: theme.color }}>Average</div>
+                      </th>
+                    </tr>
+                  </thead>
 
-                        <div className="flex items-center gap-2 ml-3">
-                          {/* Completion bar */}
-                          <div className="text-right">
-                            <span className="text-xs font-bold text-gray-700">{stats.done}/{stats.total}</span>
-                            <div className="w-20 h-1.5 bg-gray-200 rounded-full mt-0.5">
-                              <div className={`h-1.5 rounded-full ${pctColor} transition-all`} style={{ width: `${stats.pct}%` }}></div>
+                  <tbody>
+                    {students.map((student, rowIdx) => {
+                      const avg = getStudentAverage(student.id);
+                      const avgGrade = avg !== null ? getGrade(avg, gradingSystem, selectedClass) : null;
+
+                      return (
+                        <tr key={student.id} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                          <td className={`px-3 py-2 border-r border-gray-200 sticky left-0 ${rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                                style={{ backgroundColor: `${theme.color}20`, color: theme.color }}>
+                                {student.student_no}
+                              </span>
+                              <span className="font-medium text-gray-800 truncate">{student.name}</span>
                             </div>
-                          </div>
+                          </td>
 
-                          {!isFinalized && (
-                            <div className="flex gap-1">
-                              <button onClick={() => setShowStatusModal(hw)}
-                                className="p-1.5 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors" title="Track completion">
-                                <CheckCircle size={15} />
-                              </button>
-                              <button onClick={() => { setEditingHomework(hw); setShowAddModal(true); }}
-                                className="p-1.5 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors" title="Edit">
-                                <Edit2 size={15} />
-                              </button>
-                              <button onClick={() => handleDeleteHomework(hw.id)}
-                                className="p-1.5 hover:bg-red-100 text-red-500 rounded-lg transition-colors" title="Delete">
-                                <Trash2 size={15} />
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                          {assessments.map(a => {
+                            const grade = gradebook[student.id]?.[a.key];
+                            if (!grade) {
+                              return <td key={a.key} className="px-2 py-2 text-center text-gray-300 text-xs">—</td>;
+                            }
 
-                      {/* Quick student status pills */}
-                      <div className="px-4 py-2 flex flex-wrap gap-1">
-                        {students.map(s => {
-                          const sh = studentHomework[hw.id]?.[s.id];
-                          const status = sh?.status || 'not_done';
-                          const cfg = STATUS_CONFIG[status];
-                          return (
-                            <span key={s.id} className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${cfg.bg}`} title={`${s.name}: ${cfg.label}`}>
-                              {getInitials(s.name)}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
+                            const pct = (grade.grade / grade.max_grade) * 100;
+                            const gradeInfo = getGrade(pct, gradingSystem, selectedClass);
+
+                            return (
+                              <td key={a.key} className="px-2 py-2 text-center group relative">
+                                <div className="flex flex-col items-center">
+                                  <span className="font-semibold text-gray-800 text-xs">
+                                    {grade.grade}/{grade.max_grade}
+                                  </span>
+                                  <span className="text-[11px] font-bold mt-0.5 px-1.5 py-0.5 rounded" 
+                                    style={{ color: gradeInfo.color, backgroundColor: gradeInfo.color + '15' }}>
+                                    {gradeInfo.label}
+                                  </span>
+                                </div>
+
+                                {!isFinalized && (
+                                  <button onClick={() => handleDeleteGrade(grade.id)}
+                                    className="absolute top-0.5 right-0.5 p-0.5 rounded bg-red-100 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="Delete">
+                                    <Trash2 size={10} />
+                                  </button>
+                                )}
+                              </td>
+                            );
+                          })}
+
+                          <td className="px-3 py-2 text-center border-l border-gray-200"
+                            style={{ backgroundColor: `${theme.color}05` }}>
+                            {avg !== null ? (
+                              <div className="flex flex-col items-center">
+                                <span className="font-bold text-sm" style={{ color: getPercentageColor(avg) }}>
+                                  {avg.toFixed(0)}%
+                                </span>
+                                <span className="text-[10px] font-bold mt-0.5" style={{ color: avgGrade.color }}>
+                                  {avgGrade.label}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-300 text-xs">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* No terms */}
+      {/* No terms configured */}
       {selectedClass && allTerms.length === 0 && !termsLoading && (
         <div className="bg-white rounded-2xl shadow-lg p-6 border border-amber-200 text-center py-8">
-          <AlertCircle size={40} className="mx-auto text-amber-400 mb-3" />
+          <AlertCircle size={48} className="mx-auto text-amber-400 mb-4" />
           <p className="text-gray-700 font-medium">Academic terms not configured</p>
-          <p className="text-sm text-gray-500 mt-1">Go to Management → Academic Terms</p>
+          <p className="text-sm text-gray-500 mt-2">Go to Management → Academic Terms to set up your school year.</p>
         </div>
       )}
 
-      {/* ─── ADD/EDIT MODAL ──────────────────────────────── */}
+      {/* ─── ADD HOMEWORK MODAL ──────────────────────────── */}
       {showAddModal && (
-        <HomeworkFormModal
-          homework={editingHomework}
-          subjects={subjects}
-          activeTerm={activeTerm}
-          onSave={handleAddHomework}
-          onClose={() => { setShowAddModal(false); setEditingHomework(null); }}
-        />
-      )}
-
-      {/* ─── STUDENT STATUS MODAL ────────────────────────── */}
-      {showStatusModal && (
-        <StudentStatusModal
-          hw={showStatusModal}
-          students={students}
-          studentHomework={studentHomework[showStatusModal.id] || {}}
-          onUpdate={handleUpdateStudentStatus}
-          onClose={() => setShowStatusModal(null)}
-          isFinalized={isFinalized}
-        />
-      )}
-    </div>
-  );
-};
-
-// ─── HOMEWORK FORM MODAL ─────────────────────────────────
-
-const HomeworkFormModal = ({ homework, subjects, activeTerm, onSave, onClose }) => {
-  const [formData, setFormData] = useState({
-    title: homework?.title || '',
-    description: homework?.description || '',
-    subject: homework?.subject || '',
-    assigned_date: homework?.assigned_date || new Date().toISOString().split('T')[0],
-    due_date: homework?.due_date || '',
-  });
-
-  const handleSubmit = () => {
-    if (!formData.title || !formData.subject || !formData.due_date) {
-      alert('Please fill in title, subject and due date.');
-      return;
-    }
-    onSave(formData);
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-6 max-w-lg w-full">
-        <div className="flex items-center justify-between mb-5">
-          <h3 className="text-lg font-bold">{homework ? 'Edit Homework' : 'Assign Homework'}</h3>
-          {activeTerm && (
-            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${TERM_CONFIG[activeTerm.term_number]?.bgActive}`}>
-              {TERM_CONFIG[activeTerm.term_number]?.name} Term
-            </span>
-          )}
-        </div>
-
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Title *</label>
-            <input type="text" placeholder="e.g., Chapter 5 Exercises" value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Subject *</label>
-            <select value={formData.subject} onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
-              <option value="">Select...</option>
-              {subjects.map(s => <option key={s.id} value={s.subject_name}>{s.subject_name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
-            <textarea rows={3} placeholder="Optional details..." value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none resize-none" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Assigned Date</label>
-              <input type="date" value={formData.assigned_date} onChange={(e) => setFormData({ ...formData, assigned_date: e.target.value })}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Due Date *</label>
-              <input type="date" value={formData.due_date} onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex gap-3 mt-5">
-          <button onClick={handleSubmit}
-            className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-2.5 rounded-lg text-sm font-medium hover:shadow-lg transition-all">
-            {homework ? 'Update' : 'Assign'}
-          </button>
-          <button onClick={onClose} className="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-300 transition-all">
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ─── STUDENT STATUS MODAL ────────────────────────────────
-
-const StudentStatusModal = ({ hw, students, studentHomework, onUpdate, onClose, isFinalized }) => {
-  const getInitials = (name) => name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-
-  const statuses = ['done', 'partially_done', 'not_done'];
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-6 max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col">
-        <div className="mb-4">
-          <h3 className="text-lg font-bold text-gray-800">{hw.title}</h3>
-          <p className="text-xs text-gray-500">{hw.subject} • Due: {new Date(hw.due_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</p>
-        </div>
-
-        <div className="flex-1 overflow-y-auto space-y-1.5">
-          {students.map(student => {
-            const sh = studentHomework[student.id];
-            const currentStatus = sh?.status || 'not_done';
-
-            return (
-              <div key={student.id} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center flex-shrink-0">
-                  <span className="text-white font-bold text-[10px]">{getInitials(student.name)}</span>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-xl font-bold">Add Homework — {selectedClass}</h3>
+              {activeTerm && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+                  style={{ backgroundColor: theme.withAlpha(0.15), color: theme.color }}>
+                  <theme.icon size={12} />
+                  {theme.name} Term
                 </div>
-                <span className="flex-1 text-sm font-medium text-gray-800">{student.name}</span>
+              )}
+            </div>
 
-                {isFinalized ? (
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${STATUS_CONFIG[currentStatus].bg}`}>
-                    {STATUS_CONFIG[currentStatus].label}
-                  </span>
-                ) : (
-                  <div className="flex gap-1">
-                    {statuses.map(status => {
-                      const cfg = STATUS_CONFIG[status];
-                      const isActive = currentStatus === status;
-                      return (
-                        <button key={status} onClick={() => onUpdate(hw.id, student.id, status)}
-                          className={`px-2 py-1 rounded-lg text-[11px] font-medium border transition-all ${
-                            isActive ? cfg.bg + ' shadow-sm' : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300'
-                          }`}>
-                          {cfg.label}
-                        </button>
-                      );
-                    })}
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Homework Title *</label>
+                <input type="text" placeholder="e.g., Chapter 3 Exercises, Reading Log" value={formData.assessmentTitle}
+                  onChange={(e) => setFormData({...formData, assessmentTitle: e.target.value})}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Subject *</label>
+                <select value={formData.subject} onChange={(e) => setFormData({...formData, subject: e.target.value})}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none text-sm">
+                  <option value="">Select subject...</option>
+                  {subjects.map(s => (<option key={s.id} value={s.subject_name}>{s.subject_name}</option>))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <select value={formData.assessmentType} onChange={(e) => setFormData({...formData, assessmentType: e.target.value})}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none text-sm">
+                  <option value="Homework">Homework</option>
+                  <option value="Classwork">Classwork</option>
+                  <option value="Project">Project</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Max Grade</label>
+                <input type="number" value={formData.maxGrade} onChange={(e) => setFormData({...formData, maxGrade: e.target.value})}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none text-sm" />
+              </div>
+            </div>
+
+            {/* Student Score Entry */}
+            <div className="border-t border-gray-200 pt-4 mb-4">
+              <h4 className="font-semibold text-gray-800 mb-3 text-sm">Student Grades</h4>
+              <div className="space-y-1.5 max-h-80 overflow-y-auto">
+                {students.length === 0 ? (
+                  <div className="text-center text-gray-500 py-6 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="font-medium">No students found in {selectedClass}</p>
                   </div>
+                ) : (
+                  students.map(student => {
+                    const score = studentScores[student.id];
+                    const pct = score && formData.maxGrade ? (parseFloat(score) / parseFloat(formData.maxGrade)) * 100 : null;
+                    const gradeInfo = pct !== null ? getGrade(pct, gradingSystem, selectedClass) : null;
+
+                    return (
+                      <div key={student.id} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <span className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                          style={{ backgroundColor: `${theme.color}20`, color: theme.color }}>
+                          {student.student_no}
+                        </span>
+                        <span className="flex-1 font-medium text-gray-800 text-sm">{student.name}</span>
+                        <div className="flex items-center gap-2">
+                          <input type="number" placeholder="0" value={score || ''}
+                            onChange={(e) => setStudentScores({...studentScores, [student.id]: e.target.value})}
+                            className="w-20 px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none text-center font-semibold text-sm"
+                            max={formData.maxGrade} step="0.5" />
+                          <span className="text-gray-400 text-sm">/ {formData.maxGrade}</span>
+                          {gradeInfo && (
+                            <span className="text-xs font-bold px-2 py-0.5 rounded min-w-[50px] text-center"
+                              style={{ color: gradeInfo.color, backgroundColor: gradeInfo.color + '15' }}>
+                              {gradeInfo.label}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
-            );
-          })}
-        </div>
+            </div>
 
-        <button onClick={onClose}
-          className="mt-4 w-full bg-gray-200 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 transition-all">
-          Done
-        </button>
-      </div>
+            {students.length > 0 && (
+              <div className="p-2.5 rounded-lg border text-xs mb-4"
+                style={{ backgroundColor: `${theme.color}10`, borderColor: `${theme.color}30`, color: theme.color }}>
+                <strong>{students.length}</strong> students • <strong>{Object.keys(studentScores).filter(id => studentScores[id]).length}</strong> grades entered • Saving to <strong>{theme.name} Term</strong>
+              </div>
+            )}
+
+            <div className="flex gap-3 border-t border-gray-200 pt-4">
+              <button onClick={handleAddGrades}
+                disabled={!formData.assessmentTitle || !formData.subject || students.length === 0}
+                className="flex-1 text-white py-2.5 rounded-lg font-medium text-sm hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={theme.gradientStyle}>
+                Save Homework
+              </button>
+              <button onClick={() => { setShowAddModal(false); setStudentScores({}); }}
+                className="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-lg font-medium text-sm hover:bg-gray-300 transition-all">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

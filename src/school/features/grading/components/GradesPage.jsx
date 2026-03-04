@@ -1,22 +1,34 @@
-import React, { useState, useEffect } from 'react';
-import { BookOpen, Plus, Trash2, Filter, Snowflake, Flower2, Sun, AlertCircle, ChevronDown } from 'lucide-react';
-import { supabase } from '../../../../core/infrastructure/supabaseClient';
+import React, { useState, useEffect, useCallback } from 'react';
+import { BookOpen, Plus, Trash2, Filter, AlertCircle } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import { useAuth } from '../../../../core/context/AuthContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
-import { getCambridgeGrade, getPercentageColor } from '../../../../core/utils/cambridgeGrading';
+import useTermTheme from '../../../../shared/hooks/useTermTheme';
+import { useBranding } from '../../../../core/context/BrandingContext';
+import { getGrade, getPercentageColor } from '../../../../core/utils/gradingSystem';
 
-
-const TERM_CONFIG = {
-  1: { name: 'Winter', icon: Snowflake, bgActive: 'bg-blue-100 text-blue-700 border-blue-300', bgInactive: 'text-gray-500 hover:bg-gray-100' },
-  2: { name: 'Spring', icon: Flower2, bgActive: 'bg-pink-100 text-pink-700 border-pink-300', bgInactive: 'text-gray-500 hover:bg-gray-100' },
-  3: { name: 'Summer', icon: Sun, bgActive: 'bg-amber-100 text-amber-700 border-amber-300', bgInactive: 'text-gray-500 hover:bg-gray-100' }
-};
+// ════════════════════════════════════════════════════════════════════════════
+// GRADES PAGE - Uses useTermTheme for dynamic colors
+// ════════════════════════════════════════════════════════════════════════════
 
 const GradesPage = () => {
-  const { studentsDb } = useApp();
+  const { supabase } = useApp();                                   // ✂ removed unused studentsDb
   const { teacher } = useAuth();
   const { activeTerm, allTerms, loading: termsLoading } = useActiveTerm();
+  const { gradingSystem } = useBranding();
+
+  // ═══ TERM THEMES FOR TABS ═══
+  const theme = useTermTheme();
+
+  // ✅ FIX: call useBranding at component level, not inside getTermTheme
+  const branding = useBranding();
+  const getTermTheme = useCallback((termNumber) => {
+    const colorKey = `term${termNumber}Color`;
+    const nameKey  = `term${termNumber}Name`;
+    const color = branding[colorKey] || ['#3b82f6', '#ec4899', '#f59e0b'][termNumber - 1];
+    const name  = branding[nameKey]  || ['Winter', 'Spring', 'Summer'][termNumber - 1];
+    return { color, name };
+  }, [branding]);
 
   const [classes, setClasses] = useState([]);
   const [selectedClass, setSelectedClass] = useState('');
@@ -44,7 +56,72 @@ const GradesPage = () => {
     }
   }, [activeTerm, selectedTermNumber]);
 
-  useEffect(() => { loadClasses(); loadSubjects(); }, []);
+  // ✅ FIX: wrap loaders in useCallback so they can be stable deps
+  const loadClasses = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('custom_classes').select('*').eq('is_active', true).order('class_name');
+      if (error) throw error;
+      setClasses(data || []);
+    } catch (err) { console.error('Error loading classes:', err); }
+  }, [supabase]);
+
+  const loadSubjects = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('custom_subjects').select('*').eq('is_active', true).order('subject_name');
+      if (error) throw error;
+      setSubjects((data || []).filter(s => mySubjects.includes(s.subject_name)));
+    } catch (err) { console.error('Error loading subjects:', err); }
+  }, [supabase, mySubjects]);
+
+  const loadStudents = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('students').select('*')
+        .eq('class_name', selectedClass).eq('status', 'active').order('student_no');
+      if (error) throw error;
+      setStudents(data || []);
+    } catch (err) { console.error('Error loading students:', err); }
+  }, [supabase, selectedClass]);
+
+  const loadGrades = useCallback(async () => {
+    if (!selectedClass || !selectedTermNumber) return;
+    try {
+      const { data: termData, error: e1 } = await supabase
+        .from('grades')
+        .select('*')
+        .eq('class_name', selectedClass)
+        .eq('term_number', selectedTermNumber)
+        .in('subject', mySubjects)
+        .order('date', { ascending: true });
+      if (e1) throw e1;
+
+      const { data: legacyData, error: e2 } = await supabase
+        .from('grades')
+        .select('*')
+        .eq('class_name', selectedClass)
+        .is('term_number', null)
+        .in('subject', mySubjects)
+        .order('date', { ascending: true });
+      if (e2) throw e2;
+
+      const currentTermData = allTerms.find(t => t.term_number === selectedTermNumber);
+      const legacyForThisTerm = (legacyData || []).filter(g => {
+        if (!currentTermData) return selectedTermNumber === 1;
+        return g.date >= currentTermData.start_date && g.date <= currentTermData.end_date;
+      });
+
+      legacyForThisTerm.forEach(g => {
+        supabase.from('grades').update({ term_number: selectedTermNumber }).eq('id', g.id).then(() => {});
+      });
+
+      setGrades([...(termData || []), ...legacyForThisTerm]);
+    } catch (err) { console.error('Error loading grades:', err); }
+  }, [supabase, selectedClass, selectedTermNumber, mySubjects, allTerms]);
+
+  // ✅ FIX: proper deps arrays
+  useEffect(() => { loadClasses(); loadSubjects(); }, [loadClasses, loadSubjects]);
 
   useEffect(() => {
     if (selectedClass) {
@@ -53,78 +130,13 @@ const GradesPage = () => {
       setStudents([]);
       setGrades([]);
     }
-  }, [selectedClass]);
+  }, [selectedClass, loadStudents]);
 
   useEffect(() => {
     if (selectedClass && selectedTermNumber) {
       loadGrades();
     }
-  }, [selectedClass, selectedTermNumber]);
-
-  const loadClasses = async () => {
-    try {
-      const { data, error } = await supabase.from('custom_classes').select('*').eq('is_active', true).order('class_name');
-      if (error) throw error;
-      setClasses(data || []);
-    } catch (err) { console.error('Error loading classes:', err); }
-  };
-
-  const loadSubjects = async () => {
-    try {
-      const { data, error } = await supabase.from('custom_subjects').select('*').eq('is_active', true).order('subject_name');
-      if (error) throw error;
-      setSubjects((data || []).filter(s => mySubjects.includes(s.subject_name)));
-    } catch (err) { console.error('Error loading subjects:', err); }
-  };
-
-  const loadStudents = async () => {
-    try {
-      const { data, error } = await supabase.from('students').select('*').eq('class_name', selectedClass).eq('status', 'active').order('student_no');
-      if (error) throw error;
-      setStudents(data || []);
-    } catch (err) { console.error('Error loading students:', err); }
-  };
-
-  const loadGrades = async () => {
-    if (!selectedClass || !selectedTermNumber) return;
-    try {
-      // Fetch grades WITH this term_number
-      const { data: termData, error: e1 } = await supabase
-        .from('grades')
-        .select('*')
-        .eq('class_name', selectedClass)
-        .eq('term_number', selectedTermNumber)
-        .in('subject', mySubjects)
-        .order('date', { ascending: true });
-
-      if (e1) throw e1;
-
-      // Also fetch legacy grades without term_number
-      const { data: legacyData, error: e2 } = await supabase
-        .from('grades')
-        .select('*')
-        .eq('class_name', selectedClass)
-        .is('term_number', null)
-        .in('subject', mySubjects)
-        .order('date', { ascending: true });
-
-      if (e2) throw e2;
-
-      // Assign legacy grades to terms by date
-      const currentTermData = allTerms.find(t => t.term_number === selectedTermNumber);
-      const legacyForThisTerm = (legacyData || []).filter(g => {
-        if (!currentTermData) return selectedTermNumber === 1;
-        return g.date >= currentTermData.start_date && g.date <= currentTermData.end_date;
-      });
-
-      // Backfill term_number for legacy grades (fire-and-forget)
-      legacyForThisTerm.forEach(g => {
-        supabase.from('grades').update({ term_number: selectedTermNumber }).eq('id', g.id).then(() => {});
-      });
-
-      setGrades([...(termData || []), ...legacyForThisTerm]);
-    } catch (err) { console.error('Error loading grades:', err); }
-  };
+  }, [selectedClass, selectedTermNumber, loadGrades]);
 
   const handleAddGrades = async () => {
     if (!activeTerm) { alert('No active term. Configure academic terms first.'); return; }
@@ -175,16 +187,12 @@ const GradesPage = () => {
   };
 
   // ─── DERIVED DATA ──────────────────────────────────────
-
-  // Filter grades by selected subject
   const filteredGrades = selectedSubject === 'all'
     ? grades
     : grades.filter(g => g.subject === selectedSubject);
 
-  // Get unique subjects in current grades
   const gradeSubjects = [...new Set(grades.map(g => g.subject))];
 
-  // Get unique assessments (columns for gradebook)
   const assessments = [];
   const seen = new Set();
   for (const g of filteredGrades) {
@@ -202,7 +210,6 @@ const GradesPage = () => {
     }
   }
 
-  // Build gradebook: student → assessment → grade
   const gradebook = {};
   for (const student of students) {
     gradebook[student.id] = {};
@@ -214,7 +221,6 @@ const GradesPage = () => {
     }
   }
 
-  // Calculate term average per student
   const getStudentAverage = (studentId) => {
     const studentGrades = filteredGrades.filter(g => g.student_id === studentId);
     if (studentGrades.length === 0) return null;
@@ -231,16 +237,19 @@ const GradesPage = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white rounded-2xl shadow-lg p-6 border border-emerald-100">
+      <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-            <BookOpen size={24} className="text-emerald-600" />
+            <BookOpen size={24} style={theme.textStyle} />
             Gradebook
           </h2>
           {activeTerm && (
-            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${TERM_CONFIG[activeTerm.term_number]?.bgActive}`}>
-              {React.createElement(TERM_CONFIG[activeTerm.term_number]?.icon || BookOpen, { size: 14 })}
-              Active: {TERM_CONFIG[activeTerm.term_number]?.name} Term
+            <div 
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
+              style={{ backgroundColor: theme.withAlpha(0.15), color: theme.color }}
+            >
+              <theme.icon size={14} />
+              Active: {theme.name} Term
             </div>
           )}
         </div>
@@ -249,7 +258,8 @@ const GradesPage = () => {
           <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Class</label>
             <select value={selectedClass} onChange={(e) => { setSelectedClass(e.target.value); setSelectedSubject('all'); }}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-sm">
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none text-sm"
+              style={{ '--tw-ring-color': theme.color }}>
               <option value="">Choose a class...</option>
               {classes.map(cls => (<option key={cls.id} value={cls.class_name}>{cls.class_name}</option>))}
             </select>
@@ -257,7 +267,8 @@ const GradesPage = () => {
 
           <button onClick={() => setShowAddModal(true)}
             disabled={!selectedClass || subjects.length === 0 || !activeTerm || isFinalized}
-            className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg transition-all">
+            className="text-white px-5 py-2.5 rounded-lg flex items-center gap-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg transition-all"
+            style={theme.gradientStyle}>
             <Plus size={18} /> Add Grades
           </button>
         </div>
@@ -272,23 +283,30 @@ const GradesPage = () => {
 
       {/* Term Tabs + Content */}
       {selectedClass && allTerms.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-lg border border-emerald-100 overflow-hidden">
-          {/* Term Tabs */}
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+          {/* Term Tabs - Dynamic Colors */}
           <div className="flex border-b border-gray-200 bg-gray-50">
             {allTerms.map(term => {
-              const config = TERM_CONFIG[term.term_number];
-              const Icon = config?.icon || BookOpen;
+              const termTheme = getTermTheme(term.term_number);
               const isSelected = selectedTermNumber === term.term_number;
               const isActive = activeTerm?.term_number === term.term_number;
+              
               return (
                 <button key={term.id} onClick={() => setSelectedTermNumber(term.term_number)}
-                  className={`flex-1 px-4 py-3 flex items-center justify-center gap-2 text-sm font-medium transition-colors border-b-2 ${
-                    isSelected ? `${config?.bgActive} border-current` : `${config?.bgInactive} border-transparent`
-                  }`}>
-                  <Icon size={16} />
-                  <span className="hidden sm:inline">Term {term.term_number}:</span> {config?.name}
-                  {isActive && <span className="text-[10px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-bold">ACTIVE</span>}
-                  {term.is_finalized && <span className="text-[10px] bg-gray-400 text-white px-1.5 py-0.5 rounded-full font-bold">LOCKED</span>}
+                  className="flex-1 px-4 py-3 flex items-center justify-center gap-2 text-sm font-medium transition-colors border-b-2"
+                  style={{
+                    backgroundColor: isSelected ? `${termTheme.color}15` : 'transparent',
+                    color: isSelected ? termTheme.color : '#6b7280',
+                    borderBottomColor: isSelected ? termTheme.color : 'transparent'
+                  }}>
+                  <span className="hidden sm:inline">Term {term.term_number}:</span> {termTheme.name}
+                  {isActive && (
+                    <span className="text-[10px] text-white px-1.5 py-0.5 rounded-full font-bold"
+                      style={{ backgroundColor: theme.color }}>ACTIVE</span>
+                  )}
+                  {term.is_finalized && (
+                    <span className="text-[10px] bg-gray-400 text-white px-1.5 py-0.5 rounded-full font-bold">LOCKED</span>
+                  )}
                 </button>
               );
             })}
@@ -299,16 +317,20 @@ const GradesPage = () => {
             <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2 flex-wrap">
               <Filter size={14} className="text-gray-400" />
               <button onClick={() => setSelectedSubject('all')}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  selectedSubject === 'all' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}>
+                className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
+                style={{
+                  backgroundColor: selectedSubject === 'all' ? `${theme.color}20` : '#f3f4f6',
+                  color: selectedSubject === 'all' ? theme.color : '#6b7280'
+                }}>
                 All Subjects
               </button>
               {gradeSubjects.map(subj => (
                 <button key={subj} onClick={() => setSelectedSubject(subj)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                    selectedSubject === subj ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}>
+                  className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
+                  style={{
+                    backgroundColor: selectedSubject === subj ? `${theme.color}20` : '#f3f4f6',
+                    color: selectedSubject === subj ? theme.color : '#6b7280'
+                  }}>
                   {subj}
                 </button>
               ))}
@@ -341,13 +363,12 @@ const GradesPage = () => {
             {assessments.length === 0 ? (
               <div className="text-center py-12 bg-gray-50 rounded-lg">
                 <BookOpen size={48} className="mx-auto text-gray-300 mb-4" />
-                <p className="text-gray-500">No grades for {TERM_CONFIG[selectedTermNumber]?.name} Term{selectedSubject !== 'all' ? ` (${selectedSubject})` : ''}</p>
+                <p className="text-gray-500">No grades for {getTermTheme(selectedTermNumber).name} Term{selectedSubject !== 'all' ? ` (${selectedSubject})` : ''}</p>
                 {isActiveTerm && <p className="text-sm text-gray-400 mt-2">Click "Add Grades" to get started</p>}
               </div>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-gray-200">
                 <table className="w-full text-sm">
-                  {/* Table Header */}
                   <thead>
                     <tr className="bg-gray-50">
                       <th className="text-left px-3 py-2.5 font-semibold text-gray-700 border-b border-r border-gray-200 sticky left-0 bg-gray-50 min-w-[160px]">
@@ -361,31 +382,30 @@ const GradesPage = () => {
                           </div>
                         </th>
                       ))}
-                      <th className="px-3 py-2.5 border-b border-l border-gray-200 bg-emerald-50 text-center min-w-[90px]">
-                        <div className="font-semibold text-emerald-700 text-xs">Average</div>
+                      <th className="px-3 py-2.5 border-b border-l border-gray-200 text-center min-w-[90px]"
+                        style={{ backgroundColor: `${theme.color}10` }}>
+                        <div className="font-semibold text-xs" style={{ color: theme.color }}>Average</div>
                       </th>
                     </tr>
                   </thead>
 
-                  {/* Table Body */}
                   <tbody>
                     {students.map((student, rowIdx) => {
                       const avg = getStudentAverage(student.id);
-                      const avgGrade = avg !== null ? getCambridgeGrade(avg, selectedClass) : null;
+                      const avgGrade = avg !== null ? getGrade(avg, gradingSystem, selectedClass) : null;
 
                       return (
                         <tr key={student.id} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                          {/* Student name - sticky */}
                           <td className={`px-3 py-2 border-r border-gray-200 sticky left-0 ${rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                             <div className="flex items-center gap-2">
-                              <span className="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center text-[10px] font-bold text-emerald-700 flex-shrink-0">
+                              <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                                style={{ backgroundColor: `${theme.color}20`, color: theme.color }}>
                                 {student.student_no}
                               </span>
                               <span className="font-medium text-gray-800 truncate">{student.name}</span>
                             </div>
                           </td>
 
-                          {/* Assessment grades */}
                           {assessments.map(a => {
                             const grade = gradebook[student.id]?.[a.key];
                             if (!grade) {
@@ -393,7 +413,7 @@ const GradesPage = () => {
                             }
 
                             const pct = (grade.grade / grade.max_grade) * 100;
-                            const cambridge = getCambridgeGrade(pct, selectedClass);
+                            const gradeInfo = getGrade(pct, gradingSystem, selectedClass);
 
                             return (
                               <td key={a.key} className="px-2 py-2 text-center group relative">
@@ -401,12 +421,12 @@ const GradesPage = () => {
                                   <span className="font-semibold text-gray-800 text-xs">
                                     {grade.grade}/{grade.max_grade}
                                   </span>
-                                  <span className="text-[11px] font-bold mt-0.5 px-1.5 py-0.5 rounded" style={{ color: cambridge.color, backgroundColor: cambridge.color + '15' }}>
-                                    {cambridge.display}
+                                  <span className="text-[11px] font-bold mt-0.5 px-1.5 py-0.5 rounded" 
+                                    style={{ color: gradeInfo.color, backgroundColor: gradeInfo.color + '15' }}>
+                                    {gradeInfo.label}
                                   </span>
                                 </div>
 
-                                {/* Delete button on hover */}
                                 {!isFinalized && (
                                   <button onClick={() => handleDeleteGrade(grade.id)}
                                     className="absolute top-0.5 right-0.5 p-0.5 rounded bg-red-100 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -418,15 +438,15 @@ const GradesPage = () => {
                             );
                           })}
 
-                          {/* Average column */}
-                          <td className="px-3 py-2 text-center border-l border-gray-200 bg-emerald-50/30">
+                          <td className="px-3 py-2 text-center border-l border-gray-200"
+                            style={{ backgroundColor: `${theme.color}05` }}>
                             {avg !== null ? (
                               <div className="flex flex-col items-center">
                                 <span className="font-bold text-sm" style={{ color: getPercentageColor(avg) }}>
                                   {avg.toFixed(0)}%
                                 </span>
                                 <span className="text-[10px] font-bold mt-0.5" style={{ color: avgGrade.color }}>
-                                  {avgGrade.display}
+                                  {avgGrade.label}
                                 </span>
                               </div>
                             ) : (
@@ -460,9 +480,10 @@ const GradesPage = () => {
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-xl font-bold">Add Grades — {selectedClass}</h3>
               {activeTerm && (
-                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${TERM_CONFIG[activeTerm.term_number]?.bgActive}`}>
-                  {React.createElement(TERM_CONFIG[activeTerm.term_number]?.icon || BookOpen, { size: 12 })}
-                  {TERM_CONFIG[activeTerm.term_number]?.name} Term
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+                  style={{ backgroundColor: theme.withAlpha(0.15), color: theme.color }}>
+                  <theme.icon size={12} />
+                  {theme.name} Term
                 </div>
               )}
             </div>
@@ -472,12 +493,12 @@ const GradesPage = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Assessment Title *</label>
                 <input type="text" placeholder="e.g., Unit 1 Test, Midterm Exam" value={formData.assessmentTitle}
                   onChange={(e) => setFormData({...formData, assessmentTitle: e.target.value})}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-sm" />
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none text-sm" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Subject *</label>
                 <select value={formData.subject} onChange={(e) => setFormData({...formData, subject: e.target.value})}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-sm">
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none text-sm">
                   <option value="">Select subject...</option>
                   {subjects.map(s => (<option key={s.id} value={s.subject_name}>{s.subject_name}</option>))}
                 </select>
@@ -485,7 +506,7 @@ const GradesPage = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
                 <select value={formData.assessmentType} onChange={(e) => setFormData({...formData, assessmentType: e.target.value})}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-sm">
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none text-sm">
                   <option value="Test">Test</option>
                   <option value="Exam">Exam</option>
                   <option value="Quiz">Quiz</option>
@@ -497,12 +518,12 @@ const GradesPage = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Max Grade</label>
                 <input type="number" value={formData.maxGrade} onChange={(e) => setFormData({...formData, maxGrade: e.target.value})}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-sm" />
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none text-sm" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                 <input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-sm" />
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none text-sm" />
               </div>
             </div>
 
@@ -518,24 +539,25 @@ const GradesPage = () => {
                   students.map(student => {
                     const score = studentScores[student.id];
                     const pct = score && formData.maxGrade ? (parseFloat(score) / parseFloat(formData.maxGrade)) * 100 : null;
-                    const cambridge = pct !== null ? getCambridgeGrade(pct, selectedClass) : null;
+                    const gradeInfo = pct !== null ? getGrade(pct, gradingSystem, selectedClass) : null;
 
                     return (
                       <div key={student.id} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                        <span className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center text-xs font-bold text-emerald-700 flex-shrink-0">
+                        <span className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                          style={{ backgroundColor: `${theme.color}20`, color: theme.color }}>
                           {student.student_no}
                         </span>
                         <span className="flex-1 font-medium text-gray-800 text-sm">{student.name}</span>
                         <div className="flex items-center gap-2">
                           <input type="number" placeholder="0" value={score || ''}
                             onChange={(e) => setStudentScores({...studentScores, [student.id]: e.target.value})}
-                            className="w-20 px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-center font-semibold text-sm"
+                            className="w-20 px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none text-center font-semibold text-sm"
                             max={formData.maxGrade} step="0.5" />
                           <span className="text-gray-400 text-sm">/ {formData.maxGrade}</span>
-                          {cambridge && (
+                          {gradeInfo && (
                             <span className="text-xs font-bold px-2 py-0.5 rounded min-w-[50px] text-center"
-                              style={{ color: cambridge.color, backgroundColor: cambridge.color + '15' }}>
-                              {cambridge.display}
+                              style={{ color: gradeInfo.color, backgroundColor: gradeInfo.color + '15' }}>
+                              {gradeInfo.label}
                             </span>
                           )}
                         </div>
@@ -547,15 +569,17 @@ const GradesPage = () => {
             </div>
 
             {students.length > 0 && (
-              <div className="p-2.5 bg-blue-50 rounded-lg border border-blue-200 text-xs text-blue-800 mb-4">
-                <strong>{students.length}</strong> students • <strong>{Object.keys(studentScores).filter(id => studentScores[id]).length}</strong> grades entered • Saving to <strong>{TERM_CONFIG[activeTerm?.term_number]?.name} Term</strong>
+              <div className="p-2.5 rounded-lg border text-xs mb-4"
+                style={{ backgroundColor: `${theme.color}10`, borderColor: `${theme.color}30`, color: theme.color }}>
+                <strong>{students.length}</strong> students • <strong>{Object.keys(studentScores).filter(id => studentScores[id]).length}</strong> grades entered • Saving to <strong>{theme.name} Term</strong>
               </div>
             )}
 
             <div className="flex gap-3 border-t border-gray-200 pt-4">
               <button onClick={handleAddGrades}
                 disabled={!formData.assessmentTitle || !formData.subject || students.length === 0}
-                className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-2.5 rounded-lg font-medium text-sm hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                className="flex-1 text-white py-2.5 rounded-lg font-medium text-sm hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={theme.gradientStyle}>
                 Save Grades
               </button>
               <button onClick={() => { setShowAddModal(false); setStudentScores({}); }}
