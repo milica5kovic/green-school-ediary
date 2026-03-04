@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BookOpen, Plus, Trash2, Filter, AlertCircle } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import { useAuth } from '../../../../core/context/AuthContext';
@@ -12,23 +12,23 @@ import { getGrade, getPercentageColor } from '../../../../core/utils/gradingSyst
 // ════════════════════════════════════════════════════════════════════════════
 
 const GradesPage = () => {
-  const { supabase } = useApp();                                   // ✂ removed unused studentsDb
+  const { supabase } = useApp();
   const { teacher } = useAuth();
   const { activeTerm, allTerms, loading: termsLoading } = useActiveTerm();
-  const { gradingSystem } = useBranding();
-
-  // ═══ TERM THEMES FOR TABS ═══
-  const theme = useTermTheme();
-
-  // ✅ FIX: call useBranding at component level, not inside getTermTheme
   const branding = useBranding();
-  const getTermTheme = useCallback((termNumber) => {
+  const { gradingSystem } = branding;
+  
+  // ═══ TERM THEME ═══
+  const theme = useTermTheme();
+  
+  // Helper to get color/name for any term number (not a hook!)
+  const getTermInfo = (termNumber) => {
     const colorKey = `term${termNumber}Color`;
-    const nameKey  = `term${termNumber}Name`;
+    const nameKey = `term${termNumber}Name`;
     const color = branding[colorKey] || ['#3b82f6', '#ec4899', '#f59e0b'][termNumber - 1];
-    const name  = branding[nameKey]  || ['Winter', 'Spring', 'Summer'][termNumber - 1];
+    const name = branding[nameKey] || ['Winter', 'Spring', 'Summer'][termNumber - 1];
     return { color, name };
-  }, [branding]);
+  };
 
   const [classes, setClasses] = useState([]);
   const [selectedClass, setSelectedClass] = useState('');
@@ -56,36 +56,48 @@ const GradesPage = () => {
     }
   }, [activeTerm, selectedTermNumber]);
 
-  // ✅ FIX: wrap loaders in useCallback so they can be stable deps
-  const loadClasses = useCallback(async () => {
+  useEffect(() => { loadClasses(); loadSubjects(); }, []);
+
+  useEffect(() => {
+    if (selectedClass) {
+      loadStudents();
+    } else {
+      setStudents([]);
+      setGrades([]);
+    }
+  }, [selectedClass]);
+
+  useEffect(() => {
+    if (selectedClass && selectedTermNumber) {
+      loadGrades();
+    }
+  }, [selectedClass, selectedTermNumber]);
+
+  const loadClasses = async () => {
     try {
-      const { data, error } = await supabase
-        .from('custom_classes').select('*').eq('is_active', true).order('class_name');
+      const { data, error } = await supabase.from('custom_classes').select('*').eq('is_active', true).order('class_name');
       if (error) throw error;
       setClasses(data || []);
     } catch (err) { console.error('Error loading classes:', err); }
-  }, [supabase]);
+  };
 
-  const loadSubjects = useCallback(async () => {
+  const loadSubjects = async () => {
     try {
-      const { data, error } = await supabase
-        .from('custom_subjects').select('*').eq('is_active', true).order('subject_name');
+      const { data, error } = await supabase.from('custom_subjects').select('*').eq('is_active', true).order('subject_name');
       if (error) throw error;
       setSubjects((data || []).filter(s => mySubjects.includes(s.subject_name)));
     } catch (err) { console.error('Error loading subjects:', err); }
-  }, [supabase, mySubjects]);
+  };
 
-  const loadStudents = useCallback(async () => {
+  const loadStudents = async () => {
     try {
-      const { data, error } = await supabase
-        .from('students').select('*')
-        .eq('class_name', selectedClass).eq('status', 'active').order('student_no');
+      const { data, error } = await supabase.from('students').select('*').eq('class_name', selectedClass).eq('status', 'active').order('student_no');
       if (error) throw error;
       setStudents(data || []);
     } catch (err) { console.error('Error loading students:', err); }
-  }, [supabase, selectedClass]);
+  };
 
-  const loadGrades = useCallback(async () => {
+  const loadGrades = async () => {
     if (!selectedClass || !selectedTermNumber) return;
     try {
       const { data: termData, error: e1 } = await supabase
@@ -95,6 +107,7 @@ const GradesPage = () => {
         .eq('term_number', selectedTermNumber)
         .in('subject', mySubjects)
         .order('date', { ascending: true });
+
       if (e1) throw e1;
 
       const { data: legacyData, error: e2 } = await supabase
@@ -104,6 +117,7 @@ const GradesPage = () => {
         .is('term_number', null)
         .in('subject', mySubjects)
         .order('date', { ascending: true });
+
       if (e2) throw e2;
 
       const currentTermData = allTerms.find(t => t.term_number === selectedTermNumber);
@@ -118,25 +132,7 @@ const GradesPage = () => {
 
       setGrades([...(termData || []), ...legacyForThisTerm]);
     } catch (err) { console.error('Error loading grades:', err); }
-  }, [supabase, selectedClass, selectedTermNumber, mySubjects, allTerms]);
-
-  // ✅ FIX: proper deps arrays
-  useEffect(() => { loadClasses(); loadSubjects(); }, [loadClasses, loadSubjects]);
-
-  useEffect(() => {
-    if (selectedClass) {
-      loadStudents();
-    } else {
-      setStudents([]);
-      setGrades([]);
-    }
-  }, [selectedClass, loadStudents]);
-
-  useEffect(() => {
-    if (selectedClass && selectedTermNumber) {
-      loadGrades();
-    }
-  }, [selectedClass, selectedTermNumber, loadGrades]);
+  };
 
   const handleAddGrades = async () => {
     if (!activeTerm) { alert('No active term. Configure academic terms first.'); return; }
@@ -258,8 +254,7 @@ const GradesPage = () => {
           <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Class</label>
             <select value={selectedClass} onChange={(e) => { setSelectedClass(e.target.value); setSelectedSubject('all'); }}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none text-sm"
-              style={{ '--tw-ring-color': theme.color }}>
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none text-sm">
               <option value="">Choose a class...</option>
               {classes.map(cls => (<option key={cls.id} value={cls.class_name}>{cls.class_name}</option>))}
             </select>
@@ -287,7 +282,7 @@ const GradesPage = () => {
           {/* Term Tabs - Dynamic Colors */}
           <div className="flex border-b border-gray-200 bg-gray-50">
             {allTerms.map(term => {
-              const termTheme = getTermTheme(term.term_number);
+              const termInfo = getTermInfo(term.term_number);
               const isSelected = selectedTermNumber === term.term_number;
               const isActive = activeTerm?.term_number === term.term_number;
               
@@ -295,11 +290,11 @@ const GradesPage = () => {
                 <button key={term.id} onClick={() => setSelectedTermNumber(term.term_number)}
                   className="flex-1 px-4 py-3 flex items-center justify-center gap-2 text-sm font-medium transition-colors border-b-2"
                   style={{
-                    backgroundColor: isSelected ? `${termTheme.color}15` : 'transparent',
-                    color: isSelected ? termTheme.color : '#6b7280',
-                    borderBottomColor: isSelected ? termTheme.color : 'transparent'
+                    backgroundColor: isSelected ? `${termInfo.color}15` : 'transparent',
+                    color: isSelected ? termInfo.color : '#6b7280',
+                    borderBottomColor: isSelected ? termInfo.color : 'transparent'
                   }}>
-                  <span className="hidden sm:inline">Term {term.term_number}:</span> {termTheme.name}
+                  <span className="hidden sm:inline">Term {term.term_number}:</span> {termInfo.name}
                   {isActive && (
                     <span className="text-[10px] text-white px-1.5 py-0.5 rounded-full font-bold"
                       style={{ backgroundColor: theme.color }}>ACTIVE</span>
@@ -363,7 +358,7 @@ const GradesPage = () => {
             {assessments.length === 0 ? (
               <div className="text-center py-12 bg-gray-50 rounded-lg">
                 <BookOpen size={48} className="mx-auto text-gray-300 mb-4" />
-                <p className="text-gray-500">No grades for {getTermTheme(selectedTermNumber).name} Term{selectedSubject !== 'all' ? ` (${selectedSubject})` : ''}</p>
+                <p className="text-gray-500">No grades for {getTermInfo(selectedTermNumber).name} Term{selectedSubject !== 'all' ? ` (${selectedSubject})` : ''}</p>
                 {isActiveTerm && <p className="text-sm text-gray-400 mt-2">Click "Add Grades" to get started</p>}
               </div>
             ) : (

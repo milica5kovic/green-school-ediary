@@ -1,20 +1,31 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Users, TrendingUp, AlertCircle, Download, Search, Snowflake, Flower2, Sun, BookOpen } from 'lucide-react';
+import { Calendar, Users, TrendingUp, AlertCircle, Download, Search, BookOpen } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import { useAuth } from '../../../../core/context/AuthContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
+import useTermTheme from '../../../../shared/hooks/useTermTheme';
+import { useBranding } from '../../../../core/context/BrandingContext';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-const TERM_CONFIG = {
-  1: { name: 'Winter', icon: Snowflake, bgActive: 'bg-blue-100 text-blue-700 border-blue-300', bgInactive: 'text-gray-500 hover:bg-gray-100' },
-  2: { name: 'Spring', icon: Flower2, bgActive: 'bg-pink-100 text-pink-700 border-pink-300', bgInactive: 'text-gray-500 hover:bg-gray-100' },
-  3: { name: 'Summer', icon: Sun, bgActive: 'bg-amber-100 text-amber-700 border-amber-300', bgInactive: 'text-gray-500 hover:bg-gray-100' }
-};
+// ════════════════════════════════════════════════════════════════════════════
+// ATTENDANCE LOG PAGE - Uses useTermTheme for dynamic colors
+// ════════════════════════════════════════════════════════════════════════════
 
 const AttendanceLogPage = () => {
   const { supabase, studentsService } = useApp();
   const { teacher, canViewAllClasses } = useAuth();
   const { activeTerm, allTerms, loading: termsLoading } = useActiveTerm();
+  const branding = useBranding();
+  const theme = useTermTheme();
+
+  // Helper to get term info (not a hook)
+  const getTermInfo = (termNumber) => {
+    const colorKey = `term${termNumber}Color`;
+    const nameKey = `term${termNumber}Name`;
+    const color = branding[colorKey] || ['#3b82f6', '#ec4899', '#f59e0b'][termNumber - 1];
+    const name = branding[nameKey] || ['Winter', 'Spring', 'Summer'][termNumber - 1];
+    return { color, name };
+  };
 
   const [availableClasses, setAvailableClasses] = useState([]);
   const [view, setView] = useState('overview');
@@ -166,6 +177,7 @@ const AttendanceLogPage = () => {
   const trendData = getTrendData();
   const alerts = getAlerts();
   const selectedTermData = allTerms.find(t => t.term_number === selectedTermNumber);
+  const selectedTermInfo = selectedTermNumber ? getTermInfo(selectedTermNumber) : { color: theme.color, name: 'Current' };
 
   const overallStats = {
     totalRecords: attendanceData.length,
@@ -180,7 +192,8 @@ const AttendanceLogPage = () => {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="w-12 h-12 border-4 rounded-full animate-spin mx-auto mb-4"
+            style={{ borderColor: theme.withAlpha(0.3), borderTopColor: 'transparent' }}></div>
           <p className="text-gray-500 text-sm">Loading attendance data...</p>
         </div>
       </div>
@@ -190,17 +203,18 @@ const AttendanceLogPage = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white rounded-2xl shadow-lg p-6 border border-emerald-100">
+      <div className="bg-white rounded-2xl shadow-lg p-6 border" style={{ borderColor: `${theme.color}20` }}>
         <div className="flex justify-between items-center mb-5">
           <div>
             <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-              <Calendar size={24} className="text-emerald-600" />
+              <Calendar size={24} style={theme.textStyle} />
               Attendance Log
             </h2>
             <p className="text-sm text-gray-500 mt-1">Historical attendance records and analytics</p>
           </div>
           <button onClick={() => alert('PDF export coming soon!')}
-            className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-5 py-2.5 rounded-lg font-medium text-sm hover:shadow-lg transition-all flex items-center gap-2">
+            className="text-white px-5 py-2.5 rounded-lg font-medium text-sm hover:shadow-lg transition-all flex items-center gap-2"
+            style={theme.gradientStyle}>
             <Download size={18} /> Export PDF
           </button>
         </div>
@@ -209,7 +223,8 @@ const AttendanceLogPage = () => {
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Class</label>
             <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+              style={{ '--tw-ring-color': theme.color }}>
               <option value="all">All Classes</option>
               {availableClasses.map(cls => (<option key={cls} value={cls}>{cls}</option>))}
             </select>
@@ -219,7 +234,7 @@ const AttendanceLogPage = () => {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
               <input type="text" placeholder="Search by name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                className="w-full pl-9 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:outline-none" />
             </div>
           </div>
         </div>
@@ -227,22 +242,27 @@ const AttendanceLogPage = () => {
 
       {/* Term Tabs + Content */}
       {allTerms.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-lg border border-emerald-100 overflow-hidden">
-          {/* Term Tabs */}
+        <div className="bg-white rounded-2xl shadow-lg border overflow-hidden" style={{ borderColor: `${theme.color}20` }}>
+          {/* Term Tabs - Dynamic Colors */}
           <div className="flex border-b border-gray-200 bg-gray-50">
             {allTerms.map(term => {
-              const config = TERM_CONFIG[term.term_number];
-              const Icon = config?.icon || BookOpen;
+              const termInfo = getTermInfo(term.term_number);
               const isSelected = selectedTermNumber === term.term_number;
               const isActive = activeTerm?.term_number === term.term_number;
+              
               return (
                 <button key={term.id} onClick={() => setSelectedTermNumber(term.term_number)}
-                  className={`flex-1 px-4 py-3 flex items-center justify-center gap-2 text-sm font-medium transition-colors border-b-2 ${
-                    isSelected ? `${config?.bgActive} border-current` : `${config?.bgInactive} border-transparent`
-                  }`}>
-                  <Icon size={16} />
-                  <span className="hidden sm:inline">Term {term.term_number}:</span> {config?.name}
-                  {isActive && <span className="text-[10px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-bold">ACTIVE</span>}
+                  className="flex-1 px-4 py-3 flex items-center justify-center gap-2 text-sm font-medium transition-colors border-b-2"
+                  style={{
+                    backgroundColor: isSelected ? `${termInfo.color}15` : 'transparent',
+                    color: isSelected ? termInfo.color : '#6b7280',
+                    borderBottomColor: isSelected ? termInfo.color : 'transparent'
+                  }}>
+                  <span className="hidden sm:inline">Term {term.term_number}:</span> {termInfo.name}
+                  {isActive && (
+                    <span className="text-[10px] text-white px-1.5 py-0.5 rounded-full font-bold"
+                      style={{ backgroundColor: theme.color }}>ACTIVE</span>
+                  )}
                 </button>
               );
             })}
@@ -258,9 +278,9 @@ const AttendanceLogPage = () => {
           </div>
 
           <div className="p-4">
-            {/* Stats Cards */}
+            {/* Stats Cards - Dynamic Primary Gradient */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
-              <div className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-xl p-4 shadow">
+              <div className="text-white rounded-xl p-4 shadow" style={theme.gradientStyle}>
                 <p className="text-2xl font-bold">{overallStats.percentage}%</p>
                 <p className="text-xs opacity-90 mt-0.5">Overall Rate</p>
               </div>
@@ -282,7 +302,7 @@ const AttendanceLogPage = () => {
               </div>
             </div>
 
-            {/* View Tabs */}
+            {/* View Tabs - Dynamic Colors */}
             <div className="flex gap-2 mb-5">
               {[
                 { id: 'overview', label: 'Trend', icon: TrendingUp },
@@ -291,9 +311,8 @@ const AttendanceLogPage = () => {
                 { id: 'alerts', label: 'Alerts', icon: AlertCircle }
               ].map(tab => (
                 <button key={tab.id} onClick={() => setView(tab.id)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
-                    view === tab.id ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}>
+                  className="px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5"
+                  style={view === tab.id ? theme.gradientStyle : { backgroundColor: '#f3f4f6', color: '#4b5563' }}>
                   <tab.icon size={16} /> {tab.label}
                   {tab.id === 'alerts' && alerts.length > 0 && (
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${view === 'alerts' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700'}`}>{alerts.length}</span>
@@ -305,7 +324,7 @@ const AttendanceLogPage = () => {
             {/* OVERVIEW / TREND */}
             {view === 'overview' && (
               <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Attendance Trend — {TERM_CONFIG[selectedTermNumber]?.name} Term</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Attendance Trend — {selectedTermInfo.name} Term</h3>
                 {trendData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={280}>
                     <LineChart data={trendData}>
@@ -313,7 +332,7 @@ const AttendanceLogPage = () => {
                       <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                       <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
                       <Tooltip />
-                      <Line type="monotone" dataKey="percentage" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981', r: 3 }} name="Attendance %" />
+                      <Line type="monotone" dataKey="percentage" stroke={theme.color} strokeWidth={2} dot={{ fill: theme.color, r: 3 }} name="Attendance %" />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
@@ -328,7 +347,7 @@ const AttendanceLogPage = () => {
             {/* STUDENTS */}
             {view === 'students' && (
               <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Student Attendance — {TERM_CONFIG[selectedTermNumber]?.name} Term</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Student Attendance — {selectedTermInfo.name} Term</h3>
                 {filteredStudents.length === 0 ? (
                   <div className="text-center py-12 bg-gray-50 rounded-lg">
                     <Users size={40} className="mx-auto text-gray-300 mb-3" />
@@ -357,14 +376,18 @@ const AttendanceLogPage = () => {
                             <tr key={student.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
                               <td className="px-4 py-2.5">
                                 <div className="flex items-center gap-2.5">
-                                  <div className="w-8 h-8 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-full flex items-center justify-center flex-shrink-0">
-                                    <span className="text-xs font-bold text-emerald-700">{initials}</span>
+                                  <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                                    style={{ backgroundColor: theme.withAlpha(0.15) }}>
+                                    <span className="text-xs font-bold" style={theme.textStyle}>{initials}</span>
                                   </div>
                                   <span className="font-medium text-gray-800">{student.name}</span>
                                 </div>
                               </td>
                               <td className="text-center px-3 py-2.5">
-                                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-xs font-medium">{student.class_name}</span>
+                                <span className="px-2 py-0.5 rounded text-xs font-medium"
+                                  style={{ backgroundColor: theme.withAlpha(0.1), color: theme.color }}>
+                                  {student.class_name}
+                                </span>
                               </td>
                               <td className="text-center px-3 py-2.5 text-green-600 font-medium">{stats.present}</td>
                               <td className="text-center px-3 py-2.5 text-red-600 font-medium">{stats.absent}</td>
@@ -384,7 +407,7 @@ const AttendanceLogPage = () => {
             {/* CLASSES */}
             {view === 'classes' && (
               <div className="space-y-5">
-                <h3 className="text-sm font-semibold text-gray-700">Class Comparison — {TERM_CONFIG[selectedTermNumber]?.name} Term</h3>
+                <h3 className="text-sm font-semibold text-gray-700">Class Comparison — {selectedTermInfo.name} Term</h3>
                 {Object.keys(classStats).length > 0 ? (
                   <>
                     <ResponsiveContainer width="100%" height={250}>
@@ -393,7 +416,7 @@ const AttendanceLogPage = () => {
                         <XAxis dataKey="class" tick={{ fontSize: 11 }} />
                         <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
                         <Tooltip />
-                        <Bar dataKey="percentage" fill="#10b981" radius={[6, 6, 0, 0]} name="Attendance %" />
+                        <Bar dataKey="percentage" fill={theme.color} radius={[6, 6, 0, 0]} name="Attendance %" />
                       </BarChart>
                     </ResponsiveContainer>
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

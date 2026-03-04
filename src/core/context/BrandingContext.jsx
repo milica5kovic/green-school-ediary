@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useTenant } from './TenantContext';
 
 // ============================================================================
-// BRANDING CONTEXT - Centralized branding for entire app
+// BRANDING CONTEXT v3 - With use_term_colors toggle
 // ============================================================================
 
 const BrandingContext = createContext(null);
@@ -20,15 +20,20 @@ const DEFAULT_BRANDING = {
   secondaryColor: '#0d9488',
   accentColor: '#f59e0b',
   
-  // Term Colors (NEW)
+  // Term Colors
   term1Color: '#3b82f6',   // Winter - Blue
   term2Color: '#ec4899',   // Spring - Pink
   term3Color: '#f59e0b',   // Summer - Amber
   
-  // Term Names (NEW)
+  // Term Names
   term1Name: 'Winter',
   term2Name: 'Spring',
   term3Name: 'Summer',
+  
+  // ═══ NEW: Toggle for term colors ═══
+  // When false (default): UI uses primaryColor everywhere
+  // When true: UI uses term1/2/3 colors based on active term
+  useTermColors: false,
   
   // Computed colors (will be calculated)
   primaryRgb: { r: 16, g: 185, b: 129 },
@@ -115,15 +120,18 @@ export const BrandingProvider = ({ children }) => {
       secondaryColor: school.secondary_color || DEFAULT_BRANDING.secondaryColor,
       accentColor: school.accent_color || DEFAULT_BRANDING.accentColor,
       
-      // ═══ TERM COLORS (NEW) ═══
+      // ═══ TERM COLORS ═══
       term1Color: school.term1_color || DEFAULT_BRANDING.term1Color,
       term2Color: school.term2_color || DEFAULT_BRANDING.term2Color,
       term3Color: school.term3_color || DEFAULT_BRANDING.term3Color,
       
-      // ═══ TERM NAMES (NEW) ═══
+      // ═══ TERM NAMES ═══
       term1Name: school.term1_name || DEFAULT_BRANDING.term1Name,
       term2Name: school.term2_name || DEFAULT_BRANDING.term2Name,
       term3Name: school.term3_name || DEFAULT_BRANDING.term3Name,
+      
+      // ═══ USE TERM COLORS TOGGLE ═══
+      useTermColors: school.use_term_colors ?? DEFAULT_BRANDING.useTermColors,
       
       // Computed RGB (for PDF, canvas, etc.)
       primaryRgb: hexToRgb(school.primary_color || DEFAULT_BRANDING.primaryColor),
@@ -169,7 +177,10 @@ export const BrandingProvider = ({ children }) => {
     // Apply branding to document
     applyBrandingToDocument(schoolBranding);
     
-    console.log('🎨 Branding applied:', schoolBranding.name);
+    console.log('🎨 Branding applied:', {
+      name: schoolBranding.name,
+      useTermColors: schoolBranding.useTermColors
+    });
     
   }, [school, schoolId, isSchool, tenantLoading]);
 
@@ -238,7 +249,7 @@ const applyBrandingToDocument = (branding) => {
   root.style.setProperty('--school-primary-dark', branding.primaryDark);
   root.style.setProperty('--school-primary-rgb', `${branding.primaryRgb.r}, ${branding.primaryRgb.g}, ${branding.primaryRgb.b}`);
   
-  // ═══ TERM COLOR CSS VARIABLES (NEW) ═══
+  // ═══ TERM COLOR CSS VARIABLES ═══
   root.style.setProperty('--school-term1', branding.term1Color);
   root.style.setProperty('--school-term2', branding.term2Color);
   root.style.setProperty('--school-term3', branding.term3Color);
@@ -281,12 +292,14 @@ export const useBrandColors = () => {
   const { 
     primaryColor, secondaryColor, accentColor, 
     primaryRgb, primaryLight, primaryDark,
-    term1Color, term2Color, term3Color
+    term1Color, term2Color, term3Color,
+    useTermColors
   } = useBranding();
   return { 
     primaryColor, secondaryColor, accentColor, 
     primaryRgb, primaryLight, primaryDark,
-    term1Color, term2Color, term3Color
+    term1Color, term2Color, term3Color,
+    useTermColors
   };
 };
 
@@ -309,17 +322,19 @@ export const usePdfBranding = () => {
   };
 };
 
-// ═══ NEW: Get term colors ═══
+// ═══ Get term colors ═══
 export const useTermColors = () => {
   const { 
     term1Color, term2Color, term3Color,
-    term1Name, term2Name, term3Name
+    term1Name, term2Name, term3Name,
+    useTermColors
   } = useBranding();
   
   return {
     term1: { color: term1Color, name: term1Name },
     term2: { color: term2Color, name: term2Name },
     term3: { color: term3Color, name: term3Name },
+    isEnabled: useTermColors,
   };
 };
 

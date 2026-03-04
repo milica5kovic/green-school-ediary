@@ -1,48 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Clock, Snowflake, Flower2, Sun, Calendar } from 'lucide-react';
+import { Plus, Clock, Calendar } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import DateNavigator from '../../../../shared/components/DateNavigator';
 import ClassCard from './ClassCard';
 import AddClassModal from './AddClassModal';
 import { useAuth } from '../../../../core/context/AuthContext';
-import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
-
-// ════════════════════════════════════════════════════════════════════════════
-// SEASONAL TERM COLORS - Winter, Spring, Summer
-// ════════════════════════════════════════════════════════════════════════════
-
-const TERM_CONFIG = {
-  1: { 
-    name: 'Winter', 
-    icon: Snowflake, 
-    gradient: 'from-blue-500 to-cyan-600',
-    bg: 'bg-blue-50', 
-    text: 'text-blue-700', 
-    border: 'border-blue-200',
-    buttonGradient: 'from-blue-500 to-cyan-600'
-  },
-  2: { 
-    name: 'Spring', 
-    icon: Flower2, 
-    gradient: 'from-pink-500 to-rose-600',
-    bg: 'bg-pink-50', 
-    text: 'text-pink-700', 
-    border: 'border-pink-200',
-    buttonGradient: 'from-pink-500 to-rose-600'
-  },
-  3: { 
-    name: 'Summer', 
-    icon: Sun, 
-    gradient: 'from-amber-500 to-orange-600',
-    bg: 'bg-amber-50', 
-    text: 'text-amber-700', 
-    border: 'border-amber-200',
-    buttonGradient: 'from-amber-500 to-orange-600'
-  }
-};
+import useTermTheme from '../../../../shared/hooks/useTermTheme';
 
 // ════════════════════════════════════════════════════════════════════════════
 // HOMEPAGE - Teacher's Daily Class Management
+// Uses useTermTheme for dynamic colors from BrandingContext
 // ════════════════════════════════════════════════════════════════════════════
 
 const HomePage = () => {
@@ -52,10 +19,10 @@ const HomePage = () => {
   const [todaySchedule, setTodaySchedule] = useState([]);
   const [localLoading, setLocalLoading] = useState(false);
   const { teacher, profile } = useAuth();
-  const { activeTerm } = useActiveTerm();
-
-  const termConfig = activeTerm ? TERM_CONFIG[activeTerm.term_number] : null;
-  const TermIcon = termConfig?.icon || Calendar;
+  
+  // ═══ USE TERM THEME (dynamic colors from admin settings) ═══
+  const theme = useTermTheme();
+  const TermIcon = theme.icon;
 
   // Get day name helper
   const getDayName = (date) => {
@@ -177,34 +144,33 @@ const HomePage = () => {
   const hasSchedule = todaySchedule.length > 0;
   const showAdminMessage = profile?.role === 'admin' && !teacher?.user_id;
 
-  // Calculate days remaining
-  const getDaysRemaining = () => {
-    if (!activeTerm) return 0;
-    const end = new Date(activeTerm.end_date + 'T00:00:00');
-    const now = new Date();
-    return Math.max(0, Math.ceil((end - now) / (1000 * 60 * 60 * 24)));
-  };
-
   return (
     <div className="space-y-5">
-      {/* ═══ TERM BANNER - Seasonal Colors ═══ */}
-      {activeTerm && termConfig && (
-        <div className={`${termConfig.bg} border ${termConfig.border} rounded-xl px-4 py-2.5 flex items-center justify-between`}>
+      {/* ═══ TERM BANNER - Dynamic Colors ═══ */}
+      {theme.hasActiveTerm && (
+        <div 
+          className="rounded-xl px-4 py-2.5 flex items-center justify-between"
+          style={{ 
+            backgroundColor: theme.withAlpha(0.1),
+            borderWidth: '1px',
+            borderColor: theme.withAlpha(0.2)
+          }}
+        >
           <div className="flex items-center gap-2">
-            <TermIcon size={16} className={termConfig.text} />
-            <span className={`text-sm font-semibold ${termConfig.text}`}>
-              {termConfig.name} Term
+            <TermIcon size={16} style={theme.textStyle} />
+            <span className="text-sm font-semibold" style={theme.textStyle}>
+              {theme.name} Term
             </span>
             <span className="text-xs text-gray-500">
-              {new Date(activeTerm.start_date + 'T00:00:00')
+              {new Date(theme.activeTerm.start_date + 'T00:00:00')
                 .toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
               {' – '}
-              {new Date(activeTerm.end_date + 'T00:00:00')
+              {new Date(theme.activeTerm.end_date + 'T00:00:00')
                 .toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
             </span>
           </div>
-          <span className={`text-xs font-medium ${termConfig.text}`}>
-            {getDaysRemaining()} days left
+          <span className="text-xs font-medium" style={theme.textStyle}>
+            {theme.daysRemaining} days left
           </span>
         </div>
       )}
@@ -227,12 +193,13 @@ const HomePage = () => {
         </div>
       )}
 
-      {/* ═══ ADD CLASS BUTTON - Seasonal Gradient ═══ */}
+      {/* ═══ ADD CLASS BUTTON - Dynamic Gradient ═══ */}
       {!showAdminMessage && (
         <button
           onClick={() => setShowAddClass(true)}
           disabled={localLoading || !hasSchedule}
-          className={`w-full bg-gradient-to-r ${termConfig?.buttonGradient || 'from-emerald-500 to-teal-600'} text-white py-4 rounded-2xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
+          className="w-full text-white py-4 rounded-2xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          style={theme.gradientStyle}
         >
           <Plus size={20} />
           {!hasSchedule ? 'No classes scheduled for this day' : 'Add Class for Today'}
@@ -241,8 +208,11 @@ const HomePage = () => {
 
       {/* ═══ CLASSES LIST ═══ */}
       {dailyClasses.length === 0 ? (
-        <div className={`bg-white rounded-2xl shadow-lg p-12 text-center border ${termConfig?.border || 'border-emerald-100'}`}>
-          <Clock size={48} className={`mx-auto mb-4 ${termConfig?.text || 'text-emerald-300'}`} style={{ opacity: 0.5 }} />
+        <div 
+          className="bg-white rounded-2xl shadow-lg p-12 text-center border"
+          style={{ borderColor: theme.withAlpha(0.2) }}
+        >
+          <Clock size={48} className="mx-auto mb-4" style={{ color: theme.withAlpha(0.4) }} />
           <p className="text-gray-500">No classes added for this day yet</p>
           {hasSchedule && !showAdminMessage && (
             <p className="text-sm text-gray-400 mt-2">
