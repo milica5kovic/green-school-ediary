@@ -1,20 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ChevronDown, ArrowLeft, ClipboardList, CheckCircle, Clock, XCircle,
-  AlertTriangle, Snowflake, Flower2, Sun, Calendar, BookOpen, Filter
+  AlertTriangle, Calendar, BookOpen
 } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
+import useTermTheme from '../../../../shared/hooks/useTermTheme';
+import { useBranding } from '../../../../core/context/BrandingContext';
 
 // ═══════════════════════════════════════════════════════════════
-// SHARED PARENT DESIGN TOKENS
+// PARENT HOMEWORK PAGE - Uses useTermTheme for dynamic colors
 // ═══════════════════════════════════════════════════════════════
-
-const TERM_CONFIG = {
-  1: { name: 'Winter', icon: Snowflake, gradient: 'from-blue-500 to-cyan-600', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
-  2: { name: 'Spring', icon: Flower2, gradient: 'from-pink-500 to-rose-600', bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
-  3: { name: 'Summer', icon: Sun, gradient: 'from-amber-500 to-orange-600', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
-};
 
 const ChildSelector = ({ children, selectedChild, setSelectedChild }) => {
   if (children.length <= 1) return null;
@@ -38,13 +34,21 @@ const STATUS_CONFIG = {
   not_done: { label: 'Not Done', icon: XCircle, color: 'red', bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', badge: 'bg-red-100 text-red-700' },
 };
 
-// ═══════════════════════════════════════════════════════════════
-// PARENT HOMEWORK PAGE
-// ═══════════════════════════════════════════════════════════════
-
 const ParentHomeworkPage = () => {
   const { supabase, setCurrentPage } = useApp();
   const { activeTerm, terms } = useActiveTerm();
+  const branding = useBranding();
+  const theme = useTermTheme();
+  const TermIcon = theme.icon;
+
+  // Helper to get term info (not a hook)
+  const getTermInfo = (termNumber) => {
+    const colorKey = `term${termNumber}Color`;
+    const nameKey = `term${termNumber}Name`;
+    const color = branding[colorKey] || ['#3b82f6', '#ec4899', '#f59e0b'][termNumber - 1];
+    const name = branding[nameKey] || ['Winter', 'Spring', 'Summer'][termNumber - 1];
+    return { color, name };
+  };
 
   const [children, setChildren] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
@@ -140,13 +144,13 @@ const ParentHomeworkPage = () => {
     return list;
   }, [homework, statusFilter, subjectFilter]);
 
-  const termConfig = selectedTerm ? TERM_CONFIG[selectedTerm.term_number] : null;
-  const TermIcon = termConfig?.icon || Calendar;
+  const selectedTermInfo = selectedTerm ? getTermInfo(selectedTerm.term_number) : null;
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-12 h-12 border-4 rounded-full animate-spin"
+          style={{ borderColor: theme.withAlpha(0.3), borderTopColor: 'transparent' }} />
       </div>
     );
   }
@@ -154,8 +158,9 @@ const ParentHomeworkPage = () => {
   return (
     <div className="space-y-6">
 
-      {/* ═══ HEADER ═══════════════════════════════════════════ */}
-      <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-lg p-6 md:p-8 text-white relative overflow-hidden">
+      {/* ═══ HEADER - Dynamic gradient ═══════════════════════ */}
+      <div className="rounded-2xl shadow-lg p-6 md:p-8 text-white relative overflow-hidden"
+        style={theme.gradientStyle}>
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-5 rounded-full -ml-24 -mb-24" />
 
@@ -167,16 +172,16 @@ const ParentHomeworkPage = () => {
                 <ArrowLeft size={18} />
               </button>
               <div>
-                <p className="text-emerald-100 text-sm">Homework Tracker</p>
+                <p className="text-white/70 text-sm">Homework Tracker</p>
                 <h1 className="text-2xl md:text-3xl font-bold">All Homework</h1>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-              {selectedTerm && termConfig && (
+              {theme.hasActiveTerm && (
                 <div className="hidden sm:flex bg-white/15 backdrop-blur px-3 py-1.5 rounded-lg items-center gap-1.5">
                   <TermIcon size={14} />
-                  <span className="text-xs font-medium">{termConfig.name} Term</span>
+                  <span className="text-xs font-medium">{theme.name} Term</span>
                 </div>
               )}
               <ChildSelector children={children} selectedChild={selectedChild} setSelectedChild={setSelectedChild} />
@@ -197,7 +202,7 @@ const ParentHomeworkPage = () => {
                 <div key={s.label} className="bg-white/10 backdrop-blur rounded-xl p-3 border border-white/20 text-center">
                   <I size={14} className="mx-auto text-white/60 mb-1" />
                   <p className="text-xl font-bold">{s.value}</p>
-                  <p className="text-[10px] text-emerald-100">{s.label}</p>
+                  <p className="text-[10px] text-white/70">{s.label}</p>
                 </div>
               );
             })}
@@ -205,23 +210,26 @@ const ParentHomeworkPage = () => {
         </div>
       </div>
 
-      {/* ═══ TERM TABS ════════════════════════════════════════ */}
+      {/* ═══ TERM TABS - Dynamic colors ═══════════════════════ */}
       {terms && terms.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-1">
           {terms.map(t => {
-            const tc = TERM_CONFIG[t.term_number];
-            const TI = tc?.icon || Calendar;
+            const termInfo = getTermInfo(t.term_number);
             const active = selectedTerm?.id === t.id;
             return (
               <button key={t.id}
                 onClick={() => { setSelectedTerm(t); setStatusFilter('all'); setSubjectFilter('all'); }}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
-                  active
-                    ? `bg-gradient-to-r ${tc?.gradient || ''} text-white shadow-md`
-                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-                }`}>
-                <TI size={14} />
-                {tc?.name || `Term ${t.term_number}`}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition-all"
+                style={active ? {
+                  background: `linear-gradient(135deg, ${termInfo.color} 0%, ${termInfo.color}dd 100%)`,
+                  color: 'white',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                } : {
+                  backgroundColor: 'white',
+                  border: '1px solid #e5e7eb',
+                  color: '#4b5563'
+                }}>
+                {termInfo.name}
               </button>
             );
           })}
@@ -240,13 +248,16 @@ const ParentHomeworkPage = () => {
         ].map(f => (
           <button key={f.key}
             onClick={() => setStatusFilter(f.key)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              statusFilter === f.key
-                ? f.key === 'overdue'
-                  ? 'bg-red-500 text-white shadow-sm'
-                  : 'bg-emerald-500 text-white shadow-sm'
-                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-            }`}>
+            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+            style={statusFilter === f.key ? {
+              backgroundColor: f.key === 'overdue' ? '#ef4444' : theme.color,
+              color: 'white',
+              boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+            } : {
+              backgroundColor: 'white',
+              border: '1px solid #e5e7eb',
+              color: '#4b5563'
+            }}>
             {f.label} <span className="opacity-70">({f.count})</span>
           </button>
         ))}
@@ -258,11 +269,16 @@ const ParentHomeworkPage = () => {
         {subjects.length > 2 && subjects.map(s => (
           <button key={s}
             onClick={() => setSubjectFilter(s)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-              subjectFilter === s
-                ? 'bg-indigo-500 text-white shadow-sm'
-                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-            }`}>
+            className="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all"
+            style={subjectFilter === s ? {
+              backgroundColor: '#6366f1',
+              color: 'white',
+              boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+            } : {
+              backgroundColor: 'white',
+              border: '1px solid #e5e7eb',
+              color: '#4b5563'
+            }}>
             {s === 'all' ? 'All Subjects' : s}
           </button>
         ))}
@@ -367,19 +383,23 @@ const ParentHomeworkPage = () => {
         )}
       </div>
 
-      {/* ═══ TERM FOOTER ══════════════════════════════════════ */}
-      {selectedTerm && termConfig && (
-        <div className={`${termConfig.bg} border ${termConfig.border} rounded-xl px-4 py-3 flex items-center justify-between`}>
+      {/* ═══ TERM FOOTER - Dynamic colors ═════════════════════ */}
+      {selectedTerm && selectedTermInfo && (
+        <div className="rounded-xl px-4 py-3 flex items-center justify-between"
+          style={{ backgroundColor: `${selectedTermInfo.color}15`, borderWidth: '1px', borderColor: `${selectedTermInfo.color}30` }}>
           <div className="flex items-center gap-2">
-            <TermIcon size={14} className={termConfig.text} />
-            <span className={`text-xs font-semibold ${termConfig.text}`}>{termConfig.name} Term {selectedTerm.academic_year}</span>
+            <TermIcon size={14} style={{ color: selectedTermInfo.color }} />
+            <span className="text-xs font-semibold" style={{ color: selectedTermInfo.color }}>{selectedTermInfo.name} Term {selectedTerm.academic_year}</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-24 bg-white/60 rounded-full h-1.5 hidden sm:block">
-              <div className={`bg-gradient-to-r ${termConfig.gradient} h-1.5 rounded-full`}
-                style={{ width: `${Math.min(100, Math.max(0, ((new Date() - new Date(selectedTerm.start_date)) / (new Date(selectedTerm.end_date) - new Date(selectedTerm.start_date))) * 100))}%` }} />
+            <div className="w-24 rounded-full h-1.5 hidden sm:block" style={{ backgroundColor: `${selectedTermInfo.color}30` }}>
+              <div className="h-1.5 rounded-full"
+                style={{ 
+                  width: `${Math.min(100, Math.max(0, ((new Date() - new Date(selectedTerm.start_date)) / (new Date(selectedTerm.end_date) - new Date(selectedTerm.start_date))) * 100))}%`,
+                  backgroundColor: selectedTermInfo.color
+                }} />
             </div>
-            <span className={`text-[10px] font-medium ${termConfig.text}`}>
+            <span className="text-[10px] font-medium" style={{ color: selectedTermInfo.color }}>
               {Math.max(0, Math.ceil((new Date(selectedTerm.end_date + 'T00:00:00') - new Date()) / 86400000))}d left
             </span>
           </div>

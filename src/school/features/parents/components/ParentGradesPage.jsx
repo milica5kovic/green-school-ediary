@@ -1,21 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  ChevronDown, ChevronLeft, BarChart3, BookOpen, Filter, ArrowLeft,
-  Snowflake, Flower2, Sun, Calendar, TrendingUp, Award, Info
+  ChevronDown, BarChart3, ArrowLeft, Calendar, TrendingUp
 } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
+import useTermTheme from '../../../../shared/hooks/useTermTheme';
+import { useBranding } from '../../../../core/context/BrandingContext';
 import { getCambridgeGrade, isPrimaryClass } from '../../../../core/utils/cambridgeGrading';
 
 // ═══════════════════════════════════════════════════════════════
-// SHARED PARENT DESIGN TOKENS
+// PARENT GRADES PAGE - Uses useTermTheme for dynamic colors
 // ═══════════════════════════════════════════════════════════════
-
-const TERM_CONFIG = {
-  1: { name: 'Winter', icon: Snowflake, gradient: 'from-blue-500 to-cyan-600', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
-  2: { name: 'Spring', icon: Flower2, gradient: 'from-pink-500 to-rose-600', bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
-  3: { name: 'Summer', icon: Sun, gradient: 'from-amber-500 to-orange-600', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
-};
 
 const ChildSelector = ({ children, selectedChild, setSelectedChild }) => {
   if (children.length <= 1) return null;
@@ -33,13 +28,21 @@ const ChildSelector = ({ children, selectedChild, setSelectedChild }) => {
   );
 };
 
-// ═══════════════════════════════════════════════════════════════
-// PARENT GRADES PAGE
-// ═══════════════════════════════════════════════════════════════
-
 const ParentGradesPage = () => {
   const { supabase, setCurrentPage } = useApp();
   const { activeTerm, terms } = useActiveTerm();
+  const branding = useBranding();
+  const theme = useTermTheme();
+  const TermIcon = theme.icon;
+
+  // Helper to get term info (not a hook)
+  const getTermInfo = (termNumber) => {
+    const colorKey = `term${termNumber}Color`;
+    const nameKey = `term${termNumber}Name`;
+    const color = branding[colorKey] || ['#3b82f6', '#ec4899', '#f59e0b'][termNumber - 1];
+    const name = branding[nameKey] || ['Winter', 'Spring', 'Summer'][termNumber - 1];
+    return { color, name };
+  };
 
   const [children, setChildren] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
@@ -139,14 +142,14 @@ const ParentGradesPage = () => {
   }, [grades, selectedChild]);
 
   const primary = isPrimaryClass(selectedChild?.class_name);
-  const termConfig = selectedTerm ? TERM_CONFIG[selectedTerm.term_number] : null;
-  const TermIcon = termConfig?.icon || Calendar;
+  const selectedTermInfo = selectedTerm ? getTermInfo(selectedTerm.term_number) : null;
 
   // ─── Loading ───────────────────────────────────────────────
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-12 h-12 border-4 rounded-full animate-spin"
+          style={{ borderColor: theme.withAlpha(0.3), borderTopColor: 'transparent' }} />
       </div>
     );
   }
@@ -154,8 +157,9 @@ const ParentGradesPage = () => {
   return (
     <div className="space-y-6">
 
-      {/* ═══ HEADER ═══════════════════════════════════════════ */}
-      <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-lg p-6 md:p-8 text-white relative overflow-hidden">
+      {/* ═══ HEADER - Dynamic gradient ═══════════════════════ */}
+      <div className="rounded-2xl shadow-lg p-6 md:p-8 text-white relative overflow-hidden"
+        style={theme.gradientStyle}>
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-5 rounded-full -ml-24 -mb-24" />
 
@@ -167,16 +171,16 @@ const ParentGradesPage = () => {
                 <ArrowLeft size={18} />
               </button>
               <div>
-                <p className="text-emerald-100 text-sm">Academic Performance</p>
+                <p className="text-white/70 text-sm">Academic Performance</p>
                 <h1 className="text-2xl md:text-3xl font-bold">All Grades</h1>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-              {selectedTerm && termConfig && (
+              {theme.hasActiveTerm && (
                 <div className="hidden sm:flex bg-white/15 backdrop-blur px-3 py-1.5 rounded-lg items-center gap-1.5">
                   <TermIcon size={14} />
-                  <span className="text-xs font-medium">{termConfig.name} Term</span>
+                  <span className="text-xs font-medium">{theme.name} Term</span>
                 </div>
               )}
               <ChildSelector children={children} selectedChild={selectedChild} setSelectedChild={setSelectedChild} />
@@ -192,30 +196,33 @@ const ParentGradesPage = () => {
               </div>
               <div>
                 <p className="font-semibold text-lg">{overallAvg.display}</p>
-                <p className="text-emerald-100 text-sm">Overall Average · {grades.length} assessment{grades.length !== 1 ? 's' : ''}</p>
+                <p className="text-white/70 text-sm">Overall Average · {grades.length} assessment{grades.length !== 1 ? 's' : ''}</p>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* ═══ TERM TABS ════════════════════════════════════════ */}
+      {/* ═══ TERM TABS - Dynamic colors ═══════════════════════ */}
       {terms && terms.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-1">
           {terms.map(t => {
-            const tc = TERM_CONFIG[t.term_number];
-            const TI = tc?.icon || Calendar;
+            const termInfo = getTermInfo(t.term_number);
             const active = selectedTerm?.id === t.id;
             return (
               <button key={t.id}
                 onClick={() => { setSelectedTerm(t); setSelectedSubject('all'); }}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
-                  active
-                    ? `bg-gradient-to-r ${tc?.gradient || ''} text-white shadow-md`
-                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-                }`}>
-                <TI size={14} />
-                {tc?.name || `Term ${t.term_number}`}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition-all"
+                style={active ? {
+                  background: `linear-gradient(135deg, ${termInfo.color} 0%, ${termInfo.color}dd 100%)`,
+                  color: 'white',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                } : {
+                  backgroundColor: 'white',
+                  border: '1px solid #e5e7eb',
+                  color: '#4b5563'
+                }}>
+                {termInfo.name}
                 {t.status === 'finalized' && <span className="text-[10px] opacity-70">🔒</span>}
               </button>
             );
@@ -237,11 +244,15 @@ const ParentGradesPage = () => {
             {subjectAverages.map(sa => (
               <button key={sa.subject}
                 onClick={() => setSelectedSubject(selectedSubject === sa.subject ? 'all' : sa.subject)}
-                className={`p-3 rounded-xl border transition-all text-left ${
-                  selectedSubject === sa.subject
-                    ? 'border-emerald-300 bg-emerald-50 ring-2 ring-emerald-200'
-                    : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
-                }`}>
+                className="p-3 rounded-xl border transition-all text-left"
+                style={selectedSubject === sa.subject ? {
+                  borderColor: `${theme.color}60`,
+                  backgroundColor: theme.withAlpha(0.05),
+                  boxShadow: `0 0 0 2px ${theme.withAlpha(0.2)}`
+                } : {
+                  borderColor: '#e5e7eb',
+                  backgroundColor: '#f9fafb'
+                }}>
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs"
                     style={{ backgroundColor: sa.cambridge.color }}>
@@ -262,11 +273,16 @@ const ParentGradesPage = () => {
           {subjects.map(s => (
             <button key={s}
               onClick={() => setSelectedSubject(s)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-                selectedSubject === s
-                  ? 'bg-emerald-500 text-white shadow-sm'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}>
+              className="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all"
+              style={selectedSubject === s ? {
+                backgroundColor: theme.color,
+                color: 'white',
+                boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+              } : {
+                backgroundColor: 'white',
+                border: '1px solid #e5e7eb',
+                color: '#4b5563'
+              }}>
               {s === 'all' ? 'All Subjects' : s}
               {s !== 'all' && (
                 <span className="ml-1 text-[10px] opacity-70">
@@ -356,12 +372,13 @@ const ParentGradesPage = () => {
         )}
       </div>
 
-      {/* ═══ TERM FOOTER ══════════════════════════════════════ */}
-      {selectedTerm && termConfig && (
-        <div className={`${termConfig.bg} border ${termConfig.border} rounded-xl px-4 py-3 flex items-center justify-between`}>
+      {/* ═══ TERM FOOTER - Dynamic colors ═════════════════════ */}
+      {selectedTerm && selectedTermInfo && (
+        <div className="rounded-xl px-4 py-3 flex items-center justify-between"
+          style={{ backgroundColor: `${selectedTermInfo.color}15`, borderWidth: '1px', borderColor: `${selectedTermInfo.color}30` }}>
           <div className="flex items-center gap-2">
-            <TermIcon size={14} className={termConfig.text} />
-            <span className={`text-xs font-semibold ${termConfig.text}`}>{termConfig.name} Term {selectedTerm.academic_year}</span>
+            <TermIcon size={14} style={{ color: selectedTermInfo.color }} />
+            <span className="text-xs font-semibold" style={{ color: selectedTermInfo.color }}>{selectedTermInfo.name} Term {selectedTerm.academic_year}</span>
             <span className="text-[10px] text-gray-500 hidden sm:inline">
               {new Date(selectedTerm.start_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
               {' – '}
@@ -369,11 +386,14 @@ const ParentGradesPage = () => {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-24 bg-white/60 rounded-full h-1.5 hidden sm:block">
-              <div className={`bg-gradient-to-r ${termConfig.gradient} h-1.5 rounded-full`}
-                style={{ width: `${Math.min(100, Math.max(0, ((new Date() - new Date(selectedTerm.start_date)) / (new Date(selectedTerm.end_date) - new Date(selectedTerm.start_date))) * 100))}%` }} />
+            <div className="w-24 rounded-full h-1.5 hidden sm:block" style={{ backgroundColor: `${selectedTermInfo.color}30` }}>
+              <div className="h-1.5 rounded-full"
+                style={{ 
+                  width: `${Math.min(100, Math.max(0, ((new Date() - new Date(selectedTerm.start_date)) / (new Date(selectedTerm.end_date) - new Date(selectedTerm.start_date))) * 100))}%`,
+                  backgroundColor: selectedTermInfo.color
+                }} />
             </div>
-            <span className={`text-[10px] font-medium ${termConfig.text}`}>
+            <span className="text-[10px] font-medium" style={{ color: selectedTermInfo.color }}>
               {Math.max(0, Math.ceil((new Date(selectedTerm.end_date + 'T00:00:00') - new Date()) / 86400000))}d left
             </span>
           </div>

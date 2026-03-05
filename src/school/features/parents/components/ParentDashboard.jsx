@@ -1,22 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   ChevronDown, Calendar, Clock, BookOpen, CheckCircle, XCircle, AlertTriangle,
-  Snowflake, Flower2, Sun, ClipboardList, BarChart3, ArrowRight, UserCheck,
+  ClipboardList, BarChart3, ArrowRight, UserCheck,
   AlertCircle, Award, Users
 } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
+import useTermTheme from '../../../../shared/hooks/useTermTheme';
 import { getCambridgeGrade, isPrimaryClass } from '../../../../core/utils/cambridgeGrading';
 
 // ═══════════════════════════════════════════════════════════
-// SHARED PARENT DESIGN TOKENS — reuse across all parent pages
+// PARENT DASHBOARD - Uses useTermTheme for dynamic colors
 // ═══════════════════════════════════════════════════════════
-
-const TERM_CONFIG = {
-  1: { name: 'Winter', icon: Snowflake, gradient: 'from-blue-500 to-cyan-600', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
-  2: { name: 'Spring', icon: Flower2, gradient: 'from-pink-500 to-rose-600', bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
-  3: { name: 'Summer', icon: Sun, gradient: 'from-amber-500 to-orange-600', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
-};
 
 // Shared child selector for parent pages
 const ChildSelector = ({ children, selectedChild, setSelectedChild, compact = false }) => {
@@ -35,13 +30,11 @@ const ChildSelector = ({ children, selectedChild, setSelectedChild, compact = fa
   );
 };
 
-// ═══════════════════════════════════════════════════════════
-// PARENT DASHBOARD
-// ═══════════════════════════════════════════════════════════
-
 const ParentDashboard = () => {
   const { supabase, setCurrentPage } = useApp();
   const { activeTerm } = useActiveTerm();
+  const theme = useTermTheme();
+  const TermIcon = theme.icon;
 
   const [children, setChildren] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
@@ -58,8 +51,6 @@ const ParentDashboard = () => {
   const [todayClasses, setTodayClasses] = useState([]);
 
   const today = new Date().toISOString().split('T')[0];
-  const termConfig = activeTerm ? TERM_CONFIG[activeTerm.term_number] : null;
-  const TermIcon = termConfig?.icon || Calendar;
 
   // ─── LOAD CHILDREN ───────────────────────────────────
   useEffect(() => {
@@ -199,7 +190,8 @@ const ParentDashboard = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-12 h-12 border-4 rounded-full animate-spin"
+          style={{ borderColor: theme.withAlpha(0.3), borderTopColor: 'transparent' }}></div>
       </div>
     );
   }
@@ -217,25 +209,26 @@ const ParentDashboard = () => {
   return (
     <div className="space-y-6">
 
-      {/* ═══ HEADER ═══════════════════════════════════════ */}
-      <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-lg p-6 md:p-8 text-white relative overflow-hidden">
+      {/* ═══ HEADER - Dynamic gradient ═══════════════════ */}
+      <div className="rounded-2xl shadow-lg p-6 md:p-8 text-white relative overflow-hidden"
+        style={theme.gradientStyle}>
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-5 rounded-full -ml-24 -mb-24" />
 
         <div className="relative z-10">
           <div className="flex items-center justify-between mb-5">
             <div>
-              <p className="text-emerald-100 text-sm">
+              <p className="text-white/70 text-sm">
                 {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
               </p>
               <h1 className="text-2xl md:text-3xl font-bold mt-1">Parent Dashboard</h1>
             </div>
 
             <div className="flex items-center gap-3">
-              {activeTerm && termConfig && (
+              {theme.hasActiveTerm && (
                 <div className="hidden sm:flex bg-white/15 backdrop-blur px-3 py-1.5 rounded-lg items-center gap-1.5">
                   <TermIcon size={14} />
-                  <span className="text-xs font-medium">{termConfig.name} Term</span>
+                  <span className="text-xs font-medium">{theme.name} Term</span>
                 </div>
               )}
               <ChildSelector children={children} selectedChild={selectedChild} setSelectedChild={setSelectedChild} />
@@ -249,14 +242,12 @@ const ParentDashboard = () => {
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-base md:text-lg truncate">{selectedChild?.name}</p>
-              <p className="text-emerald-100 text-sm">Class {selectedChild?.class_name} · {primary ? 'Cambridge Primary' : 'Cambridge IGCSE'}</p>
+              <p className="text-white/70 text-sm">Class {selectedChild?.class_name} · {primary ? 'Cambridge Primary' : 'Cambridge IGCSE'}</p>
             </div>
-            {activeTerm && termConfig && (
+            {theme.hasActiveTerm && (
               <div className="hidden md:block text-right">
-                <p className="text-2xl font-bold">
-                  {Math.max(0, Math.ceil((new Date(activeTerm.end_date + 'T00:00:00') - new Date()) / 86400000))}
-                </p>
-                <p className="text-emerald-100 text-xs">days left in term</p>
+                <p className="text-2xl font-bold">{theme.daysRemaining}</p>
+                <p className="text-white/60 text-xs">days left in term</p>
               </div>
             )}
           </div>
@@ -264,7 +255,10 @@ const ParentDashboard = () => {
       </div>
 
       {dataLoading && (
-        <div className="flex justify-center py-2"><div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" /></div>
+        <div className="flex justify-center py-2">
+          <div className="w-5 h-5 border-2 rounded-full animate-spin"
+            style={{ borderColor: theme.withAlpha(0.3), borderTopColor: 'transparent' }} />
+        </div>
       )}
 
       {/* ═══ STAT CARDS — colorful gradients ═════════════ */}
@@ -366,7 +360,7 @@ const ParentDashboard = () => {
               </div>
               <h3 className="text-sm font-bold text-gray-800">Recent Grades</h3>
             </div>
-            <button onClick={() => nav('parent-grades')} className="text-emerald-600 text-xs font-semibold flex items-center gap-0.5 hover:underline">
+            <button onClick={() => nav('parent-grades')} className="text-xs font-semibold flex items-center gap-0.5 hover:underline" style={theme.textStyle}>
               View All <ArrowRight size={12} />
             </button>
           </div>
@@ -428,7 +422,7 @@ const ParentDashboard = () => {
               </div>
               <h3 className="text-sm font-bold text-gray-800">Homework</h3>
             </div>
-            <button onClick={() => nav('parent-homework')} className="text-emerald-600 text-xs font-semibold flex items-center gap-0.5 hover:underline">
+            <button onClick={() => nav('parent-homework')} className="text-xs font-semibold flex items-center gap-0.5 hover:underline" style={theme.textStyle}>
               View All <ArrowRight size={12} />
             </button>
           </div>
@@ -496,7 +490,7 @@ const ParentDashboard = () => {
               </div>
               <h3 className="text-sm font-bold text-gray-800">Today's Classes</h3>
             </div>
-            <button onClick={() => nav('parent-daily')} className="text-emerald-600 text-xs font-semibold flex items-center gap-0.5 hover:underline">
+            <button onClick={() => nav('parent-daily')} className="text-xs font-semibold flex items-center gap-0.5 hover:underline" style={theme.textStyle}>
               Details <ArrowRight size={12} />
             </button>
           </div>
@@ -573,7 +567,7 @@ const ParentDashboard = () => {
               </div>
               <h3 className="text-sm font-bold text-gray-800">School Events</h3>
             </div>
-            <button onClick={() => nav('parent-calendar')} className="text-emerald-600 text-xs font-semibold flex items-center gap-0.5 hover:underline">
+            <button onClick={() => nav('parent-calendar')} className="text-xs font-semibold flex items-center gap-0.5 hover:underline" style={theme.textStyle}>
               Calendar <ArrowRight size={12} />
             </button>
           </div>
@@ -583,11 +577,11 @@ const ParentDashboard = () => {
               {upcomingEvents.map(e => (
                 <div key={e.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                   <div className="w-10 h-10 rounded-xl flex flex-col items-center justify-center flex-shrink-0 border"
-                    style={{ backgroundColor: (e.color || '#10b981') + '15', borderColor: (e.color || '#10b981') + '40' }}>
-                    <span className="text-[8px] font-medium leading-none" style={{ color: e.color || '#10b981' }}>
+                    style={{ backgroundColor: (e.color || theme.color) + '15', borderColor: (e.color || theme.color) + '40' }}>
+                    <span className="text-[8px] font-medium leading-none" style={{ color: e.color || theme.color }}>
                       {new Date(e.start_date + 'T00:00:00').toLocaleDateString('en-GB', { month: 'short' }).toUpperCase()}
                     </span>
-                    <span className="text-sm font-bold leading-none" style={{ color: e.color || '#10b981' }}>
+                    <span className="text-sm font-bold leading-none" style={{ color: e.color || theme.color }}>
                       {new Date(e.start_date + 'T00:00:00').getDate()}
                     </span>
                   </div>
@@ -610,25 +604,25 @@ const ParentDashboard = () => {
         </div>
       </div>
 
-      {/* ═══ TERM FOOTER ═════════════════════════════════ */}
-      {activeTerm && termConfig && (
-        <div className={`${termConfig.bg} border ${termConfig.border} rounded-xl px-4 py-3 flex items-center justify-between`}>
+      {/* ═══ TERM FOOTER - Dynamic colors ════════════════ */}
+      {theme.hasActiveTerm && (
+        <div className="rounded-xl px-4 py-3 flex items-center justify-between"
+          style={{ backgroundColor: theme.withAlpha(0.1), borderWidth: '1px', borderColor: theme.withAlpha(0.2) }}>
           <div className="flex items-center gap-2">
-            <TermIcon size={14} className={termConfig.text} />
-            <span className={`text-xs font-semibold ${termConfig.text}`}>{termConfig.name} Term {activeTerm.academic_year}</span>
+            <TermIcon size={14} style={theme.textStyle} />
+            <span className="text-xs font-semibold" style={theme.textStyle}>{theme.name} Term {theme.activeTerm?.academic_year}</span>
             <span className="text-[10px] text-gray-500 hidden sm:inline">
-              {new Date(activeTerm.start_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              {new Date(theme.activeTerm?.start_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
               {' – '}
-              {new Date(activeTerm.end_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              {new Date(theme.activeTerm?.end_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-24 bg-white/60 rounded-full h-1.5 hidden sm:block">
-              <div className={`bg-gradient-to-r ${termConfig.gradient} h-1.5 rounded-full`}
-                style={{ width: `${Math.min(100, Math.max(0, ((new Date() - new Date(activeTerm.start_date)) / (new Date(activeTerm.end_date) - new Date(activeTerm.start_date))) * 100))}%` }} />
+            <div className="w-24 rounded-full h-1.5 hidden sm:block" style={{ backgroundColor: theme.withAlpha(0.2) }}>
+              <div className="h-1.5 rounded-full" style={{ width: `${theme.progress}%`, backgroundColor: theme.color }} />
             </div>
-            <span className={`text-[10px] font-medium ${termConfig.text}`}>
-              {Math.max(0, Math.ceil((new Date(activeTerm.end_date + 'T00:00:00') - new Date()) / 86400000))}d left
+            <span className="text-[10px] font-medium" style={theme.textStyle}>
+              {theme.daysRemaining}d left
             </span>
           </div>
         </div>
