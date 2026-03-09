@@ -1,63 +1,48 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useTenant } from './TenantContext';
 
 // ============================================================================
-// BRANDING CONTEXT v3 - With use_term_colors toggle
+// BRANDING CONTEXT v4 - With refetch function
 // ============================================================================
 
 const BrandingContext = createContext(null);
 
-// Default branding (Akio/SchoolHub platform defaults)
 const DEFAULT_BRANDING = {
-  // Identity
   name: 'SchoolHub',
   tagline: 'School Management Platform',
   logoUrl: '/Logo(1).png',
   faviconUrl: '/Logo(1).png',
   
-  // Colors
   primaryColor: '#10b981',
   secondaryColor: '#0d9488',
   accentColor: '#f59e0b',
   
-  // Term Colors
-  term1Color: '#3b82f6',   // Winter - Blue
-  term2Color: '#ec4899',   // Spring - Pink
-  term3Color: '#f59e0b',   // Summer - Amber
-  
-  // Term Names
+  term1Color: '#3b82f6',
+  term2Color: '#ec4899',
+  term3Color: '#f59e0b',
   term1Name: 'Winter',
   term2Name: 'Spring',
   term3Name: 'Summer',
-  
-  // ═══ NEW: Toggle for term colors ═══
-  // When false (default): UI uses primaryColor everywhere
-  // When true: UI uses term1/2/3 colors based on active term
   useTermColors: false,
   
-  // Computed colors (will be calculated)
   primaryRgb: { r: 16, g: 185, b: 129 },
   secondaryRgb: { r: 13, g: 148, b: 136 },
   accentRgb: { r: 245, g: 158, b: 11 },
   
-  // Contact
   email: 'hello@akio.rs',
   phone: '',
   website: 'https://akio.rs',
   address: 'Belgrade, Serbia',
   
-  // Academic
   gradingSystem: 'cambridge',
   academicYear: '2025-26',
   timezone: 'Europe/Belgrade',
   language: 'en',
   
-  // PDF
   pdfHeaderText: 'SchoolHub',
   pdfFooterText: 'Powered by Akio',
   showLogoInPdf: true,
   
-  // Features
   features: {
     homework: true,
     attendance: true,
@@ -70,12 +55,10 @@ const DEFAULT_BRANDING = {
     pdf_branding: false,
   },
   
-  // Meta
   isCustomBranding: false,
   isLoading: true,
 };
 
-// Helper: Convert hex to RGB
 const hexToRgb = (hex) => {
   if (!hex) return { r: 0, g: 0, b: 0 };
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -86,7 +69,6 @@ const hexToRgb = (hex) => {
   } : { r: 0, g: 0, b: 0 };
 };
 
-// Helper: Darken/Lighten color
 const adjustColor = (hex, percent) => {
   const rgb = hexToRgb(hex);
   const adjust = (c) => Math.min(255, Math.max(0, Math.round(c + (c * percent / 100))));
@@ -94,144 +76,68 @@ const adjustColor = (hex, percent) => {
   return `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`;
 };
 
-export const BrandingProvider = ({ children }) => {
-  const { school, schoolId, isSchool, isMarketing, loading: tenantLoading } = useTenant();
-  const [branding, setBranding] = useState(DEFAULT_BRANDING);
+// ════════════════════════════════════════════════════════════════════════════
+// BUILD BRANDING FROM SCHOOL DATA
+// ════════════════════════════════════════════════════════════════════════════
 
-  useEffect(() => {
-    if (tenantLoading) return;
-
-    // If not a school context, use defaults
-    if (!isSchool || !school) {
-      setBranding({ ...DEFAULT_BRANDING, isLoading: false });
-      return;
-    }
-
-    // Build branding from school data
-    const schoolBranding = {
-      // Identity
-      name: school.name || DEFAULT_BRANDING.name,
-      tagline: school.tagline || DEFAULT_BRANDING.tagline,
-      logoUrl: school.logo_url || DEFAULT_BRANDING.logoUrl,
-      faviconUrl: school.favicon_url || school.logo_url || DEFAULT_BRANDING.faviconUrl,
-      
-      // Colors
-      primaryColor: school.primary_color || DEFAULT_BRANDING.primaryColor,
-      secondaryColor: school.secondary_color || DEFAULT_BRANDING.secondaryColor,
-      accentColor: school.accent_color || DEFAULT_BRANDING.accentColor,
-      
-      // ═══ TERM COLORS ═══
-      term1Color: school.term1_color || DEFAULT_BRANDING.term1Color,
-      term2Color: school.term2_color || DEFAULT_BRANDING.term2Color,
-      term3Color: school.term3_color || DEFAULT_BRANDING.term3Color,
-      
-      // ═══ TERM NAMES ═══
-      term1Name: school.term1_name || DEFAULT_BRANDING.term1Name,
-      term2Name: school.term2_name || DEFAULT_BRANDING.term2Name,
-      term3Name: school.term3_name || DEFAULT_BRANDING.term3Name,
-      
-      // ═══ USE TERM COLORS TOGGLE ═══
-      useTermColors: school.use_term_colors ?? DEFAULT_BRANDING.useTermColors,
-      
-      // Computed RGB (for PDF, canvas, etc.)
-      primaryRgb: hexToRgb(school.primary_color || DEFAULT_BRANDING.primaryColor),
-      secondaryRgb: hexToRgb(school.secondary_color || DEFAULT_BRANDING.secondaryColor),
-      accentRgb: hexToRgb(school.accent_color || DEFAULT_BRANDING.accentColor),
-      
-      // Computed variations
-      primaryLight: adjustColor(school.primary_color || DEFAULT_BRANDING.primaryColor, 30),
-      primaryDark: adjustColor(school.primary_color || DEFAULT_BRANDING.primaryColor, -20),
-      
-      // Contact
-      email: school.email || DEFAULT_BRANDING.email,
-      phone: school.phone || DEFAULT_BRANDING.phone,
-      website: school.website || DEFAULT_BRANDING.website,
-      address: school.address || DEFAULT_BRANDING.address,
-      
-      // Academic
-      gradingSystem: school.grading_system || DEFAULT_BRANDING.gradingSystem,
-      academicYear: school.academic_year || DEFAULT_BRANDING.academicYear,
-      timezone: school.timezone || DEFAULT_BRANDING.timezone,
-      language: school.default_language || DEFAULT_BRANDING.language,
-      
-      // PDF
-      pdfHeaderText: school.pdf_header_text || school.name || DEFAULT_BRANDING.pdfHeaderText,
-      pdfFooterText: school.pdf_footer_text || DEFAULT_BRANDING.pdfFooterText,
-      showLogoInPdf: school.show_logo_in_pdf ?? DEFAULT_BRANDING.showLogoInPdf,
-      
-      // Features
-      features: {
-        ...DEFAULT_BRANDING.features,
-        ...(school.features || {}),
-      },
-      
-      // Meta
-      isCustomBranding: school.features?.custom_branding ?? true,
-      isLoading: false,
-      schoolId: school.id,
-      schoolSlug: school.slug,
-    };
-
-    setBranding(schoolBranding);
+const buildBrandingFromSchool = (school) => {
+  return {
+    name: school.name || DEFAULT_BRANDING.name,
+    tagline: school.tagline || DEFAULT_BRANDING.tagline,
+    logoUrl: school.logo_url || DEFAULT_BRANDING.logoUrl,
+    faviconUrl: school.favicon_url || school.logo_url || DEFAULT_BRANDING.faviconUrl,
     
-    // Apply branding to document
-    applyBrandingToDocument(schoolBranding);
+    primaryColor: school.primary_color || DEFAULT_BRANDING.primaryColor,
+    secondaryColor: school.secondary_color || DEFAULT_BRANDING.secondaryColor,
+    accentColor: school.accent_color || DEFAULT_BRANDING.accentColor,
     
-    console.log('🎨 Branding applied:', {
-      name: schoolBranding.name,
-      useTermColors: schoolBranding.useTermColors
-    });
+    // ═══ TERM COLORS ═══
+    term1Color: school.term1_color || DEFAULT_BRANDING.term1Color,
+    term2Color: school.term2_color || DEFAULT_BRANDING.term2Color,
+    term3Color: school.term3_color || DEFAULT_BRANDING.term3Color,
+    term1Name: school.term1_name || DEFAULT_BRANDING.term1Name,
+    term2Name: school.term2_name || DEFAULT_BRANDING.term2Name,
+    term3Name: school.term3_name || DEFAULT_BRANDING.term3Name,
     
-  }, [school, schoolId, isSchool, tenantLoading]);
-
-  // ═══ UPDATE BRANDING (for real-time preview in settings) ═══
-  const updateBranding = (updates) => {
-    setBranding(prev => {
-      const updated = { ...prev, ...updates };
-      
-      // Update CSS variables for preview
-      const root = document.documentElement;
-      if (updates.primaryColor) {
-        root.style.setProperty('--school-primary', updates.primaryColor);
-      }
-      if (updates.secondaryColor) {
-        root.style.setProperty('--school-secondary', updates.secondaryColor);
-      }
-      if (updates.term1Color) {
-        root.style.setProperty('--school-term1', updates.term1Color);
-      }
-      if (updates.term2Color) {
-        root.style.setProperty('--school-term2', updates.term2Color);
-      }
-      if (updates.term3Color) {
-        root.style.setProperty('--school-term3', updates.term3Color);
-      }
-      
-      return updated;
-    });
+    // ═══ THE KEY TOGGLE ═══
+    useTermColors: school.use_term_colors === true,
+    
+    primaryRgb: hexToRgb(school.primary_color || DEFAULT_BRANDING.primaryColor),
+    secondaryRgb: hexToRgb(school.secondary_color || DEFAULT_BRANDING.secondaryColor),
+    accentRgb: hexToRgb(school.accent_color || DEFAULT_BRANDING.accentColor),
+    primaryLight: adjustColor(school.primary_color || DEFAULT_BRANDING.primaryColor, 30),
+    primaryDark: adjustColor(school.primary_color || DEFAULT_BRANDING.primaryColor, -20),
+    
+    email: school.email || DEFAULT_BRANDING.email,
+    phone: school.phone || DEFAULT_BRANDING.phone,
+    website: school.website || DEFAULT_BRANDING.website,
+    address: school.address || DEFAULT_BRANDING.address,
+    
+    gradingSystem: school.grading_system || DEFAULT_BRANDING.gradingSystem,
+    academicYear: school.academic_year || DEFAULT_BRANDING.academicYear,
+    timezone: school.timezone || DEFAULT_BRANDING.timezone,
+    language: school.default_language || DEFAULT_BRANDING.language,
+    
+    pdfHeaderText: school.pdf_header_text || school.name || DEFAULT_BRANDING.pdfHeaderText,
+    pdfFooterText: school.pdf_footer_text || DEFAULT_BRANDING.pdfFooterText,
+    showLogoInPdf: school.show_logo_in_pdf ?? DEFAULT_BRANDING.showLogoInPdf,
+    
+    features: { ...DEFAULT_BRANDING.features, ...(school.features || {}) },
+    
+    isCustomBranding: school.features?.custom_branding ?? true,
+    isLoading: false,
+    schoolId: school.id,
+    schoolSlug: school.slug,
   };
-
-  const value = {
-    ...branding,
-    updateBranding,
-  };
-
-  return (
-    <BrandingContext.Provider value={value}>
-      {children}
-    </BrandingContext.Provider>
-  );
 };
 
-// ============================================================================
-// APPLY BRANDING TO DOCUMENT (Title, Favicon, CSS Variables)
-// ============================================================================
+// ════════════════════════════════════════════════════════════════════════════
+// APPLY BRANDING TO DOCUMENT
+// ════════════════════════════════════════════════════════════════════════════
 
 const applyBrandingToDocument = (branding) => {
-  // Set document title
   document.title = `${branding.name} | SchoolHub`;
   
-  // Set favicon
   let favicon = document.querySelector("link[rel~='icon']");
   if (!favicon) {
     favicon = document.createElement('link');
@@ -240,7 +146,6 @@ const applyBrandingToDocument = (branding) => {
   }
   favicon.href = branding.faviconUrl;
   
-  // Set CSS variables on :root
   const root = document.documentElement;
   root.style.setProperty('--school-primary', branding.primaryColor);
   root.style.setProperty('--school-secondary', branding.secondaryColor);
@@ -248,13 +153,10 @@ const applyBrandingToDocument = (branding) => {
   root.style.setProperty('--school-primary-light', branding.primaryLight);
   root.style.setProperty('--school-primary-dark', branding.primaryDark);
   root.style.setProperty('--school-primary-rgb', `${branding.primaryRgb.r}, ${branding.primaryRgb.g}, ${branding.primaryRgb.b}`);
-  
-  // ═══ TERM COLOR CSS VARIABLES ═══
   root.style.setProperty('--school-term1', branding.term1Color);
   root.style.setProperty('--school-term2', branding.term2Color);
   root.style.setProperty('--school-term3', branding.term3Color);
   
-  // Set meta theme color (for mobile browsers)
   let metaTheme = document.querySelector("meta[name='theme-color']");
   if (!metaTheme) {
     metaTheme = document.createElement('meta');
@@ -264,9 +166,92 @@ const applyBrandingToDocument = (branding) => {
   metaTheme.content = branding.primaryColor;
 };
 
-// ============================================================================
-// HOOK
-// ============================================================================
+// ════════════════════════════════════════════════════════════════════════════
+// PROVIDER
+// ════════════════════════════════════════════════════════════════════════════
+
+export const BrandingProvider = ({ children }) => {
+  const { school, schoolId, isSchool, loading: tenantLoading, supabase } = useTenant();
+  const [branding, setBranding] = useState(DEFAULT_BRANDING);
+
+  // ═══ REFETCH FUNCTION - can be called after settings change ═══
+  const refetch = useCallback(async () => {
+    if (!schoolId || !supabase) return;
+    
+    console.log('🔄 Refetching branding for school:', schoolId);
+    
+    const { data, error } = await supabase
+      .from('schools')
+      .select('*')
+      .eq('id', schoolId)
+      .single();
+    
+    if (error) {
+      console.error('Failed to refetch branding:', error);
+      return;
+    }
+    
+    if (data) {
+      const newBranding = buildBrandingFromSchool(data);
+      setBranding(newBranding);
+      applyBrandingToDocument(newBranding);
+      console.log('✅ Branding refetched:', { useTermColors: newBranding.useTermColors });
+    }
+  }, [schoolId, supabase]);
+
+  // Initial load
+  useEffect(() => {
+    if (tenantLoading) return;
+
+    if (!isSchool || !school) {
+      setBranding({ ...DEFAULT_BRANDING, isLoading: false });
+      return;
+    }
+
+    const schoolBranding = buildBrandingFromSchool(school);
+    setBranding(schoolBranding);
+    applyBrandingToDocument(schoolBranding);
+    
+    console.log('🎨 Branding loaded:', {
+      name: schoolBranding.name,
+      useTermColors: schoolBranding.useTermColors,
+      term1Color: schoolBranding.term1Color,
+    });
+    
+  }, [school, schoolId, isSchool, tenantLoading]);
+
+  // ═══ UPDATE BRANDING (for real-time preview) ═══
+  const updateBranding = (updates) => {
+    setBranding(prev => {
+      const updated = { ...prev, ...updates };
+      
+      const root = document.documentElement;
+      if (updates.primaryColor) root.style.setProperty('--school-primary', updates.primaryColor);
+      if (updates.secondaryColor) root.style.setProperty('--school-secondary', updates.secondaryColor);
+      if (updates.term1Color) root.style.setProperty('--school-term1', updates.term1Color);
+      if (updates.term2Color) root.style.setProperty('--school-term2', updates.term2Color);
+      if (updates.term3Color) root.style.setProperty('--school-term3', updates.term3Color);
+      
+      return updated;
+    });
+  };
+
+  const value = {
+    ...branding,
+    updateBranding,
+    refetch,  // ← NOW AVAILABLE!
+  };
+
+  return (
+    <BrandingContext.Provider value={value}>
+      {children}
+    </BrandingContext.Provider>
+  );
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// HOOKS
+// ════════════════════════════════════════════════════════════════════════════
 
 export const useBranding = () => {
   const context = useContext(BrandingContext);
@@ -277,17 +262,11 @@ export const useBranding = () => {
   return context;
 };
 
-// ============================================================================
-// HELPER HOOKS
-// ============================================================================
-
-// Check if a feature is enabled
 export const useFeature = (featureName) => {
   const { features } = useBranding();
   return features[featureName] ?? false;
 };
 
-// Get colors for inline styles
 export const useBrandColors = () => {
   const { 
     primaryColor, secondaryColor, accentColor, 
@@ -303,7 +282,6 @@ export const useBrandColors = () => {
   };
 };
 
-// Get PDF branding
 export const usePdfBranding = () => {
   const { 
     name, logoUrl, pdfHeaderText, pdfFooterText, showLogoInPdf,
@@ -322,7 +300,6 @@ export const usePdfBranding = () => {
   };
 };
 
-// ═══ Get term colors ═══
 export const useTermColors = () => {
   const { 
     term1Color, term2Color, term3Color,

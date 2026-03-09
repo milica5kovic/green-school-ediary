@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { tenantSupabase, getCurrentSchoolId } from '../infrastructure/supabaseClient';
+import { tenantSupabase } from '../infrastructure/supabaseClient';
 import { useTenant } from './TenantContext';
 
-// Servisi
 import { AttendanceService } from '../../school/features/attendance/services/attendanceService';
 import { ClassService } from '../../school/features/dashboard/services/classService';
 import { StudentsService } from '../../school/features/students/services/studentService';
@@ -20,27 +19,15 @@ export const useApp = () => {
 };
 
 export const AppProvider = ({ children }) => {
-  // ============================================================================
-  // GET TENANT INFO - This ensures we wait for school to load
-  // ============================================================================
   const { school, schoolId, loading: tenantLoading, isSchool } = useTenant();
   
-  // ============================================================================
-  // STATE
-  // ============================================================================
   const [currentPage, setCurrentPage] = useState('home');
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dataLoaded, setDataLoaded] = useState(false);
-  
-  // Date state za HomePage i druge komponente
   const [selectedDate, setSelectedDate] = useState(new Date());
 
-  // ============================================================================
-  // DATE HELPERS
-  // ============================================================================
-  
   const getDateKey = useCallback((date) => {
     if (!date) return '';
     const d = new Date(date);
@@ -52,9 +39,7 @@ export const AppProvider = ({ children }) => {
 
   const getDayName = useCallback((date) => {
     if (!date) return '';
-    return new Intl.DateTimeFormat('en-US', {
-      weekday: 'long',
-    }).format(new Date(date));
+    return new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date(date));
   }, []);
 
   const goToPreviousDay = useCallback(() => {
@@ -77,15 +62,8 @@ export const AppProvider = ({ children }) => {
     setSelectedDate(new Date());
   }, []);
 
-  // ============================================================================
-  // SERVICES - Recreate when schoolId changes
-  // ============================================================================
-  
   const services = useMemo(() => {
     console.log('🔧 Creating services with schoolId:', schoolId || 'none');
-    
-    // Pass tenantSupabase to all services
-    // tenantSupabase will automatically filter by currentSchoolId
     return {
       attendance: new AttendanceService(tenantSupabase),
       classes: new ClassService(tenantSupabase),
@@ -95,30 +73,28 @@ export const AppProvider = ({ children }) => {
       todos: new TodoService(tenantSupabase),
       parents: new ParentService(tenantSupabase),
     };
-  }, [schoolId]); // Recreate services when schoolId changes
+  }, [schoolId]);
 
-  // ============================================================================
-  // STUDENT OPERATIONS
-  // ============================================================================
+  useEffect(() => {
+    if (schoolId) {
+      console.log('🧹 Clearing caches for school:', schoolId);
+      if (services.grading?.clearCache) {
+        services.grading.clearCache();
+      }
+      setStudents([]);
+      setDataLoaded(false);
+      setError(null);
+    }
+  }, [schoolId]);
 
   const loadAllStudents = useCallback(async () => {
-    // Don't load if tenant is still loading or no school
-    if (tenantLoading) {
-      console.log('⏳ Waiting for tenant to load...');
-      return;
-    }
-    
-    if (!schoolId && isSchool) {
-      console.log('⚠️ No schoolId yet, waiting...');
-      return;
-    }
+    if (tenantLoading) return;
+    if (!schoolId && isSchool) return;
     
     try {
       setLoading(true);
       setError(null);
-      
       console.log('📚 Loading students for school:', schoolId);
-      
       const data = await services.students.getAllStudents();
       console.log(`✅ Loaded ${data?.length || 0} students`);
       setStudents(data || []);
@@ -131,27 +107,14 @@ export const AppProvider = ({ children }) => {
     }
   }, [services, schoolId, tenantLoading, isSchool]);
 
-  // Load students when schoolId becomes available
   useEffect(() => {
-    // Only load when:
-    // 1. Tenant is done loading
-    // 2. We have a schoolId (for school tenants)
-    // 3. Data hasn't been loaded yet
     if (!tenantLoading && schoolId && !dataLoaded) {
-      console.log('🚀 SchoolId ready, loading students...');
       loadAllStudents();
     }
-    
-    // For non-school contexts (owner dashboard, marketing), just set loading to false
     if (!tenantLoading && !isSchool) {
       setLoading(false);
     }
   }, [tenantLoading, schoolId, dataLoaded, loadAllStudents, isSchool]);
-
-  // Reset dataLoaded when schoolId changes (e.g., switching schools)
-  useEffect(() => {
-    setDataLoaded(false);
-  }, [schoolId]);
 
   const getStudentsByClass = useCallback(() => {
     return students.reduce((acc, student) => {
@@ -192,23 +155,12 @@ export const AppProvider = ({ children }) => {
     setStudents(prev => prev.filter(s => s.id !== studentId));
   }, [services]);
 
-  // ============================================================================
-  // CONTEXT VALUE
-  // ============================================================================
-
   const value = {
-    // ⭐ SUPABASE CLIENT - tenant-aware
     supabase: tenantSupabase,
-    
-    // School info (from TenantContext)
     school,
     schoolId,
-    
-    // Page navigation
     currentPage, 
     setCurrentPage,
-    
-    // Date management
     selectedDate,
     setSelectedDate,
     getDateKey,
@@ -216,8 +168,6 @@ export const AppProvider = ({ children }) => {
     goToPreviousDay,
     goToNextDay,
     goToToday,
-    
-    // Students
     students, 
     setStudents, 
     loadAllStudents, 
@@ -227,8 +177,6 @@ export const AppProvider = ({ children }) => {
     deleteStudent,
     getStudentsByClass, 
     getAllClasses,
-    
-    // Services (all tenant-aware)
     services,
     attendanceService: services.attendance,
     classService: services.classes,
@@ -237,8 +185,6 @@ export const AppProvider = ({ children }) => {
     scheduleService: services.schedule,
     todoService: services.todos,
     parentService: services.parents,
-    
-    // Loading state
     loading: loading || tenantLoading, 
     error,
   };

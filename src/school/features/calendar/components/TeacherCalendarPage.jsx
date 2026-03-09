@@ -102,7 +102,7 @@ const TeacherCalendarPage = () => {
       // Load ALL tests (for conflict detection)
       const { data: allTestsData, error: allTestError } = await supabase
         .from('scheduled_tests')
-        .select('*, teachers(name)')
+        .select('*, teachers(full_name)') 
         .order('test_date');
       
       if (allTestError) throw allTestError;
@@ -712,7 +712,7 @@ const TeacherCalendarPage = () => {
                         </div>
                         <p className="font-semibold text-gray-800 text-sm">{test.title}</p>
                         <p className="text-[10px] text-orange-600 mt-1">
-                          By: {test.teachers?.name || 'Unknown'}
+                          By: {test.teachers?.full_name || 'Unknown'}
                         </p>
                       </div>
                     ))}
