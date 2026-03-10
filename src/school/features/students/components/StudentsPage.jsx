@@ -350,11 +350,10 @@ const StudentsPage = () => {
           primaryColor={primaryColor}
           onClose={() => { setShowAddModal(false); setEditingStudent(null); }}
           onSave={async () => { 
-            await loadStudents(); 
-            await loadAllStudents(); 
-            setShowAddModal(false); 
-            setEditingStudent(null); 
-          }}
+  await loadStudents();  //  Samo lokalni fetch
+  setShowAddModal(false); 
+  setEditingStudent(null); 
+}}
         />
       )}
 

@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { 
-  Settings, User, Users as UsersIcon, BookOpen, GraduationCap, 
-  Archive as ArchiveIcon, BarChart3, Calendar, Palette, ChevronRight
+  Settings, User, Users as UsersIcon, GraduationCap, 
+  Archive as ArchiveIcon, BarChart3, Calendar, Palette, ChevronRight,
+  BookOpen
 } from 'lucide-react';
 import { useAuth } from '../../../../core/context/AuthContext';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
@@ -10,8 +11,7 @@ import useTermTheme from '../../../../shared/hooks/useTermTheme';
 import StudentsPage from '../../students/components/StudentsPage';
 import ProfileManagementPage from './ProfileManagementPage';
 import AnalyticsTab from '../../grading/components/AnalyticsTab';
-import ClassesTabContent from '../../settings/components/ClassesTabContent';
-import SubjectsTabContent from '../../settings/components/SubjectsTabContent';
+import CurriculumSettingsTab from '../../settings/components/CurriculumSettingsTab';
 import ArchiveTabContent from '../../settings/components/ArchiveTabContent';
 import AccountTabContent from '../../settings/components/AccountTabContent';
 import AcademicTermsManager from './AcademicTermsManager';
@@ -25,8 +25,7 @@ const TABS = [
   { id: 'account', label: 'My Account', icon: User, description: 'Profile and preferences' },
   { id: 'students', label: 'Students', icon: GraduationCap, description: 'Manage student records' },
   { id: 'profiles', label: 'Profiles', icon: UsersIcon, description: 'Staff and parent accounts' },
-  { id: 'classes', label: 'Classes', icon: UsersIcon, description: 'Class configuration' },
-  { id: 'subjects', label: 'Subjects', icon: BookOpen, description: 'Subject management' },
+  { id: 'curriculum', label: 'Curriculum', icon: BookOpen, description: 'Classes, subjects & grading' },
   { id: 'analytics', label: 'Analytics', icon: BarChart3, description: 'Reports and insights' },
   { id: 'terms', label: 'Terms', icon: Calendar, description: 'Academic term dates' },
   { id: 'colors', label: 'Colors', icon: Palette, description: 'Brand and term colors' },
@@ -37,8 +36,7 @@ const TAB_COMPONENTS = {
   account: AccountTabContent,
   students: StudentsPage,
   profiles: ProfileManagementPage,
-  classes: ClassesTabContent,
-  subjects: SubjectsTabContent,
+  curriculum: CurriculumSettingsTab,
   analytics: AnalyticsTab,
   terms: AcademicTermsManager,
   colors: SchoolColorsTab,

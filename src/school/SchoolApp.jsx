@@ -621,7 +621,7 @@ const SchoolAppContent = () => {
         </aside>
 
         {/* ========== MAIN CONTENT ========== */}
-        <main className="flex-1">{renderPage()}</main>
+        <main className="flex-1 min-w-0 overflow-hidden">{renderPage()}</main>
       </div>
 
       {/* Click outside to close dropdown */}
