@@ -1,18 +1,10 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { 
-  Settings, 
-  User, 
-  Users as UsersIcon, 
-  BookOpen, 
-  GraduationCap, 
-  Archive as ArchiveIcon, 
-  BarChart3, 
-  Calendar,
-  Palette,
-  ChevronRight
+  Settings, User, Users as UsersIcon, BookOpen, GraduationCap, 
+  Archive as ArchiveIcon, BarChart3, Calendar, Palette, ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../../../../core/context/AuthContext';
-import { useBranding } from '../../../../core/context/BrandingContext';
+import useTermTheme from '../../../../shared/hooks/useTermTheme';
 
 // Tab Components
 import StudentsPage from '../../students/components/StudentsPage';
@@ -26,7 +18,7 @@ import AcademicTermsManager from './AcademicTermsManager';
 import SchoolColorsTab from '../../settings/components/SchoolColorsTab';
 
 // ============================================================================
-// TAB CONFIGURATION
+// MANAGEMENT PAGE - Multi-tenant with useTermTheme
 // ============================================================================
 
 const TABS = [
@@ -53,23 +45,19 @@ const TAB_COMPONENTS = {
   archive: ArchiveTabContent,
 };
 
-// ============================================================================
-// MANAGEMENT PAGE
-// ============================================================================
-
 const ManagementPage = () => {
   const { isAdmin } = useAuth();
-  const { primaryColor } = useBranding();
+  const theme = useTermTheme();
+  const TermIcon = theme.icon;
+  
   const [activeTab, setActiveTab] = useState('account');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Handlers
   const handleTabChange = useCallback((tabId) => {
     setActiveTab(tabId);
     setIsMobileMenuOpen(false);
   }, []);
 
-  // Current tab info
   const currentTab = useMemo(() => 
     TABS.find(t => t.id === activeTab) || TABS[0],
   [activeTab]);
@@ -87,38 +75,66 @@ const ManagementPage = () => {
     );
   }
 
-  // Render tab content
   const renderContent = () => {
     const Component = TAB_COMPONENTS[activeTab] || AccountTabContent;
     return <Component />;
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6 max-w-full overflow-hidden">
-      {/* Header */}
+    <div className="space-y-5">
+      {/* ═══ TERM BANNER ═══ */}
+      {theme.hasActiveTerm && (
+        <div 
+          className="rounded-xl px-4 py-2.5 flex items-center justify-between"
+          style={{ 
+            backgroundColor: theme.withAlpha(0.1),
+            borderWidth: '1px',
+            borderColor: theme.withAlpha(0.2)
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <TermIcon size={16} style={theme.textStyle} />
+            <span className="text-sm font-semibold" style={theme.textStyle}>
+              {theme.name} Term
+            </span>
+            <span className="text-xs text-gray-500">
+              {new Date(theme.activeTerm.start_date + 'T00:00:00')
+                .toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              {' – '}
+              {new Date(theme.activeTerm.end_date + 'T00:00:00')
+                .toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+            </span>
+          </div>
+          <span className="text-xs font-medium" style={theme.textStyle}>
+            {theme.daysRemaining} days left
+          </span>
+        </div>
+      )}
+
+      {/* ═══ HEADER ═══ */}
       <div 
-        className="rounded-xl sm:rounded-2xl shadow-lg p-4 sm:p-6 border"
-        style={{ 
-          background: `linear-gradient(135deg, ${primaryColor}08, ${primaryColor}03)`,
-          borderColor: `${primaryColor}20`
-        }}
+        className="rounded-2xl shadow-lg p-6 border bg-white"
+        style={{ borderColor: theme.withAlpha(0.2) }}
       >
         <div className="flex items-center gap-3">
           <div 
-            className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center"
-            style={{ backgroundColor: `${primaryColor}15` }}
+            className="w-12 h-12 rounded-xl flex items-center justify-center"
+            style={{ backgroundColor: theme.withAlpha(0.15) }}
           >
-            <Settings size={22} style={{ color: primaryColor }} />
+            <Settings size={24} style={{ color: theme.color }} />
           </div>
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Management</h2>
-            <p className="text-gray-500 text-xs sm:text-sm">School administration and system settings</p>
+            <h2 className="text-2xl font-bold text-gray-800">Management</h2>
+            <p className="text-gray-500 text-sm">School administration and settings</p>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+      {/* ═══ MAIN CONTENT ═══ */}
+      <div 
+        className="bg-white rounded-2xl shadow-lg border overflow-hidden"
+        style={{ borderColor: theme.withAlpha(0.15) }}
+      >
         {/* Mobile Tab Selector */}
         <div className="sm:hidden border-b border-gray-200">
           <button
@@ -126,7 +142,7 @@ const ManagementPage = () => {
             className="w-full flex items-center justify-between p-4 hover:bg-gray-50"
           >
             <div className="flex items-center gap-3">
-              <currentTab.icon size={18} style={{ color: primaryColor }} />
+              <currentTab.icon size={18} style={{ color: theme.color }} />
               <span className="font-medium text-gray-800">{currentTab.label}</span>
             </div>
             <ChevronRight 
@@ -145,11 +161,9 @@ const ManagementPage = () => {
                     key={tab.id}
                     onClick={() => handleTabChange(tab.id)}
                     className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors border-l-2 ${
-                      isActive 
-                        ? 'bg-white' 
-                        : 'hover:bg-gray-100 border-transparent'
+                      isActive ? 'bg-white' : 'hover:bg-gray-100 border-transparent'
                     }`}
-                    style={isActive ? { borderColor: primaryColor, color: primaryColor } : {}}
+                    style={isActive ? { borderColor: theme.color, color: theme.color } : {}}
                   >
                     <Icon size={16} className={isActive ? '' : 'text-gray-400'} />
                     <div>
@@ -166,10 +180,7 @@ const ManagementPage = () => {
         </div>
 
         {/* Desktop Tab Navigation */}
-        <nav 
-          className="hidden sm:flex flex-wrap border-b border-gray-200" 
-          role="tablist"
-        >
+        <nav className="hidden sm:flex flex-wrap border-b border-gray-200" role="tablist">
           {TABS.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -180,20 +191,14 @@ const ManagementPage = () => {
                 onClick={() => handleTabChange(tab.id)}
                 role="tab"
                 aria-selected={isActive}
-                aria-controls={`panel-${tab.id}`}
-                className={`px-3 lg:px-4 py-3 font-medium transition-all whitespace-nowrap border-b-2 ${
-                  isActive
-                    ? 'border-current'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                className={`px-4 py-3 font-medium transition-all whitespace-nowrap border-b-2 ${
+                  isActive ? 'border-current' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                 }`}
-                style={isActive ? { 
-                  color: primaryColor,
-                  backgroundColor: `${primaryColor}05`
-                } : {}}
+                style={isActive ? { color: theme.color, backgroundColor: theme.withAlpha(0.05) } : {}}
               >
-                <div className="flex items-center gap-1.5 lg:gap-2">
-                  <Icon size={15} />
-                  <span className="text-xs lg:text-sm">{tab.label}</span>
+                <div className="flex items-center gap-2">
+                  <Icon size={16} />
+                  <span className="text-sm">{tab.label}</span>
                 </div>
               </button>
             );
@@ -201,11 +206,7 @@ const ManagementPage = () => {
         </nav>
 
         {/* Tab Content */}
-        <div 
-          className="p-4 sm:p-6 overflow-x-auto"
-          role="tabpanel"
-          id={`panel-${activeTab}`}
-        >
+        <div className="p-6">
           {renderContent()}
         </div>
       </div>

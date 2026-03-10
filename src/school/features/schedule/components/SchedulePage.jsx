@@ -180,14 +180,37 @@ const SchedulePage = () => {
       const logoUrl = branding.logoUrl;
       const schoolName = branding.name || 'School';
       
-      const generatePDF = (hasLogo, logoImg) => {
+      // Helper to convert image to canvas (handles SVG)
+      const loadImageAsDataUrl = (url) => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = img.width || 200;
+              canvas.height = img.height || 200;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0);
+              resolve({ success: true, dataUrl: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height });
+            } catch (e) {
+              console.warn('Canvas conversion failed:', e);
+              resolve({ success: false });
+            }
+          };
+          img.onerror = () => resolve({ success: false });
+          img.src = url;
+        });
+      };
+      
+      const generatePDF = (logoData) => {
         let startX = 20;
         
-        if (hasLogo && logoImg) {
-          const logoAspectRatio = logoImg.width / logoImg.height;
+        if (logoData && logoData.success) {
+          const logoAspectRatio = logoData.width / logoData.height;
           const logoHeight = 12;
           const logoWidth = logoHeight * logoAspectRatio;
-          pdf.addImage(logoImg, 'PNG', 20, 12, logoWidth, logoHeight);
+          pdf.addImage(logoData.dataUrl, 'PNG', 20, 12, logoWidth, logoHeight);
           startX = 20 + logoWidth + 5;
         }
 
@@ -282,14 +305,12 @@ const SchedulePage = () => {
         setLoading(false);
       };
 
+      // Load logo and generate PDF
       if (logoUrl) {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => generatePDF(true, img);
-        img.onerror = () => generatePDF(false, null);
-        img.src = logoUrl;
+        const logoData = await loadImageAsDataUrl(logoUrl);
+        generatePDF(logoData);
       } else {
-        generatePDF(false, null);
+        generatePDF(null);
       }
     } catch (error) {
       console.error('PDF error:', error);

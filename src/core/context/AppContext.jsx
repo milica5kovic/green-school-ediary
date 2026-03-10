@@ -62,12 +62,16 @@ export const AppProvider = ({ children }) => {
     setSelectedDate(new Date());
   }, []);
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SERVICES - Recreate when schoolId changes
+  // ✅ FIXED: Pass schoolId to StudentsService for multi-tenant writes
+  // ═══════════════════════════════════════════════════════════════════════════
   const services = useMemo(() => {
     console.log('🔧 Creating services with schoolId:', schoolId || 'none');
     return {
       attendance: new AttendanceService(tenantSupabase),
       classes: new ClassService(tenantSupabase),
-      students: new StudentsService(tenantSupabase),
+      students: new StudentsService(tenantSupabase, schoolId), // ✅ Pass schoolId
       grading: new GradingService(tenantSupabase),
       schedule: new ScheduleService(tenantSupabase),
       todos: new TodoService(tenantSupabase),
@@ -75,10 +79,12 @@ export const AppProvider = ({ children }) => {
     };
   }, [schoolId]);
 
+  // Clear caches when school changes
   useEffect(() => {
     if (schoolId) {
       console.log('🧹 Clearing caches for school:', schoolId);
       if (services.grading?.clearCache) {
+        console.log('🧹 GradingService cache cleared');
         services.grading.clearCache();
       }
       setStudents([]);
