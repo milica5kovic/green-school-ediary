@@ -1,9 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
+import { useApp } from '../../../../core/context/AppContext';
+import { useTenant } from '../../../../core/context/TenantContext';
 
-import { supabase } from '../../../../core/infrastructure/supabaseClient';
+// ════════════════════════════════════════════════════════════════════════════
+// MANAGE CHILDREN MODAL - Links parents to students
+// FIX: Now includes school_id in student_parents insert
+// ════════════════════════════════════════════════════════════════════════════
 
 const ManageChildrenModal = ({ parent, onClose, onSave }) => {
+  const { supabase } = useApp();
+  const { schoolId } = useTenant();
+  
   const [allStudents, setAllStudents] = useState([]);
   const [linkedStudentIds, setLinkedStudentIds] = useState([]);
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
@@ -18,12 +26,13 @@ const ManageChildrenModal = ({ parent, onClose, onSave }) => {
     try {
       setLoading(true);
 
-      // Load all active students
+      // Load all active students (filtered by school via tenantSupabase)
       const { data: studentsData, error: studentsError } = await supabase
         .from('students')
         .select('*')
         .eq('status', 'active')
-        .order('class_name, name');
+        .order('class_name')
+        .order('name');
 
       if (studentsError) throw studentsError;
 
@@ -57,6 +66,11 @@ const ManageChildrenModal = ({ parent, onClose, onSave }) => {
   };
 
   const handleSave = async () => {
+    if (!schoolId) {
+      alert('⚠️ School context not loaded. Please refresh the page.');
+      return;
+    }
+
     try {
       setSaving(true);
 
@@ -66,20 +80,28 @@ const ManageChildrenModal = ({ parent, onClose, onSave }) => {
       // Find students to remove (in linked but not in selected)
       const toRemove = linkedStudentIds.filter(id => !selectedStudentIds.includes(id));
 
-      // Add new links
+      // Add new links - ✅ NOW INCLUDES school_id
       if (toAdd.length > 0) {
         const newLinks = toAdd.map(studentId => ({
           student_id: studentId,
           parent_id: parent.id,
           relationship: 'parent',
-          is_primary: linkedStudentIds.length === 0 // First one is primary
+          is_primary: linkedStudentIds.length === 0,
+          school_id: schoolId  // ✅ FIX: Added school_id!
         }));
 
+        console.log('🔗 Creating links with school_id:', schoolId);
+        
         const { error: addError } = await supabase
           .from('student_parents')
           .insert(newLinks);
 
-        if (addError) throw addError;
+        if (addError) {
+          console.error('❌ Link insert error:', addError);
+          throw addError;
+        }
+        
+        console.log('✅ Links created successfully');
       }
 
       // Remove old links
@@ -105,21 +127,25 @@ const ManageChildrenModal = ({ parent, onClose, onSave }) => {
 
   // Group students by class
   const studentsByClass = allStudents.reduce((acc, student) => {
-    if (!acc[student.class_name]) {
-      acc[student.class_name] = [];
+    const className = student.class_name || 'No Class';
+    if (!acc[className]) {
+      acc[className] = [];
     }
-    acc[student.class_name].push(student);
+    acc[className].push(student);
     return acc;
   }, {});
+
+  // Sort class names
+  const sortedClassNames = Object.keys(studentsByClass).sort();
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         <div className="p-6 border-b flex items-center justify-between">
           <div>
-            <h3 className="text-xl font-bold">Manage Children</h3>
+            <h3 className="text-xl font-bold text-gray-800">Manage Children</h3>
             <p className="text-sm text-gray-600 mt-1">
-              Parent: {parent.full_name}
+              Parent: <span className="font-medium">{parent.full_name}</span>
             </p>
           </div>
           <button
@@ -136,51 +162,84 @@ const ManageChildrenModal = ({ parent, onClose, onSave }) => {
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto p-6">
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
               <p className="text-sm text-blue-800">
                 <strong>Selected:</strong> {selectedStudentIds.length} student(s)
               </p>
+              {selectedStudentIds.length !== linkedStudentIds.length && (
+                <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-medium">
+                  Unsaved changes
+                </span>
+              )}
             </div>
 
             <div className="space-y-4">
-              {Object.entries(studentsByClass).map(([className, students]) => (
-                <div key={className} className="border rounded-lg overflow-hidden">
-                  <div className="bg-gray-100 px-4 py-2 font-semibold text-gray-700">
-                    {className} ({students.length})
+              {sortedClassNames.map((className) => {
+                const students = studentsByClass[className];
+                return (
+                  <div key={className} className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="bg-gray-50 px-4 py-2.5 font-semibold text-gray-700 text-sm flex items-center justify-between">
+                      <span>{className}</span>
+                      <span className="text-xs text-gray-500 font-normal">{students.length} students</span>
+                    </div>
+                    <div className="p-2 space-y-1">
+                      {students.map(student => {
+                        const isLinked = linkedStudentIds.includes(student.id);
+                        const isSelected = selectedStudentIds.includes(student.id);
+                        const hasChanged = isLinked !== isSelected;
+                        
+                        return (
+                          <label
+                            key={student.id}
+                            className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                              hasChanged 
+                                ? isSelected 
+                                  ? 'bg-green-50 border border-green-200' 
+                                  : 'bg-red-50 border border-red-200'
+                                : 'hover:bg-gray-50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleStudent(student.id)}
+                              className="w-5 h-5 text-blue-500 rounded focus:ring-2 focus:ring-blue-500"
+                            />
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-800">{student.name}</p>
+                              {student.student_no && (
+                                <p className="text-xs text-gray-500">
+                                  Student #{student.student_no}
+                                </p>
+                              )}
+                            </div>
+                            {isLinked && !hasChanged && (
+                              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                                Linked
+                              </span>
+                            )}
+                            {hasChanged && (
+                              <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                isSelected 
+                                  ? 'bg-green-100 text-green-700' 
+                                  : 'bg-red-100 text-red-700'
+                              }`}>
+                                {isSelected ? '+ Adding' : '− Removing'}
+                              </span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="p-2 space-y-1">
-                    {students.map(student => (
-                      <label
-                        key={student.id}
-                        className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedStudentIds.includes(student.id)}
-                          onChange={() => handleToggleStudent(student.id)}
-                          className="w-5 h-5 text-blue-500 rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-800">{student.name}</p>
-                          <p className="text-xs text-gray-500">
-                            Student #{student.student_no}
-                          </p>
-                        </div>
-                        {linkedStudentIds.includes(student.id) && (
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                            Currently Linked
-                          </span>
-                        )}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            {Object.keys(studentsByClass).length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                <p>No active students found</p>
+            {sortedClassNames.length === 0 && (
+              <div className="text-center py-12 bg-gray-50 rounded-xl">
+                <p className="text-gray-500">No active students found</p>
+                <p className="text-sm text-gray-400 mt-1">Add students first before linking to parents</p>
               </div>
             )}
           </div>
@@ -190,14 +249,14 @@ const ManageChildrenModal = ({ parent, onClose, onSave }) => {
           <button
             onClick={handleSave}
             disabled={saving || loading}
-            className="flex-1 bg-blue-500 text-white py-3 rounded-lg hover:bg-blue-600 disabled:opacity-50 font-medium"
+            className="flex-1 bg-emerald-500 text-white py-3 rounded-xl hover:bg-emerald-600 disabled:opacity-50 font-medium transition-colors"
           >
             {saving ? 'Saving...' : 'Save Changes'}
           </button>
           <button
             onClick={onClose}
             disabled={saving}
-            className="flex-1 bg-gray-200 py-3 rounded-lg hover:bg-gray-300 font-medium"
+            className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl hover:bg-gray-300 font-medium transition-colors"
           >
             Cancel
           </button>

@@ -1,17 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown,
-  CheckCircle, XCircle, Clock, AlertCircle, TrendingUp,
-  Snowflake, Flower2, Sun, UserCheck
+  CheckCircle, XCircle, Clock, AlertCircle, TrendingUp, UserCheck
 } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
-import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
+import useTermTheme from '../../../../shared/hooks/useTermTheme';
 
-const TERM_CONFIG = {
-  1: { name: 'Winter', icon: Snowflake, gradient: 'from-blue-500 to-cyan-600', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
-  2: { name: 'Spring', icon: Flower2, gradient: 'from-pink-500 to-rose-600', bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
-  3: { name: 'Summer', icon: Sun, gradient: 'from-amber-500 to-orange-600', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
-};
+// ════════════════════════════════════════════════════════════════════════════
+// PARENT ATTENDANCE PAGE - Uses useTermTheme for dynamic colors
+// ════════════════════════════════════════════════════════════════════════════
 
 const STATUS_CONFIG = {
   present: { color: 'bg-emerald-500', light: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', label: 'Present', icon: CheckCircle },
@@ -22,7 +19,8 @@ const STATUS_CONFIG = {
 
 const ParentAttendancePage = () => {
   const { supabase } = useApp();
-  const { activeTerm } = useActiveTerm();
+  const theme = useTermTheme();
+  const TermIcon = theme.icon;
 
   const [children, setChildren] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
@@ -31,9 +29,6 @@ const ParentAttendancePage = () => {
   const [stats, setStats] = useState({ total: 0, present: 0, absent: 0, late: 0, sentOut: 0, rate: 0 });
   const [termStats, setTermStats] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  const termConfig = activeTerm ? TERM_CONFIG[activeTerm.term_number] : null;
-  const TermIcon = termConfig?.icon || CalendarIcon;
 
   // ─── Load children ────────────────────────────────────
   useEffect(() => {
@@ -58,12 +53,11 @@ const ParentAttendancePage = () => {
   const loadAttendance = useCallback(async () => {
     if (!supabase || !selectedChild) return;
     try {
-      // ALL attendance for calendar display
       const { data } = await supabase.from('attendance').select('*')
         .eq('student_id', selectedChild.id).order('date_key', { ascending: true });
       setAttendance(data || []);
 
-      // Total stats (all time)
+      // Total stats
       const total = data?.length || 0;
       const present = data?.filter(a => a.status === 'present').length || 0;
       const absent = data?.filter(a => a.status === 'absent').length || 0;
@@ -73,8 +67,8 @@ const ParentAttendancePage = () => {
       setStats({ total, present, absent, late, sentOut, rate });
 
       // Term-specific stats
-      if (activeTerm) {
-        const termData = (data || []).filter(a => a.date_key >= activeTerm.start_date && a.date_key <= activeTerm.end_date);
+      if (theme.activeTerm) {
+        const termData = (data || []).filter(a => a.date_key >= theme.activeTerm.start_date && a.date_key <= theme.activeTerm.end_date);
         const tTotal = termData.length;
         const tPresent = termData.filter(a => a.status === 'present').length;
         const tAbsent = termData.filter(a => a.status === 'absent').length;
@@ -84,7 +78,7 @@ const ParentAttendancePage = () => {
         setTermStats({ total: tTotal, present: tPresent, absent: tAbsent, late: tLate, sentOut: tSentOut, rate: tRate });
       }
     } catch (err) { console.error(err); }
-  }, [supabase, selectedChild, activeTerm]);
+  }, [supabase, selectedChild, theme.activeTerm]);
 
   useEffect(() => { if (selectedChild) loadAttendance(); }, [selectedChild, loadAttendance]);
 
@@ -129,7 +123,8 @@ const ParentAttendancePage = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-12 h-12 border-4 rounded-full animate-spin"
+          style={{ borderColor: theme.withAlpha(0.3), borderTopColor: 'transparent' }} />
       </div>
     );
   }
@@ -151,8 +146,9 @@ const ParentAttendancePage = () => {
   return (
     <div className="space-y-6">
 
-      {/* ═══ HEADER ═══════════════════════════════════════ */}
-      <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-lg p-6 md:p-8 text-white relative overflow-hidden">
+      {/* ═══ HEADER - Dynamic Gradient ═══════════════════════ */}
+      <div className="rounded-2xl shadow-lg p-6 md:p-8 text-white relative overflow-hidden"
+        style={theme.gradientStyle}>
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-5 rounded-full -ml-24 -mb-24" />
 
@@ -164,14 +160,14 @@ const ParentAttendancePage = () => {
               </div>
               <div>
                 <h1 className="text-2xl md:text-3xl font-bold">Attendance</h1>
-                <p className="text-emerald-100 text-sm">Daily attendance records & statistics</p>
+                <p className="text-white/70 text-sm">Daily attendance records & statistics</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {activeTerm && termConfig && (
+              {theme.hasActiveTerm && (
                 <div className="hidden sm:flex bg-white/15 backdrop-blur px-3 py-1.5 rounded-lg items-center gap-1.5">
                   <TermIcon size={14} />
-                  <span className="text-xs font-medium">{termConfig.name} Term</span>
+                  <span className="text-xs font-medium">{theme.name} Term</span>
                 </div>
               )}
               {children.length > 1 && (
@@ -187,7 +183,7 @@ const ParentAttendancePage = () => {
             </div>
           </div>
 
-          {/* Stats row inside header */}
+          {/* Stats row */}
           <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
             {[
               { label: 'Total Days', value: displayStats.total, icon: CalendarIcon },
@@ -199,7 +195,7 @@ const ParentAttendancePage = () => {
             ].map((s, i) => (
               <div key={i} className="bg-white/15 backdrop-blur rounded-xl p-3 border border-white/20">
                 <div className="flex items-center justify-between mb-1">
-                  <p className="text-emerald-100 text-[10px] font-medium">{s.label}</p>
+                  <p className="text-white/70 text-[10px] font-medium">{s.label}</p>
                   <s.icon size={12} className="text-white/50" />
                 </div>
                 <p className="text-2xl md:text-3xl font-bold">{s.value}</p>
@@ -216,15 +212,17 @@ const ParentAttendancePage = () => {
         <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
           <div className="flex justify-between items-center mb-5">
             <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <CalendarIcon size={20} className="text-emerald-600" />
+              <CalendarIcon size={20} style={theme.textStyle} />
               {monthName}
             </h3>
             <div className="flex gap-1.5">
-              <button onClick={prevMonth} className="p-2 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">
-                <ChevronLeft size={18} className="text-gray-600" />
+              <button onClick={prevMonth} className="p-2 rounded-xl transition-colors"
+                style={{ backgroundColor: theme.withAlpha(0.1) }}>
+                <ChevronLeft size={18} style={theme.textStyle} />
               </button>
-              <button onClick={nextMonth} className="p-2 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">
-                <ChevronRight size={18} className="text-gray-600" />
+              <button onClick={nextMonth} className="p-2 rounded-xl transition-colors"
+                style={{ backgroundColor: theme.withAlpha(0.1) }}>
+                <ChevronRight size={18} style={theme.textStyle} />
               </button>
             </div>
           </div>
@@ -248,9 +246,10 @@ const ParentAttendancePage = () => {
 
               return (
                 <div key={idx} className={`aspect-square rounded-xl border flex flex-col items-center justify-center relative group transition-all
-                  ${today ? 'border-emerald-400 bg-emerald-50 shadow-sm' : weekend ? 'border-gray-100 bg-gray-50' : 'border-gray-200 hover:border-gray-300'}
-                `}>
-                  <span className={`text-sm font-semibold ${today ? 'text-emerald-600' : weekend ? 'text-gray-400' : 'text-gray-700'}`}>
+                  ${weekend ? 'border-gray-100 bg-gray-50' : 'border-gray-200 hover:border-gray-300'}
+                `} style={today ? { borderColor: theme.color, backgroundColor: theme.withAlpha(0.05) } : {}}>
+                  <span className={`text-sm font-semibold ${weekend ? 'text-gray-400' : 'text-gray-700'}`}
+                    style={today ? theme.textStyle : {}}>
                     {date.getDate()}
                   </span>
                   {record && (
@@ -285,11 +284,11 @@ const ParentAttendancePage = () => {
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Term Summary */}
-          {activeTerm && termStats && (
+          {theme.hasActiveTerm && termStats && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
               <h3 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
-                <UserCheck size={16} className="text-emerald-600" />
-                {termConfig?.name} Term Summary
+                <UserCheck size={16} style={theme.textStyle} />
+                {theme.name} Term Summary
               </h3>
               <div className={`p-4 rounded-xl border mb-3 ${
                 termStats.rate >= 90 ? 'bg-emerald-50 border-emerald-200' : termStats.rate >= 80 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'
@@ -318,7 +317,7 @@ const ParentAttendancePage = () => {
           {/* Recent Records */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
             <h3 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
-              <Clock size={16} className="text-blue-600" />
+              <Clock size={16} style={theme.textStyle} />
               Recent Records
             </h3>
 
@@ -351,20 +350,26 @@ const ParentAttendancePage = () => {
       </div>
 
       {/* ═══ TERM FOOTER ═════════════════════════════════ */}
-      {activeTerm && termConfig && (
-        <div className={`${termConfig.bg} border ${termConfig.border} rounded-xl px-4 py-3 flex items-center justify-between`}>
+      {theme.hasActiveTerm && (
+        <div className="rounded-xl px-4 py-3 flex items-center justify-between"
+          style={{ backgroundColor: theme.withAlpha(0.1), borderWidth: '1px', borderColor: theme.withAlpha(0.2) }}>
           <div className="flex items-center gap-2">
-            <TermIcon size={14} className={termConfig.text} />
-            <span className={`text-xs font-semibold ${termConfig.text}`}>{termConfig.name} Term {activeTerm.academic_year}</span>
+            <TermIcon size={14} style={theme.textStyle} />
+            <span className="text-xs font-semibold" style={theme.textStyle}>{theme.name} Term {theme.activeTerm.academic_year}</span>
             <span className="text-[10px] text-gray-500 hidden sm:inline">
-              {new Date(activeTerm.start_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              {new Date(theme.activeTerm.start_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
               {' – '}
-              {new Date(activeTerm.end_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              {new Date(theme.activeTerm.end_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
             </span>
           </div>
-          <span className={`text-[10px] font-medium ${termConfig.text}`}>
-            {Math.max(0, Math.ceil((new Date(activeTerm.end_date + 'T00:00:00') - new Date()) / 86400000))}d left
-          </span>
+          <div className="flex items-center gap-2">
+            <div className="w-24 rounded-full h-1.5 hidden sm:block" style={{ backgroundColor: theme.withAlpha(0.2) }}>
+              <div className="h-1.5 rounded-full" style={{ width: `${theme.progress}%`, backgroundColor: theme.color }} />
+            </div>
+            <span className="text-[10px] font-medium" style={theme.textStyle}>
+              {theme.daysRemaining}d left
+            </span>
+          </div>
         </div>
       )}
     </div>

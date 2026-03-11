@@ -1,22 +1,38 @@
 // services/ScheduleService.js
+// FIXED: Added school_id filtering for multi-tenant support
+
 export class ScheduleService {
-  constructor(supabase) {
+  constructor(supabase, schoolId = null) {
     if (!supabase) {
       throw new Error('Supabase client is required for ScheduleService');
     }
     this.supabase = supabase;
-    console.log('ScheduleService initialized');
+    this.schoolId = schoolId;
+    console.log('ScheduleService initialized | schoolId:', schoolId);
+  }
+
+  /**
+   * Set school ID for tenant filtering
+   */
+  setSchoolId(schoolId) {
+    this.schoolId = schoolId;
   }
 
   /**
    * Get schedule for a specific day
-   * SECURITY: Returns only the teacher's schedule
+   * SECURITY: Filters by both teacher_id AND school_id
    */
   async getScheduleByDay(dayOfWeek, teacherId = null) {
     try {
-      console.log('🔐 Fetching schedule for:', dayOfWeek, '| teacherId:', teacherId);
+      console.log('🔐 Fetching schedule for:', dayOfWeek, '| teacherId:', teacherId, '| schoolId:', this.schoolId);
       
-      let query = this.supabase
+      // SECURITY: Must have both teacherId and schoolId
+      if (!teacherId || !this.schoolId) {
+        console.log('⚠️ Missing teacherId or schoolId, returning empty');
+        return [];
+      }
+
+      const { data, error } = await this.supabase
         .from('teacher_schedule')
         .select(`
           *,
@@ -27,18 +43,9 @@ export class ScheduleService {
           )
         `)
         .eq('day_of_week', dayOfWeek)
+        .eq('teacher_id', teacherId)
+        .eq('school_id', this.schoolId)  // TENANT FILTER
         .order('time_slot', { ascending: true });
-
-      // SECURITY: ALWAYS filter by teacher if provided
-      if (teacherId) {
-        query = query.eq('teacher_id', teacherId);
-      } else {
-        // If no teacherId, return empty (no admin view)
-        console.log('⚠️ No teacherId provided, returning empty');
-        return [];
-      }
-
-      const { data, error } = await query;
 
       if (error) {
         console.error('Supabase error:', error);
@@ -65,13 +72,27 @@ export class ScheduleService {
 
   /**
    * Get full week schedule
-   * SECURITY: Returns only the teacher's schedule
+   * SECURITY: Filters by both teacher_id AND school_id
    */
   async getWeekSchedule(teacherId = null) {
     try {
-      console.log('🔐 Fetching full week schedule | teacherId:', teacherId);
+      console.log('🔐 Fetching full week schedule | teacherId:', teacherId, '| schoolId:', this.schoolId);
       
-      let query = this.supabase
+      const emptySchedule = {
+        Monday: [],
+        Tuesday: [],
+        Wednesday: [],
+        Thursday: [],
+        Friday: []
+      };
+
+      // SECURITY: Must have both teacherId and schoolId
+      if (!teacherId || !this.schoolId) {
+        console.log('⚠️ Missing teacherId or schoolId, returning empty');
+        return emptySchedule;
+      }
+
+      const { data, error } = await this.supabase
         .from('teacher_schedule')
         .select(`
           *,
@@ -81,34 +102,13 @@ export class ScheduleService {
             user_id
           )
         `)
+        .eq('teacher_id', teacherId)
+        .eq('school_id', this.schoolId)  // TENANT FILTER
         .order('time_slot', { ascending: true });
-
-      // SECURITY: ALWAYS filter by teacher
-      if (teacherId) {
-        query = query.eq('teacher_id', teacherId);
-      } else {
-        // No teacherId = no schedule
-        console.log('⚠️ No teacherId provided, returning empty');
-        return {
-          Monday: [],
-          Tuesday: [],
-          Wednesday: [],
-          Thursday: [],
-          Friday: []
-        };
-      }
-
-      const { data, error } = await query;
 
       if (error) throw error;
       
-      const schedule = {
-        Monday: [],
-        Tuesday: [],
-        Wednesday: [],
-        Thursday: [],
-        Friday: []
-      };
+      const schedule = { ...emptySchedule };
 
       (data || []).forEach(item => {
         if (schedule[item.day_of_week]) {
@@ -125,7 +125,7 @@ export class ScheduleService {
         }
       });
 
-      console.log('✅ Week schedule fetched');
+      console.log('✅ Week schedule fetched for school:', this.schoolId);
       return schedule;
     } catch (error) {
       console.error('Error fetching week schedule:', error);
@@ -135,19 +135,25 @@ export class ScheduleService {
 
   /**
    * Add a class/duty/extracurricular to schedule
+   * SECURITY: Requires teacher_id and includes school_id
    */
   async addScheduleClass(dayOfWeek, timeSlot, className, subject, type = 'class', teacherId = null) {
     try {
       if (!teacherId) {
         throw new Error('🔒 SECURITY: teacher_id is required');
       }
+      
+      if (!this.schoolId) {
+        throw new Error('🔒 SECURITY: school_id is required');
+      }
 
-      console.log('🔐 Adding schedule entry for teacher:', teacherId);
+      console.log('🔐 Adding schedule entry | teacher:', teacherId, '| school:', this.schoolId);
 
       const { data, error } = await this.supabase
         .from('teacher_schedule')
         .insert([{
           teacher_id: teacherId,
+          school_id: this.schoolId,  // TENANT ASSIGNMENT
           day_of_week: dayOfWeek,
           time_slot: timeSlot,
           class_name: className,
@@ -170,10 +176,15 @@ export class ScheduleService {
 
   /**
    * Update a schedule entry
+   * SECURITY: Filters by school_id to prevent cross-tenant updates
    */
   async updateScheduleClass(scheduleId, dayOfWeek, timeSlot, className, subject, type = 'class') {
     try {
-      console.log('🔐 Updating schedule entry:', scheduleId);
+      if (!this.schoolId) {
+        throw new Error('🔒 SECURITY: school_id is required');
+      }
+
+      console.log('🔐 Updating schedule entry:', scheduleId, '| school:', this.schoolId);
 
       const { data, error } = await this.supabase
         .from('teacher_schedule')
@@ -185,6 +196,7 @@ export class ScheduleService {
           schedule_type: type
         })
         .eq('id', scheduleId)
+        .eq('school_id', this.schoolId)  // TENANT FILTER
         .select()
         .single();
 
@@ -200,15 +212,21 @@ export class ScheduleService {
 
   /**
    * Delete a class from schedule
+   * SECURITY: Filters by school_id to prevent cross-tenant deletes
    */
   async deleteScheduleClass(scheduleId) {
     try {
-      console.log('🔐 Deleting schedule entry:', scheduleId);
+      if (!this.schoolId) {
+        throw new Error('🔒 SECURITY: school_id is required');
+      }
+
+      console.log('🔐 Deleting schedule entry:', scheduleId, '| school:', this.schoolId);
 
       const { error } = await this.supabase
         .from('teacher_schedule')
         .delete()
-        .eq('id', scheduleId);
+        .eq('id', scheduleId)
+        .eq('school_id', this.schoolId);  // TENANT FILTER
 
       if (error) throw error;
 
@@ -222,12 +240,13 @@ export class ScheduleService {
 
   /**
    * Get statistics about schedule
+   * SECURITY: Filters by teacher_id AND school_id
    */
   async getScheduleStats(teacherId = null) {
     try {
-      console.log('🔐 Getting schedule stats | teacherId:', teacherId);
+      console.log('🔐 Getting schedule stats | teacherId:', teacherId, '| schoolId:', this.schoolId);
 
-      if (!teacherId) {
+      if (!teacherId || !this.schoolId) {
         return {
           total: 0,
           classes: 0,
@@ -236,12 +255,11 @@ export class ScheduleService {
         };
       }
 
-      let query = this.supabase
+      const { data, error } = await this.supabase
         .from('teacher_schedule')
         .select('schedule_type')
-        .eq('teacher_id', teacherId);
-
-      const { data, error } = await query;
+        .eq('teacher_id', teacherId)
+        .eq('school_id', this.schoolId);  // TENANT FILTER
 
       if (error) throw error;
 

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { 
-  Settings, User, Users as UsersIcon, GraduationCap, 
+  Settings, Users as UsersIcon, GraduationCap, 
   Archive as ArchiveIcon, BarChart3, Calendar, Palette, ChevronRight,
   BookOpen
 } from 'lucide-react';
@@ -13,16 +13,15 @@ import ProfileManagementPage from './ProfileManagementPage';
 import AnalyticsTab from '../../grading/components/AnalyticsTab';
 import CurriculumSettingsTab from '../../settings/components/CurriculumSettingsTab';
 import ArchiveTabContent from '../../settings/components/ArchiveTabContent';
-import AccountTabContent from '../../settings/components/AccountTabContent';
 import AcademicTermsManager from './AcademicTermsManager';
 import SchoolColorsTab from '../../settings/components/SchoolColorsTab';
 
 // ============================================================================
 // MANAGEMENT PAGE - Multi-tenant with useTermTheme
+// UPDATED: Removed "My Account" tab (redundant with Settings page)
 // ============================================================================
 
 const TABS = [
-  { id: 'account', label: 'My Account', icon: User, description: 'Profile and preferences' },
   { id: 'students', label: 'Students', icon: GraduationCap, description: 'Manage student records' },
   { id: 'profiles', label: 'Profiles', icon: UsersIcon, description: 'Staff and parent accounts' },
   { id: 'curriculum', label: 'Curriculum', icon: BookOpen, description: 'Classes, subjects & grading' },
@@ -33,7 +32,6 @@ const TABS = [
 ];
 
 const TAB_COMPONENTS = {
-  account: AccountTabContent,
   students: StudentsPage,
   profiles: ProfileManagementPage,
   curriculum: CurriculumSettingsTab,
@@ -48,7 +46,7 @@ const ManagementPage = () => {
   const theme = useTermTheme();
   const TermIcon = theme.icon;
   
-  const [activeTab, setActiveTab] = useState('account');
+  const [activeTab, setActiveTab] = useState('students');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleTabChange = useCallback((tabId) => {
@@ -74,7 +72,7 @@ const ManagementPage = () => {
   }
 
   const renderContent = () => {
-    const Component = TAB_COMPONENTS[activeTab] || AccountTabContent;
+    const Component = TAB_COMPONENTS[activeTab] || StudentsPage;
     return <Component />;
   };
 

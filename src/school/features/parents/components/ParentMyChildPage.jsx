@@ -1,24 +1,28 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { User, ChevronDown, Award, MessageSquare, TrendingUp, Star, AlertCircle, CheckCircle, Target } from 'lucide-react';
+import { User, ChevronDown, Award, MessageSquare, TrendingUp, Star, AlertCircle, CheckCircle, Target, Users } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
+import useTermTheme from '../../../../shared/hooks/useTermTheme';
+import { getCambridgeGrade, isPrimaryClass } from '../../../../core/utils/cambridgeGrading';
+
+// ════════════════════════════════════════════════════════════════════════════
+// PARENT MY CHILD PAGE - Uses useTermTheme for dynamic colors
+// ════════════════════════════════════════════════════════════════════════════
 
 const ParentMyChildPage = () => {
   const { supabase } = useApp();
+  const theme = useTermTheme();
+  const TermIcon = theme.icon;
+
   const [children, setChildren] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
   const [teacherComments, setTeacherComments] = useState([]);
   const [topSubjects, setTopSubjects] = useState([]);
-  const [behaviorStats, setBehaviorStats] = useState({
-    positive: 0,
-    neutral: 0,
-    needsAttention: 0
-  });
+  const [behaviorStats, setBehaviorStats] = useState({ positive: 0, neutral: 0, needsAttention: 0 });
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       
@@ -41,7 +45,6 @@ const ParentMyChildPage = () => {
       if (childrenList.length > 0) {
         setSelectedChild(childrenList[0]);
       }
-      
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -49,9 +52,7 @@ const ParentMyChildPage = () => {
     }
   }, [supabase]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const loadChildDetails = useCallback(async () => {
     if (!selectedChild) return;
@@ -60,10 +61,7 @@ const ParentMyChildPage = () => {
       // Load teacher comments
       const { data: comments } = await supabase
         .from('teacher_comments')
-        .select(`
-          *,
-          teachers(full_name, subjects)
-        `)
+        .select(`*, teachers(full_name, subjects)`)
         .eq('student_id', selectedChild.id)
         .eq('is_visible_to_parent', true)
         .order('created_at', { ascending: false })
@@ -85,10 +83,9 @@ const ParentMyChildPage = () => {
       ).length || 0;
       
       const neutral = (comments?.length || 0) - positive - needsAttention;
-      
       setBehaviorStats({ positive, neutral, needsAttention });
       
-      // Load grades and calculate top subjects
+      // Load grades with Cambridge grading
       const { data: grades } = await supabase
         .from('grades')
         .select('*')
@@ -96,69 +93,31 @@ const ParentMyChildPage = () => {
         .order('date', { ascending: false });
       
       if (grades && grades.length > 0) {
+        const className = selectedChild.class_name;
         const subjectAverages = {};
         
         grades.forEach(grade => {
           if (!subjectAverages[grade.subject]) {
-            subjectAverages[grade.subject] = {
-              subject: grade.subject,
-              grades: [],
-              total: 0
-            };
+            subjectAverages[grade.subject] = { subject: grade.subject, grades: [], total: 0 };
           }
           subjectAverages[grade.subject].grades.push(grade);
           subjectAverages[grade.subject].total++;
         });
         
         const topSubjectsData = Object.values(subjectAverages).map(subj => {
-          const avg = subj.grades.reduce((sum, g) => sum + (g.grade / g.max_grade * 100), 0) / subj.total;
-          return {
-            subject: subj.subject,
-            average: avg.toFixed(1),
-            count: subj.total
-          };
-        }).sort((a, b) => b.average - a.average).slice(0, 5);
+          const avgPct = Math.round(subj.grades.reduce((sum, g) => sum + (g.grade / g.max_grade * 100), 0) / subj.total);
+          const cambridge = getCambridgeGrade(avgPct, className);
+          return { subject: subj.subject, avgPct, count: subj.total, cambridge };
+        }).sort((a, b) => b.avgPct - a.avgPct).slice(0, 5);
         
         setTopSubjects(topSubjectsData);
       }
-      
     } catch (error) {
       console.error('Error loading child details:', error);
     }
   }, [selectedChild, supabase]);
 
-  useEffect(() => {
-    if (selectedChild) {
-      loadChildDetails();
-    }
-  }, [selectedChild, loadChildDetails]);
-
-  const getSubjectColor = (average) => {
-    if (average >= 90) return {
-      bg: 'bg-gradient-to-r from-green-50 to-emerald-50',
-      border: 'border-green-300',
-      text: 'text-green-700',
-      badge: 'bg-green-100 text-green-700'
-    };
-    if (average >= 75) return {
-      bg: 'bg-gradient-to-r from-blue-50 to-cyan-50',
-      border: 'border-blue-300',
-      text: 'text-blue-700',
-      badge: 'bg-blue-100 text-blue-700'
-    };
-    if (average >= 60) return {
-      bg: 'bg-gradient-to-r from-orange-50 to-yellow-50',
-      border: 'border-orange-300',
-      text: 'text-orange-700',
-      badge: 'bg-orange-100 text-orange-700'
-    };
-    return {
-      bg: 'bg-gradient-to-r from-red-50 to-pink-50',
-      border: 'border-red-300',
-      text: 'text-red-700',
-      badge: 'bg-red-100 text-red-700'
-    };
-  };
+  useEffect(() => { if (selectedChild) loadChildDetails(); }, [selectedChild, loadChildDetails]);
 
   const getBehaviorBadge = () => {
     const total = behaviorStats.positive + behaviorStats.neutral + behaviorStats.needsAttention;
@@ -166,35 +125,17 @@ const ParentMyChildPage = () => {
     
     const positiveRate = (behaviorStats.positive / total) * 100;
     
-    if (positiveRate >= 70) return { 
-      label: 'Excellent Behavior', 
-      color: 'bg-green-100 text-green-700 border-green-300', 
-      icon: CheckCircle 
-    };
-    if (positiveRate >= 50) return { 
-      label: 'Good Behavior', 
-      color: 'bg-blue-100 text-blue-700 border-blue-300', 
-      icon: Star 
-    };
-    if (positiveRate >= 30) return { 
-      label: 'Improving', 
-      color: 'bg-orange-100 text-orange-700 border-orange-300', 
-      icon: TrendingUp 
-    };
-    return { 
-      label: 'Needs Attention', 
-      color: 'bg-red-100 text-red-700 border-red-300', 
-      icon: AlertCircle 
-    };
+    if (positiveRate >= 70) return { label: 'Excellent Behavior', color: 'bg-green-100 text-green-700 border-green-300', icon: CheckCircle };
+    if (positiveRate >= 50) return { label: 'Good Behavior', color: 'bg-blue-100 text-blue-700 border-blue-300', icon: Star };
+    if (positiveRate >= 30) return { label: 'Improving', color: 'bg-orange-100 text-orange-700 border-orange-300', icon: TrendingUp };
+    return { label: 'Needs Attention', color: 'bg-red-100 text-red-700 border-red-300', icon: AlertCircle };
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="relative">
-          <div className="w-16 h-16 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin"></div>
-          <User className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-teal-600" size={24} />
-        </div>
+        <div className="w-12 h-12 border-4 rounded-full animate-spin"
+          style={{ borderColor: theme.withAlpha(0.3), borderTopColor: 'transparent' }} />
       </div>
     );
   }
@@ -202,10 +143,8 @@ const ParentMyChildPage = () => {
   if (children.length === 0) {
     return (
       <div className="bg-white rounded-2xl shadow-lg p-12 text-center border border-gray-200">
-        <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <User size={40} className="text-gray-400" />
-        </div>
-        <p className="text-gray-600 text-lg">No student data available</p>
+        <Users size={48} className="mx-auto text-gray-300 mb-4" />
+        <p className="text-gray-600 text-lg font-medium">No student data available</p>
         <p className="text-gray-400 text-sm mt-2">Please contact your school administrator</p>
       </div>
     );
@@ -213,48 +152,58 @@ const ParentMyChildPage = () => {
 
   const behaviorBadge = getBehaviorBadge();
   const BehaviorIcon = behaviorBadge.icon;
+  const primary = isPrimaryClass(selectedChild?.class_name);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-br from-teal-600 via-emerald-600 to-green-500 rounded-3xl shadow-2xl p-8 text-white overflow-hidden relative">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32"></div>
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-5 rounded-full -ml-24 -mb-24"></div>
+      {/* ═══ HEADER - Dynamic Gradient ═══════════════════════ */}
+      <div className="rounded-2xl shadow-lg p-6 md:p-8 text-white relative overflow-hidden"
+        style={theme.gradientStyle}>
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-5 rounded-full -ml-24 -mb-24" />
         
         <div className="relative z-10">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-white bg-opacity-20 rounded-2xl flex items-center justify-center backdrop-blur-sm border-2 border-white border-opacity-30">
+              <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur border-2 border-white/30">
                 <span className="text-2xl font-bold">
                   {selectedChild?.name.split(' ').map(n => n[0]).join('')}
                 </span>
               </div>
               <div>
-                <h1 className="text-3xl font-bold">{selectedChild?.name}</h1>
-                <p className="text-teal-100 text-sm">Class {selectedChild?.class_name}</p>
+                <h1 className="text-2xl md:text-3xl font-bold">{selectedChild?.name}</h1>
+                <p className="text-white/70 text-sm">Class {selectedChild?.class_name} · {primary ? 'Cambridge Primary' : 'Cambridge IGCSE'}</p>
               </div>
             </div>
             
-            {children.length > 1 && (
-              <div className="relative">
-                <select
-                  value={selectedChild?.id || ''}
-                  onChange={(e) => setSelectedChild(children.find(c => c.id === e.target.value))}
-                  className="appearance-none bg-white bg-opacity-20 backdrop-blur-sm border border-white border-opacity-30 rounded-xl px-4 py-3 pr-10 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 cursor-pointer"
-                >
-                  {children.map(child => (
-                    <option key={child.id} value={child.id} className="text-gray-900">
-                      {child.name} - {child.class_name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" size={16} />
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              {theme.hasActiveTerm && (
+                <div className="hidden sm:flex bg-white/15 backdrop-blur px-3 py-1.5 rounded-lg items-center gap-1.5">
+                  <TermIcon size={14} />
+                  <span className="text-xs font-medium">{theme.name} Term</span>
+                </div>
+              )}
+              {children.length > 1 && (
+                <div className="relative">
+                  <select
+                    value={selectedChild?.id || ''}
+                    onChange={(e) => setSelectedChild(children.find(c => c.id === e.target.value))}
+                    className="appearance-none bg-white/20 backdrop-blur border border-white/30 rounded-xl px-4 py-2.5 pr-10 text-sm font-medium text-white focus:outline-none cursor-pointer"
+                  >
+                    {children.map(child => (
+                      <option key={child.id} value={child.id} className="text-gray-900">
+                        {child.name} - {child.class_name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" size={16} />
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Behavior Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white bg-opacity-20 backdrop-blur-md rounded-xl border border-white border-opacity-30">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/15 backdrop-blur rounded-xl border border-white/20">
             <BehaviorIcon size={20} />
             <span className="font-semibold">{behaviorBadge.label}</span>
           </div>
@@ -262,10 +211,10 @@ const ParentMyChildPage = () => {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Top Subjects */}
+        {/* ═══ TOP SUBJECTS ═══════════════════════════════════ */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
-          <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Target size={24} className="text-emerald-600" />
+          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <Target size={20} style={theme.textStyle} />
             Top Subjects
           </h3>
           
@@ -276,83 +225,85 @@ const ParentMyChildPage = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              {topSubjects.map((subj, idx) => {
-                const colors = getSubjectColor(parseFloat(subj.average));
-                
-                return (
-                  <div 
-                    key={subj.subject}
-                    className={'p-4 rounded-xl border-2 transition-all hover:shadow-md ' + colors.bg + ' ' + colors.border}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border-2 border-current">
-                          <span className={'text-xl font-bold ' + colors.text}>#{idx + 1}</span>
-                        </div>
-                        <div>
-                          <p className="font-bold text-gray-900">{subj.subject}</p>
-                          <p className="text-xs text-gray-600">{subj.count} assessments</p>
-                        </div>
+              {topSubjects.map((subj, idx) => (
+                <div key={subj.subject}
+                  className="p-4 rounded-xl border-2 transition-all hover:shadow-md"
+                  style={{ 
+                    backgroundColor: subj.cambridge.color + '10',
+                    borderColor: subj.cambridge.color + '40'
+                  }}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm"
+                        style={{ backgroundColor: subj.cambridge.color }}>
+                        {subj.cambridge.short}
                       </div>
-                      <div className="text-right">
-                        <p className={'text-3xl font-bold ' + colors.text}>{subj.average}%</p>
+                      <div>
+                        <p className="font-bold text-gray-900">{subj.subject}</p>
+                        <p className="text-xs text-gray-600">{subj.count} assessment{subj.count !== 1 ? 's' : ''}</p>
                       </div>
                     </div>
+                    <div className="text-right">
+                      <p className="text-xl font-bold" style={{ color: subj.cambridge.color }}>
+                        {subj.cambridge.display}
+                      </p>
+                      <p className="text-xs text-gray-400">{subj.avgPct}%</p>
+                    </div>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           )}
         </div>
 
-        {/* Behavior Tracking */}
+        {/* ═══ BEHAVIOR TRACKING ══════════════════════════════ */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
-          <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Star size={24} className="text-yellow-600" />
+          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <Star size={20} className="text-yellow-600" />
             Behavior Overview
           </h3>
           
           <div className="grid grid-cols-3 gap-3 mb-6">
             <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 text-center border-2 border-green-200">
-              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                <CheckCircle size={24} className="text-green-600" />
+              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                <CheckCircle size={20} className="text-green-600" />
               </div>
-              <p className="text-3xl font-bold text-green-600">{behaviorStats.positive}</p>
-              <p className="text-xs text-green-700 font-medium mt-1">Positive</p>
+              <p className="text-2xl font-bold text-green-600">{behaviorStats.positive}</p>
+              <p className="text-[10px] text-green-700 font-medium mt-1">Positive</p>
             </div>
             
             <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-4 text-center border-2 border-blue-200">
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                <Star size={24} className="text-blue-600" />
+              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                <Star size={20} className="text-blue-600" />
               </div>
-              <p className="text-3xl font-bold text-blue-600">{behaviorStats.neutral}</p>
-              <p className="text-xs text-blue-700 font-medium mt-1">Neutral</p>
+              <p className="text-2xl font-bold text-blue-600">{behaviorStats.neutral}</p>
+              <p className="text-[10px] text-blue-700 font-medium mt-1">Neutral</p>
             </div>
             
             <div className="bg-gradient-to-br from-orange-50 to-yellow-50 rounded-xl p-4 text-center border-2 border-orange-200">
-              <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                <AlertCircle size={24} className="text-orange-600" />
+              <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                <AlertCircle size={20} className="text-orange-600" />
               </div>
-              <p className="text-3xl font-bold text-orange-600">{behaviorStats.needsAttention}</p>
-              <p className="text-xs text-orange-700 font-medium mt-1">Needs Work</p>
+              <p className="text-2xl font-bold text-orange-600">{behaviorStats.needsAttention}</p>
+              <p className="text-[10px] text-orange-700 font-medium mt-1">Needs Work</p>
             </div>
           </div>
 
           {/* Current Badge */}
-          <div className={'p-4 rounded-xl border-2 text-center ' + behaviorBadge.color}>
+          <div className={`p-4 rounded-xl border-2 text-center ${behaviorBadge.color}`}>
             <div className="flex items-center justify-center gap-2 mb-2">
-              <BehaviorIcon size={24} />
-              <p className="text-lg font-bold">Current Status</p>
+              <BehaviorIcon size={20} />
+              <p className="text-sm font-bold">Current Status</p>
             </div>
-            <p className="text-2xl font-bold">{behaviorBadge.label}</p>
+            <p className="text-xl font-bold">{behaviorBadge.label}</p>
           </div>
         </div>
       </div>
 
-      {/* Teacher Comments */}
+      {/* ═══ TEACHER COMMENTS ═════════════════════════════════ */}
       <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
-        <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <MessageSquare size={24} className="text-purple-600" />
+        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+          <MessageSquare size={20} style={theme.textStyle} />
           Teacher Feedback
         </h3>
         
@@ -379,7 +330,7 @@ const ParentMyChildPage = () => {
                 : 'bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200';
               
               return (
-                <div key={comment.id} className={'p-4 rounded-xl border-2 hover:shadow-md transition-all ' + cardColor}>
+                <div key={comment.id} className={`p-4 rounded-xl border-2 hover:shadow-md transition-all ${cardColor}`}>
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <p className="font-bold text-gray-900">{comment.teachers?.full_name || 'Teacher'}</p>
@@ -396,6 +347,25 @@ const ParentMyChildPage = () => {
           </div>
         )}
       </div>
+
+      {/* ═══ TERM FOOTER ═════════════════════════════════════ */}
+      {theme.hasActiveTerm && (
+        <div className="rounded-xl px-4 py-3 flex items-center justify-between"
+          style={{ backgroundColor: theme.withAlpha(0.1), borderWidth: '1px', borderColor: theme.withAlpha(0.2) }}>
+          <div className="flex items-center gap-2">
+            <TermIcon size={14} style={theme.textStyle} />
+            <span className="text-xs font-semibold" style={theme.textStyle}>{theme.name} Term {theme.activeTerm.academic_year}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-24 rounded-full h-1.5 hidden sm:block" style={{ backgroundColor: theme.withAlpha(0.2) }}>
+              <div className="h-1.5 rounded-full" style={{ width: `${theme.progress}%`, backgroundColor: theme.color }} />
+            </div>
+            <span className="text-[10px] font-medium" style={theme.textStyle}>
+              {theme.daysRemaining}d left
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

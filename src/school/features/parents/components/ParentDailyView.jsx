@@ -1,24 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Calendar, 
-  Clock, 
-  ChevronLeft, 
-  ChevronRight, 
-  ChevronDown, 
-  AlertCircle,
-  BookOpen,
-  CheckCircle,
-  XCircle,
-  FileText,
-  MessageSquare,
-  Award,
-  Home,
-  User
+  Calendar, Clock, ChevronLeft, ChevronRight, ChevronDown, AlertCircle,
+  BookOpen, CheckCircle, XCircle, FileText, MessageSquare, Award, Home, Users
 } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
+import useTermTheme from '../../../../shared/hooks/useTermTheme';
+
+// ════════════════════════════════════════════════════════════════════════════
+// PARENT DAILY VIEW PAGE - Uses useTermTheme for dynamic colors
+// ════════════════════════════════════════════════════════════════════════════
 
 const ParentDailyViewPage = () => {
   const { supabase } = useApp();
+  const theme = useTermTheme();
+  const TermIcon = theme.icon;
+
   const [children, setChildren] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -29,9 +25,9 @@ const ParentDailyViewPage = () => {
   const [loading, setLoading] = useState(true);
 
   const loadChildren = useCallback(async () => {
+    
     try {
       setLoading(true);
-      
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       
@@ -54,7 +50,6 @@ const ParentDailyViewPage = () => {
       if (childrenList.length > 0) {
         setSelectedChild(childrenList[0]);
       }
-      
     } catch (error) {
       console.error('Error loading children:', error);
     } finally {
@@ -72,50 +67,30 @@ const ParentDailyViewPage = () => {
     try {
       const dateKey = selectedDate.toISOString().split('T')[0];
       
-      console.log('🔍 Loading daily data:', {
-        student: selectedChild.name,
-        class: selectedChild.class_name,
-        date: dateKey
-      });
-      
-      // ✅ Load classes from 'classes' table for this date and class
-      const { data: classesData, error: classesError } = await supabase
+      // Load classes
+      const { data: classesData } = await supabase
         .from('classes')
         .select('*')
         .eq('date_key', dateKey)
         .eq('class_name', selectedChild.class_name)
         .order('time');
       
-      if (classesError) {
-        console.error('❌ Error loading classes:', classesError);
-      }
-      
-      console.log('📚 Classes found:', classesData?.length || 0);
       setDailyClasses(classesData || []);
       
-      // ✅ Load attendance for this student for this date
-      const { data: attendanceData, error: attendanceError } = await supabase
+      // Load attendance
+      const { data: attendanceData } = await supabase
         .from('attendance')
         .select('*')
         .eq('date_key', dateKey)
         .eq('student_id', selectedChild.id);
       
-      if (attendanceError) {
-        console.error('❌ Error loading attendance:', attendanceError);
-      }
-      
-      console.log('✅ Attendance records:', attendanceData?.length || 0);
-      
-      // ✅ Create attendance map by class_id
       const attendanceMap = {};
       attendanceData?.forEach(att => {
         attendanceMap[att.class_id] = att;
       });
-      
-      console.log('📊 Attendance map:', attendanceMap);
       setAttendanceRecords(attendanceMap);
       
-      // ✅ Load homework due today
+      // Load homework due today
       const { data: homeworkData } = await supabase
         .from('homework')
         .select('*')
@@ -123,10 +98,9 @@ const ParentDailyViewPage = () => {
         .eq('due_date', dateKey)
         .order('subject');
       
-      console.log('📝 Homework due today:', homeworkData?.length || 0);
       setHomeworkDueToday(homeworkData || []);
       
-      // ✅ Load student homework status
+      // Load student homework status
       if (homeworkData && homeworkData.length > 0) {
         const homeworkIds = homeworkData.map(hw => hw.id);
         
@@ -140,12 +114,10 @@ const ParentDailyViewPage = () => {
         studentHomework?.forEach(sh => {
           statusMap[sh.homework_id] = sh;
         });
-        
         setStudentHomeworkStatus(statusMap);
       }
-      
     } catch (error) {
-      console.error('❌ Error loading daily data:', error);
+      console.error('Error loading daily data:', error);
     }
   }, [selectedChild, selectedDate, supabase]);
 
@@ -207,20 +179,13 @@ const ParentDailyViewPage = () => {
 
   const getHomeworkStatusBadge = (homeworkId) => {
     const status = studentHomeworkStatus[homeworkId];
-    
-    if (!status) {
-      return { text: 'Not Started', color: 'bg-gray-100 text-gray-700' };
-    }
+    if (!status) return { text: 'Not Started', color: 'bg-gray-100 text-gray-700' };
     
     switch (status.status) {
-      case 'done':
-        return { text: '✓ Done', color: 'bg-green-100 text-green-700' };
-      case 'partially_done':
-        return { text: '◐ Partial', color: 'bg-orange-100 text-orange-700' };
-      case 'not_done':
-        return { text: '○ Not Done', color: 'bg-red-100 text-red-700' };
-      default:
-        return { text: 'Not Started', color: 'bg-gray-100 text-gray-700' };
+      case 'done': return { text: '✓ Done', color: 'bg-green-100 text-green-700' };
+      case 'partially_done': return { text: '◐ Partial', color: 'bg-orange-100 text-orange-700' };
+      case 'not_done': return { text: '○ Not Done', color: 'bg-red-100 text-red-700' };
+      default: return { text: 'Not Started', color: 'bg-gray-100 text-gray-700' };
     }
   };
 
@@ -236,17 +201,13 @@ const ParentDailyViewPage = () => {
     setSelectedDate(newDate);
   };
 
-  const goToToday = () => {
-    setSelectedDate(new Date());
-  };
+  const goToToday = () => setSelectedDate(new Date());
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="relative">
-          <div className="w-16 h-16 border-4 border-cyan-200 border-t-cyan-600 rounded-full animate-spin"></div>
-          <Calendar className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-cyan-600" size={24} />
-        </div>
+        <div className="w-12 h-12 border-4 rounded-full animate-spin"
+          style={{ borderColor: theme.withAlpha(0.3), borderTopColor: 'transparent' }} />
       </div>
     );
   }
@@ -254,25 +215,19 @@ const ParentDailyViewPage = () => {
   if (children.length === 0) {
     return (
       <div className="bg-white rounded-2xl shadow-lg p-12 text-center border border-gray-200">
-        <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Home size={40} className="text-gray-400" />
-        </div>
-        <p className="text-gray-600 text-lg">No children linked to your account</p>
-        <p className="text-sm text-gray-400 mt-2">Please contact the school administrator</p>
+        <Users size={48} className="mx-auto text-gray-300 mb-4" />
+        <p className="text-gray-600 text-lg font-medium">No children linked to your account</p>
+        <p className="text-gray-400 text-sm mt-2">Please contact the school administrator</p>
       </div>
     );
   }
 
   const dateString = selectedDate.toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
   });
-
   const isToday = selectedDate.toDateString() === new Date().toDateString();
 
-  // Calculate stats
+  // Stats
   const attendanceList = Object.values(attendanceRecords);
   const stats = {
     totalClasses: dailyClasses.length,
@@ -290,117 +245,108 @@ const ParentDailyViewPage = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-br from-cyan-600 via-blue-600 to-indigo-600 rounded-3xl shadow-2xl p-8 text-white overflow-hidden relative">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32"></div>
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-5 rounded-full -ml-24 -mb-24"></div>
+      {/* ═══ HEADER - Dynamic Gradient ═══════════════════════ */}
+      <div className="rounded-2xl shadow-lg p-6 md:p-8 text-white relative overflow-hidden"
+        style={theme.gradientStyle}>
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-5 rounded-full -ml-24 -mb-24" />
         
         <div className="relative z-10">
           <div className="flex items-center justify-between mb-6">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Calendar size={20} className="text-cyan-100" />
-                <p className="text-sm text-cyan-100">Daily View</p>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur">
+                <Calendar size={24} />
               </div>
-              <h1 className="text-3xl font-bold">Schedule & Attendance</h1>
-              <p className="text-cyan-100 mt-1">{dateString}</p>
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold">Daily View</h1>
+                <p className="text-white/70 text-sm">{dateString}</p>
+              </div>
             </div>
             
-            {children.length > 1 && (
-              <div className="relative">
-                <select
-                  value={selectedChild?.id || ''}
-                  onChange={(e) => setSelectedChild(children.find(c => c.id === e.target.value))}
-                  className="appearance-none bg-white bg-opacity-20 backdrop-blur-sm border border-white border-opacity-30 rounded-xl px-4 py-3 pr-10 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 cursor-pointer"
-                >
-                  {children.map(child => (
-                    <option key={child.id} value={child.id} className="text-gray-900">
-                      {child.name} - {child.class_name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" size={16} />
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              {theme.hasActiveTerm && (
+                <div className="hidden sm:flex bg-white/15 backdrop-blur px-3 py-1.5 rounded-lg items-center gap-1.5">
+                  <TermIcon size={14} />
+                  <span className="text-xs font-medium">{theme.name} Term</span>
+                </div>
+              )}
+              {children.length > 1 && (
+                <div className="relative">
+                  <select
+                    value={selectedChild?.id || ''}
+                    onChange={(e) => setSelectedChild(children.find(c => c.id === e.target.value))}
+                    className="appearance-none bg-white/20 backdrop-blur border border-white/30 rounded-xl px-4 py-2.5 pr-10 text-sm font-medium text-white focus:outline-none cursor-pointer"
+                  >
+                    {children.map(child => (
+                      <option key={child.id} value={child.id} className="text-gray-900">
+                        {child.name} - {child.class_name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" size={16} />
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Date Navigation */}
-          <div className="flex items-center justify-between bg-white bg-opacity-15 backdrop-blur-md rounded-2xl p-4 border border-white border-opacity-30">
-            <button
-              onClick={prevDay}
-              className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
-            >
+          <div className="flex items-center justify-between bg-white/15 backdrop-blur rounded-2xl p-4 border border-white/20">
+            <button onClick={prevDay} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
               <ChevronLeft size={20} />
             </button>
             
-            <div className="flex items-center gap-3">
-              <button
-                onClick={goToToday}
-                className={'px-6 py-2 rounded-xl text-sm font-semibold transition-all ' + (isToday ? 'bg-white text-cyan-600' : 'bg-white bg-opacity-20 hover:bg-opacity-30')}
-              >
-                {isToday ? "Today's Schedule" : 'Go to Today'}
-              </button>
-            </div>
-            
             <button
-              onClick={nextDay}
-              className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+              onClick={goToToday}
+              className={`px-6 py-2 rounded-xl text-sm font-semibold transition-all ${isToday ? 'bg-white text-gray-800' : 'bg-white/20 hover:bg-white/30'}`}
+              style={isToday ? { color: theme.color } : {}}
             >
+              {isToday ? "Today's Schedule" : 'Go to Today'}
+            </button>
+            
+            <button onClick={nextDay} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
               <ChevronRight size={20} />
             </button>
           </div>
 
           {/* Stats Grid */}
           <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mt-6">
-            <div className="bg-white bg-opacity-15 backdrop-blur-md rounded-xl p-3 border border-white border-opacity-20 text-center">
-              <p className="text-2xl font-bold">{stats.totalClasses}</p>
-              <p className="text-xs text-cyan-100 mt-1">Classes</p>
-            </div>
-            <div className="bg-white bg-opacity-15 backdrop-blur-md rounded-xl p-3 border border-white border-opacity-20 text-center">
-              <p className="text-2xl font-bold">{stats.present}</p>
-              <p className="text-xs text-green-100 mt-1">Present</p>
-            </div>
-            <div className="bg-white bg-opacity-15 backdrop-blur-md rounded-xl p-3 border border-white border-opacity-20 text-center">
-              <p className="text-2xl font-bold">{stats.late}</p>
-              <p className="text-xs text-orange-100 mt-1">Late</p>
-            </div>
-            <div className="bg-white bg-opacity-15 backdrop-blur-md rounded-xl p-3 border border-white border-opacity-20 text-center">
-              <p className="text-2xl font-bold">{stats.absent}</p>
-              <p className="text-xs text-red-100 mt-1">Absent</p>
-            </div>
-            <div className="bg-white bg-opacity-15 backdrop-blur-md rounded-xl p-3 border border-white border-opacity-20 text-center">
-              <p className="text-2xl font-bold">{stats.sentOut}</p>
-              <p className="text-xs text-purple-100 mt-1">Sent Out</p>
-            </div>
-            <div className="bg-white bg-opacity-15 backdrop-blur-md rounded-xl p-3 border border-white border-opacity-20 text-center">
-              <p className="text-2xl font-bold">{homeworkDueToday.length}</p>
-              <p className="text-xs text-yellow-100 mt-1">Due Today</p>
-            </div>
+            {[
+              { label: 'Classes', value: stats.totalClasses },
+              { label: 'Present', value: stats.present },
+              { label: 'Late', value: stats.late },
+              { label: 'Absent', value: stats.absent },
+              { label: 'Sent Out', value: stats.sentOut },
+              { label: 'Due Today', value: homeworkDueToday.length },
+            ].map((s, i) => (
+              <div key={i} className="bg-white/15 backdrop-blur rounded-xl p-3 border border-white/20 text-center">
+                <p className="text-2xl font-bold">{s.value}</p>
+                <p className="text-xs text-white/70 mt-1">{s.label}</p>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Homework Due Today */}
+      {/* ═══ HOMEWORK DUE TODAY ═══════════════════════════════ */}
       {homeworkDueToday.length > 0 && (
-        <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl shadow-lg border-2 border-yellow-200 p-6">
+        <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl shadow-lg border-2 border-amber-200 p-6">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center">
-              <FileText size={20} className="text-yellow-600" />
+            <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+              <FileText size={20} className="text-amber-600" />
             </div>
             <div>
               <h3 className="font-bold text-gray-900">Homework Due Today</h3>
-              <p className="text-sm text-gray-600">{homeworkDueToday.length} assignments</p>
+              <p className="text-sm text-gray-600">{homeworkDueToday.length} assignment{homeworkDueToday.length !== 1 ? 's' : ''}</p>
             </div>
           </div>
           
           <div className="grid md:grid-cols-2 gap-3">
             {homeworkDueToday.map((hw) => {
               const statusBadge = getHomeworkStatusBadge(hw.id);
-              
               return (
-                <div key={hw.id} className="bg-white rounded-xl p-4 border-2 border-yellow-300">
+                <div key={hw.id} className="bg-white rounded-xl p-4 border-2 border-amber-300">
                   <div className="flex items-start justify-between mb-2">
-                    <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-lg text-xs font-semibold">
+                    <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-semibold">
                       {hw.subject}
                     </span>
                     <span className={'text-xs font-semibold px-2 py-1 rounded-lg ' + statusBadge.color}>
@@ -411,13 +357,6 @@ const ParentDailyViewPage = () => {
                   {hw.description && (
                     <p className="text-sm text-gray-600 line-clamp-2">{hw.description}</p>
                   )}
-                  {studentHomeworkStatus[hw.id]?.teacher_notes && (
-                    <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-200">
-                      <p className="text-xs text-blue-700">
-                        <strong>Note:</strong> {studentHomeworkStatus[hw.id].teacher_notes}
-                      </p>
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -425,11 +364,12 @@ const ParentDailyViewPage = () => {
         </div>
       )}
 
-      {/* Classes & Attendance */}
+      {/* ═══ CLASSES & ATTENDANCE ═════════════════════════════ */}
       <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-            <BookOpen size={20} className="text-blue-600" />
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{ backgroundColor: theme.withAlpha(0.15) }}>
+            <BookOpen size={20} style={theme.textStyle} />
           </div>
           <div>
             <h3 className="font-bold text-gray-900 text-lg">Today's Classes</h3>
@@ -446,20 +386,18 @@ const ParentDailyViewPage = () => {
         ) : (
           <div className="space-y-4">
             {dailyClasses.map((classItem) => {
-              // ✅ Match attendance by class_id
               const attendance = attendanceRecords[classItem.class_id];
-              
               const config = getStatusConfig(attendance?.status);
               const StatusIcon = config.icon;
               
               return (
                 <div 
                   key={classItem.id}
-                  className={'rounded-2xl border-2 p-5 transition-all hover:shadow-lg ' + config.bg + ' ' + config.border}
+                  className={`rounded-2xl border-2 p-5 transition-all hover:shadow-lg ${config.bg} ${config.border}`}
                 >
                   <div className="flex items-start justify-between gap-4 mb-4">
                     <div className="flex items-start gap-4 flex-1">
-                      <div className={'w-14 h-14 rounded-2xl flex items-center justify-center border-2 ' + config.border + ' ' + config.badge}>
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center border-2 ${config.border} ${config.badge}`}>
                         <StatusIcon size={24} className={config.iconColor} />
                       </div>
                       
@@ -472,7 +410,7 @@ const ParentDailyViewPage = () => {
                         </div>
                         <p className="text-sm text-gray-700 font-medium mb-1">{classItem.title}</p>
                         {classItem.parent_visible_note && (
-                          <p className="text-sm text-blue-600 mt-2">
+                          <p className="text-sm mt-2" style={theme.textStyle}>
                             📘 {classItem.parent_visible_note}
                           </p>
                         )}
@@ -484,18 +422,18 @@ const ParentDailyViewPage = () => {
                       </div>
                     </div>
                     
-                    <div className={'px-4 py-2 rounded-xl text-sm font-bold ' + config.badge}>
+                    <div className={`px-4 py-2 rounded-xl text-sm font-bold ${config.badge}`}>
                       {config.text}
                     </div>
                   </div>
 
-                  {/* Teacher Comment from Attendance */}
                   {attendance?.comment && (
-                    <div className="mt-3 p-4 bg-white rounded-xl border-2 border-blue-200">
+                    <div className="mt-3 p-4 bg-white rounded-xl border-2"
+                      style={{ borderColor: theme.withAlpha(0.3) }}>
                       <div className="flex items-start gap-2">
-                        <MessageSquare size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
+                        <MessageSquare size={16} style={theme.textStyle} className="mt-0.5 flex-shrink-0" />
                         <div className="flex-1">
-                          <p className="text-xs font-semibold text-blue-900 mb-1">Teacher's Note:</p>
+                          <p className="text-xs font-semibold mb-1" style={theme.textStyle}>Teacher's Note:</p>
                           <p className="text-sm text-gray-700">{attendance.comment}</p>
                         </div>
                       </div>
@@ -508,7 +446,7 @@ const ParentDailyViewPage = () => {
         )}
       </div>
 
-      {/* Day Summary */}
+      {/* ═══ DAY SUMMARY ══════════════════════════════════════ */}
       {dailyClasses.length > 0 && (
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
           <div className="flex items-center gap-3 mb-4">
@@ -538,12 +476,6 @@ const ParentDailyViewPage = () => {
                     <span className="text-lg font-bold text-red-700">{stats.absent}</span>
                   </div>
                 )}
-                {stats.sentOut > 0 && (
-                  <div className="flex items-center justify-between p-3 bg-purple-50 rounded-xl border border-purple-200">
-                    <span className="text-sm font-medium text-gray-700">Sent Out</span>
-                    <span className="text-lg font-bold text-purple-700">{stats.sentOut}</span>
-                  </div>
-                )}
                 {stats.notMarked > 0 && (
                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
                     <span className="text-sm font-medium text-gray-700">Not Yet Marked</span>
@@ -555,9 +487,9 @@ const ParentDailyViewPage = () => {
             
             <div>
               <h4 className="text-sm font-semibold text-gray-700 mb-3">Overall Status</h4>
-              <div className={'p-6 rounded-2xl border-2 text-center ' + getStatusConfig(overallStatus).bg + ' ' + getStatusConfig(overallStatus).border}>
+              <div className={`p-6 rounded-2xl border-2 text-center ${getStatusConfig(overallStatus).bg} ${getStatusConfig(overallStatus).border}`}>
                 <p className="text-sm text-gray-600 mb-2">Today's Performance</p>
-                <p className={'text-3xl font-bold ' + getStatusConfig(overallStatus).iconColor}>
+                <p className={`text-2xl font-bold ${getStatusConfig(overallStatus).iconColor}`}>
                   {overallStatus === 'present' ? '✓ Perfect Attendance' :
                    overallStatus === 'late' ? '⏰ Partial Attendance' :
                    overallStatus === 'absent' ? '✗ Absent' :
@@ -566,6 +498,25 @@ const ParentDailyViewPage = () => {
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ TERM FOOTER ═════════════════════════════════════ */}
+      {theme.hasActiveTerm && (
+        <div className="rounded-xl px-4 py-3 flex items-center justify-between"
+          style={{ backgroundColor: theme.withAlpha(0.1), borderWidth: '1px', borderColor: theme.withAlpha(0.2) }}>
+          <div className="flex items-center gap-2">
+            <TermIcon size={14} style={theme.textStyle} />
+            <span className="text-xs font-semibold" style={theme.textStyle}>{theme.name} Term {theme.activeTerm.academic_year}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-24 rounded-full h-1.5 hidden sm:block" style={{ backgroundColor: theme.withAlpha(0.2) }}>
+              <div className="h-1.5 rounded-full" style={{ width: `${theme.progress}%`, backgroundColor: theme.color }} />
+            </div>
+            <span className="text-[10px] font-medium" style={theme.textStyle}>
+              {theme.daysRemaining}d left
+            </span>
           </div>
         </div>
       )}
