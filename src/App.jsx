@@ -7,6 +7,7 @@ import SchoolApp from './school/SchoolApp';
 import OwnerDashboard from './owner/OwnerDashboard';
 import AkioLanding from './marketing/AkioLanding';
 import LoginPage from './auth/LoginPage';
+import ResetPasswordPage from './auth/ResetPasswordPage';
 import Privacy from './marketing/Privacy';
 import Terms from './marketing/Terms';
 
@@ -28,21 +29,30 @@ const AppRouter = () => {
   
   const path = window.location.pathname;
   
-  // Static pages
+  // ════════════════════════════════════════════════════════
+  // STATIC PAGES (no auth required)
+  // ════════════════════════════════════════════════════════
   if (path === '/privacy') return <Privacy />;
   if (path === '/terms') return <Terms />;
-
-  // Loading state
+  if (path === '/reset-password') return <ResetPasswordPage />;
+  
+  // ════════════════════════════════════════════════════════
+  // LOADING STATE
+  // ════════════════════════════════════════════════════════
   if (tenantLoading) {
     return <LoadingScreen message="Loading..." />;
   }
-
-  // Marketing/Landing page
+  
+  // ════════════════════════════════════════════════════════
+  // MARKETING / LANDING PAGE
+  // ════════════════════════════════════════════════════════
   if (isMarketing) {
     return <AkioLanding />;
   }
-
-  // Owner Dashboard
+  
+  // ════════════════════════════════════════════════════════
+  // OWNER DASHBOARD (owner.schoolhub.rs)
+  // ════════════════════════════════════════════════════════
   if (isOwnerDashboard) {
     if (authLoading) {
       return <LoadingScreen message="Checking authentication..." />;
@@ -52,8 +62,10 @@ const AppRouter = () => {
     }
     return <OwnerDashboard />;
   }
-
-  // School App
+  
+  // ════════════════════════════════════════════════════════
+  // SCHOOL APP (school-slug.schoolhub.rs)
+  // ════════════════════════════════════════════════════════
   if (isSchool) {
     if (error) {
       return <SchoolNotFound error={error} />;
@@ -66,11 +78,16 @@ const AppRouter = () => {
     }
     return <SchoolApp />;
   }
-
-  // Default fallback
+  
+  // ════════════════════════════════════════════════════════
+  // DEFAULT FALLBACK
+  // ════════════════════════════════════════════════════════
   return <AkioLanding />;
 };
 
+// ══════════════════════════════════════════════════════════
+// LOADING SCREEN
+// ══════════════════════════════════════════════════════════
 const LoadingScreen = ({ message = "Loading..." }) => (
   <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-violet-50 to-purple-50">
     <div className="text-center">
@@ -88,6 +105,9 @@ const LoadingScreen = ({ message = "Loading..." }) => (
   </div>
 );
 
+// ══════════════════════════════════════════════════════════
+// SCHOOL NOT FOUND
+// ══════════════════════════════════════════════════════════
 const SchoolNotFound = ({ error }) => (
   <div className="min-h-screen flex items-center justify-center bg-gray-50">
     <div className="text-center max-w-md mx-auto p-8">
