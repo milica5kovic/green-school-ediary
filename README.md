@@ -1,4 +1,4 @@
-# 🏫 SchoolHub — School Management System for Cambridge Curriculum Schools
+#  SchoolHub — School Management System for Cambridge Curriculum Schools
 
 <p align="center">
   <img src="public/Logo.png" alt="SchoolHub Logo" width="120" />
@@ -17,7 +17,7 @@
 
 ---
 
-## 📖 What is this?
+## What is this?
 
 SchoolHub is a full-featured school management system built specifically for private schools following the **Cambridge International Curriculum**. It handles everything from daily attendance and grade tracking to homework assignments and parent communication — all in one unified platform.
 
@@ -27,7 +27,7 @@ Originally developed as "Green School E-Diary" for a real Cambridge school in Be
 
 ---
 
-## ⚡ Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
@@ -49,7 +49,7 @@ Originally developed as "Green School E-Diary" for a real Cambridge school in Be
 
 ## ✨ Key Features
 
-### 👩‍🏫 Teacher Portal
+### Teacher Portal
 - **Dashboard** — Today's schedule, upcoming tests, term progress, urgent alerts
 - **Attendance** — Mark daily attendance with present/absent/late/sent-out statuses
 - **Grades** — Enter assessments with automatic Cambridge grade calculation
@@ -58,21 +58,21 @@ Originally developed as "Green School E-Diary" for a real Cambridge school in Be
 - **Tests** — Create test papers with PDF export
 - **Todo** — Personal task management
 
-### 👨‍👩‍👧 Parent Portal
+### Parent Portal
 - **Dashboard** — Child overview with grades, attendance rate, homework status
 - **Grades** — View all assessments with Cambridge grade display (Band 4, A*, etc.)
 - **Homework** — Track what's done, partial, or overdue
 - **Attendance** — Calendar view with monthly statistics
 - **Calendar** — School events and upcoming tests
 
-### 🔧 Admin Features
+### Admin Features
 - **Academic Terms** — Configure school terms with dates
 - **Classes & Subjects** — Manage class lists and subject colors
 - **Teacher Scheduling** — Assign teachers to classes/periods
 - **School Events** — Create holidays, assemblies, trips
 - **Custom Branding** — School logo, colors, seasonal themes
 
-### 🎨 Branding System
+### Branding System
 - Per-school customization (logo, primary/secondary colors)
 - **Seasonal term colors** — Winter (blue), Spring (pink), Summer (amber)
 - Admin toggle: use school colors vs. seasonal themes
@@ -80,7 +80,7 @@ Originally developed as "Green School E-Diary" for a real Cambridge school in Be
 
 ---
 
-## 🚀 Running Locally
+## Running Locally
 
 ### Prerequisites
 - Node.js 18+
@@ -123,7 +123,7 @@ Then visit: `http://demo.localhost:5173`
 
 ---
 
-## 📸 Screenshots
+## Screenshots
 
 <details>
 <summary><strong>Teacher Dashboard</strong></summary>
@@ -136,7 +136,7 @@ Then visit: `http://demo.localhost:5173`
 
 ---
 
-## 🗄️ Database Schema
+## Database Schema
 
 The system uses **30+ tables** with full relational integrity:
 
@@ -152,7 +152,7 @@ All tables have `school_id` foreign key for multi-tenant isolation via RLS.
 
 ---
 
-## 🎓 Cambridge Grading System
+## Cambridge Grading System
 
 ### Primary (Years 1-6): Bands
 | Band | Percentage | Meaning |
@@ -217,7 +217,7 @@ src/
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please read the contributing guidelines before submitting PRs.
 
