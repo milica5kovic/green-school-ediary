@@ -41,7 +41,13 @@ const getSubdomain = () => {
   return null;
 };
 
-export const AuthProvider = ({ children, supabase }) => {
+// ═══════════════════════════════════════════════════════════════════════════
+// AUTH PROVIDER
+// Props:
+//   - supabase: Supabase client instance
+//   - schoolId: Current school ID from TenantContext (for security checks)
+// ═══════════════════════════════════════════════════════════════════════════
+export const AuthProvider = ({ children, supabase, schoolId }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [teacher, setTeacher] = useState(null);
@@ -79,28 +85,83 @@ export const AuthProvider = ({ children, supabase }) => {
     }
   }, [supabase]);
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LOAD TEACHER - With school security check!
+  // ═══════════════════════════════════════════════════════════════════════════
   const loadTeacher = useCallback(async (userId) => {
     if (!supabase || !userId || isSigningOut.current) return null;
     
     try {
-      const { data, error: teacherError } = await supabase
+      let query = supabase
         .from('teachers')
         .select('*')
-        .eq('user_id', userId)
-        .single();
+        .eq('user_id', userId);
+      
+      // ═══════════════════════════════════════════════════════════════════════
+      // 🔒 SIGURNOSNA PROVERA: Ako smo na school tenant, filtriraj po school_id
+      // Ovo sprečava da teacher iz škole A vidi podatke škole B
+      // ═══════════════════════════════════════════════════════════════════════
+      if (schoolId) {
+        console.log('🔒 Filtering teacher by school_id:', schoolId);
+        query = query.eq('school_id', schoolId);
+      }
+      
+      const { data, error: teacherError } = await query.single();
 
       if (teacherError) {
-        console.log('ℹ️ No teacher profile for user');
+        if (teacherError.code === 'PGRST116') {
+          // No rows returned - teacher doesn't exist for this school
+          console.log('ℹ️ No teacher profile for user in this school');
+        } else {
+          console.error('❌ Teacher load error:', teacherError);
+        }
         return null;
       }
 
-      console.log('✅ Teacher loaded');
+      console.log('✅ Teacher loaded for school:', data.school_id);
       return data;
     } catch (err) {
       console.error('❌ Error loading teacher:', err);
       return null;
     }
-  }, [supabase]);
+  }, [supabase, schoolId]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LOAD PARENT - With school security check!
+  // ═══════════════════════════════════════════════════════════════════════════
+  const loadParent = useCallback(async (userId) => {
+    if (!supabase || !userId || isSigningOut.current) return null;
+    
+    try {
+      let query = supabase
+        .from('parents')
+        .select('*')
+        .eq('user_id', userId);
+      
+      // 🔒 SIGURNOSNA PROVERA
+      if (schoolId) {
+        console.log('🔒 Filtering parent by school_id:', schoolId);
+        query = query.eq('school_id', schoolId);
+      }
+      
+      const { data, error: parentError } = await query.single();
+
+      if (parentError) {
+        if (parentError.code === 'PGRST116') {
+          console.log('ℹ️ No parent profile for user in this school');
+        } else {
+          console.error('❌ Parent load error:', parentError);
+        }
+        return null;
+      }
+
+      console.log('✅ Parent loaded for school:', data.school_id);
+      return data;
+    } catch (err) {
+      console.error('❌ Error loading parent:', err);
+      return null;
+    }
+  }, [supabase, schoolId]);
 
   const clearAuthState = useCallback(() => {
     console.log('🔒 Clearing auth state');
@@ -121,6 +182,7 @@ export const AuthProvider = ({ children, supabase }) => {
     // Update subdomain ref on mount
     initialSubdomain.current = getSubdomain();
     console.log('🏫 Stored subdomain:', initialSubdomain.current);
+    console.log('🏫 School ID for auth:', schoolId);
 
     const initAuth = async () => {
       try {
@@ -141,7 +203,26 @@ export const AuthProvider = ({ children, supabase }) => {
           
           if (profileData?.role === 'teacher' || profileData?.role === 'admin') {
             const teacherData = await loadTeacher(session.user.id);
-            if (mounted) setTeacher(teacherData);
+            if (mounted) {
+              if (teacherData) {
+                setTeacher(teacherData);
+              } else if (schoolId) {
+                // ❌ User has session but doesn't belong to this school
+                console.error('❌ User does not belong to this school - signing out');
+                await supabase.auth.signOut();
+                clearAuthState();
+                setError('Nemate pristup ovoj školi.');
+              }
+            }
+          } else if (profileData?.role === 'parent') {
+            const parentData = await loadParent(session.user.id);
+            if (mounted && !parentData && schoolId) {
+              // ❌ Parent doesn't belong to this school
+              console.error('❌ Parent does not belong to this school - signing out');
+              await supabase.auth.signOut();
+              clearAuthState();
+              setError('Nemate pristup ovoj školi.');
+            }
           }
         } else {
           console.log('ℹ️ No session');
@@ -206,17 +287,24 @@ export const AuthProvider = ({ children, supabase }) => {
             const teacherData = await loadTeacher(session.user.id);
             
             if (mounted) {
-              setTeacher(prev => {
-                if (!teacherData) return null;
-                if (prev && 
-                    prev.user_id === teacherData.user_id && 
-                    prev.full_name === teacherData.full_name &&
-                    prev.email === teacherData.email &&
-                    JSON.stringify(prev.subjects) === JSON.stringify(teacherData.subjects)) {
-                  return prev;
-                }
-                return teacherData;
-              });
+              if (teacherData) {
+                setTeacher(prev => {
+                  if (!teacherData) return null;
+                  if (prev && 
+                      prev.user_id === teacherData.user_id && 
+                      prev.full_name === teacherData.full_name &&
+                      prev.email === teacherData.email &&
+                      JSON.stringify(prev.subjects) === JSON.stringify(teacherData.subjects)) {
+                    return prev;
+                  }
+                  return teacherData;
+                });
+              } else if (schoolId) {
+                // ❌ User signed in but doesn't belong to this school
+                console.error('❌ User does not belong to this school');
+                setError('Nemate pristup ovoj školi.');
+                await supabase.auth.signOut();
+              }
             }
           }
         }
@@ -240,8 +328,11 @@ export const AuthProvider = ({ children, supabase }) => {
       isMounted.current = false;
       subscription?.unsubscribe();
     };
-  }, [supabase, loadProfile, loadTeacher, clearAuthState]);
+  }, [supabase, schoolId, loadProfile, loadTeacher, loadParent, clearAuthState]);
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SIGN IN - With school security check!
+  // ═══════════════════════════════════════════════════════════════════════════
   const signIn = async (email, password) => {
     try {
       setLoading(true);
@@ -250,6 +341,7 @@ export const AuthProvider = ({ children, supabase }) => {
       hasLoadedInitialUser.current = false;
 
       console.log('🔐 Signing in...');
+      console.log('🔐 School ID:', schoolId);
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -257,6 +349,63 @@ export const AuthProvider = ({ children, supabase }) => {
       });
 
       if (error) throw error;
+
+      // ═══════════════════════════════════════════════════════════════════════
+      // 🔒 KRITIČNA SIGURNOSNA PROVERA
+      // Proveri da li user pripada OVOJ školi pre nego što ga pustiš!
+      // ═══════════════════════════════════════════════════════════════════════
+      if (schoolId && data.user) {
+        console.log('🔒 Verifying user belongs to school:', schoolId);
+        
+        // Prvo proveri profil da vidimo ulogu
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .single();
+        
+        let belongsToSchool = false;
+        
+        if (profileData?.role === 'teacher' || profileData?.role === 'admin') {
+          // Proveri teachers tabelu
+          const { data: teacherData } = await supabase
+            .from('teachers')
+            .select('id, school_id')
+            .eq('user_id', data.user.id)
+            .eq('school_id', schoolId)
+            .single();
+          
+          belongsToSchool = !!teacherData;
+          console.log('🔒 Teacher check:', belongsToSchool ? '✅ Found' : '❌ Not found');
+        } else if (profileData?.role === 'parent') {
+          // Proveri parents tabelu
+          const { data: parentData } = await supabase
+            .from('parents')
+            .select('id, school_id')
+            .eq('user_id', data.user.id)
+            .eq('school_id', schoolId)
+            .single();
+          
+          belongsToSchool = !!parentData;
+          console.log('🔒 Parent check:', belongsToSchool ? '✅ Found' : '❌ Not found');
+        } else {
+          // Nepoznata uloga - ne puštaj
+          console.error('❌ Unknown role:', profileData?.role);
+          belongsToSchool = false;
+        }
+        
+        if (!belongsToSchool) {
+          // ❌ User postoji ali NE pripada ovoj školi!
+          console.error('❌ ACCESS DENIED: User does not belong to this school!');
+          console.error('   User email:', email);
+          console.error('   School ID:', schoolId);
+          
+          await supabase.auth.signOut();
+          throw new Error('Nemate pristup ovoj školi.');
+        }
+        
+        console.log('✅ User verified for school:', schoolId);
+      }
 
       console.log('✅ Sign in successful');
       return { success: true };

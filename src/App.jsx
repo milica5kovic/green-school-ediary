@@ -14,18 +14,35 @@ import Terms from './marketing/Terms';
 function App() {
   return (
     <TenantProvider>
-      <AuthProvider supabase={supabase}>
-        <BrandingProvider>
-          <AppRouter />
-        </BrandingProvider>
-      </AuthProvider>
+      <AppWithTenant />
     </TenantProvider>
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// APP WITH TENANT - Wrapper that passes schoolId to AuthProvider
+// ═══════════════════════════════════════════════════════════════════════════
+const AppWithTenant = () => {
+  const { schoolId, loading: tenantLoading } = useTenant();
+  
+  // Čekaj da se tenant učita pre nego što renderuješ AuthProvider
+  // Ovo je bitno da AuthProvider ima schoolId od početka
+  if (tenantLoading) {
+    return <LoadingScreen message="Loading..." />;
+  }
+  
+  return (
+    <AuthProvider supabase={supabase} schoolId={schoolId}>
+      <BrandingProvider>
+        <AppRouter />
+      </BrandingProvider>
+    </AuthProvider>
+  );
+};
+
 const AppRouter = () => {
   const { isOwnerDashboard, isMarketing, isSchool, loading: tenantLoading, error } = useTenant();
-  const { user, teacher, isParent, loading: authLoading } = useAuth();
+  const { user, teacher, isParent, loading: authLoading, error: authError } = useAuth();
   
   const path = window.location.pathname;
   
@@ -64,18 +81,27 @@ const AppRouter = () => {
   }
   
   // ════════════════════════════════════════════════════════
-  // SCHOOL APP (school-slug.schoolhub.rs)
+  // SCHOOL APP (school-slug.schoolhub.rs or custom domain)
   // ════════════════════════════════════════════════════════
   if (isSchool) {
+    // School not found error
     if (error) {
       return <SchoolNotFound error={error} />;
     }
+    
     if (authLoading) {
       return <LoadingScreen message="Checking authentication..." />;
     }
+    
+    // 🔒 Auth error (e.g., user doesn't belong to this school)
+    if (authError) {
+      return <AccessDenied error={authError} />;
+    }
+    
     if (!user) {
       return <LoginPage redirectTo="school" />;
     }
+    
     return <SchoolApp />;
   }
   
@@ -124,6 +150,29 @@ const SchoolNotFound = ({ error }) => (
       >
         Go to Home
       </a>
+    </div>
+  </div>
+);
+
+// ══════════════════════════════════════════════════════════
+// ACCESS DENIED (user doesn't belong to this school)
+// ══════════════════════════════════════════════════════════
+const AccessDenied = ({ error }) => (
+  <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="text-center max-w-md mx-auto p-8">
+      <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
+        <svg className="w-10 h-10 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+      </div>
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">Pristup odbijen</h1>
+      <p className="text-gray-600 mb-6">{error || 'Nemate pristup ovoj školi.'}</p>
+      <button 
+        onClick={() => window.location.reload()}
+        className="inline-block px-6 py-3 bg-violet-600 text-white font-semibold rounded-xl hover:bg-violet-700 transition-colors"
+      >
+        Pokušaj ponovo
+      </button>
     </div>
   </div>
 );
