@@ -22,7 +22,8 @@ import {
   LogOut,
   Shield,
   UserCog,
-  Activity
+  Activity,
+  CalendarRange,
 } from "lucide-react";
 
 // Core contexts
@@ -61,6 +62,7 @@ import ParentCalendarPage from "./features/parents/components/ParentCalendarPage
 import ParentDailyViewPage from "./features/parents/components/ParentDailyView";
 import ParentHomeworkPage from "./features/parents/components/ParentHomeworkPage";
 import ActivityTrackerPage from "./features/activity/components/ActivityTrackerPage";
+import TimetableMakerPage from "./features/timetable/components/TimetableMakerPage";
 // ============================================================================
 // SCHOOL APP - Wrapper sa AppProvider
 // ============================================================================
@@ -257,6 +259,10 @@ const SchoolAppContent = () => {
         if (!hasFeature("management"))
           return <FeatureDisabled feature="Management" />;
         return <ManagementPage />;
+
+      case "timetable":
+        if (!isAdmin()) return <UnauthorizedPage />;
+        return <TimetableMakerPage />;
 
       case "admissions":
         if (!isAdmin()) return <UnauthorizedPage />;
@@ -533,6 +539,7 @@ const SchoolAppContent = () => {
                     page="admissions"
                   />
                 )}
+                <NavItem icon={CalendarRange} label="Timetable" page="timetable" />
                 <NavItem icon={Settings} label="Settings" page="settings" />
               </>
             ) : isPureAdmin ? (
@@ -559,6 +566,7 @@ const SchoolAppContent = () => {
                 {hasFeature("reports") && (
                   <NavItem icon={BarChart3} label="Reports" page="reports" />
                 )}
+                <NavItem icon={CalendarRange} label="Timetable" page="timetable" />
                 <NavItem icon={Settings} label="Settings" page="settings" />
               </>
             ) : (
