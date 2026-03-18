@@ -185,6 +185,7 @@ export class TimetableService {
       class_name: e.class_name,
       day_of_week: e.day_of_week,
       slot_number: e.slot_number,
+      is_double: e.is_double ?? false,
       status: 'draft',
     }));
 
@@ -200,7 +201,7 @@ export class TimetableService {
   }
 
   // Upsert a single draft cell (replaces any existing entry for that class+day+slot)
-  async upsertDraftEntry({ teacher_id, subject, class_name, day_of_week, slot_number }) {
+  async upsertDraftEntry({ teacher_id, subject, class_name, day_of_week, slot_number, is_double = false }) {
     this._require();
     // Remove existing entry for this class at this slot
     await this.supabase
@@ -212,11 +213,23 @@ export class TimetableService {
       .eq('day_of_week', day_of_week)
       .eq('slot_number', slot_number);
 
+    // If double class, also clear the next slot for this class (it will be consumed visually)
+    if (is_double) {
+      await this.supabase
+        .from('timetable_entries')
+        .delete()
+        .eq('school_id', this.schoolId)
+        .eq('status', 'draft')
+        .eq('class_name', class_name)
+        .eq('day_of_week', day_of_week)
+        .eq('slot_number', slot_number + 1);
+    }
+
     const { data, error } = await this.supabase
       .from('timetable_entries')
       .insert([{
         school_id: this.schoolId,
-        teacher_id, subject, class_name, day_of_week, slot_number, status: 'draft',
+        teacher_id, subject, class_name, day_of_week, slot_number, is_double, status: 'draft',
       }])
       .select(`
         *,
@@ -285,12 +298,13 @@ export class TimetableService {
       .delete()
       .eq('school_id', this.schoolId);
 
-    const scheduleRows = draftEntries.map(e => {
+    const scheduleRows = [];
+    draftEntries.forEach(e => {
       const slot = slotMap[e.slot_number];
       const timeLabel = slot
         ? `${slot.start_time.slice(0, 5)} - ${slot.end_time.slice(0, 5)}`
         : `Period ${e.slot_number}`;
-      return {
+      scheduleRows.push({
         school_id: this.schoolId,
         teacher_id: e.teacher_id,
         day_of_week: DAY_NAMES[e.day_of_week],
@@ -299,7 +313,24 @@ export class TimetableService {
         subject: e.subject,
         schedule_type: 'class',
         created_at: new Date().toISOString(),
-      };
+      });
+      // Double class: also add the next slot to teacher_schedule
+      if (e.is_double) {
+        const nextSlot = slotMap[e.slot_number + 1];
+        const nextLabel = nextSlot
+          ? `${nextSlot.start_time.slice(0, 5)} - ${nextSlot.end_time.slice(0, 5)}`
+          : `Period ${e.slot_number + 1}`;
+        scheduleRows.push({
+          school_id: this.schoolId,
+          teacher_id: e.teacher_id,
+          day_of_week: DAY_NAMES[e.day_of_week],
+          time_slot: nextLabel,
+          class_name: e.class_name,
+          subject: e.subject,
+          schedule_type: 'class',
+          created_at: new Date().toISOString(),
+        });
+      }
     });
 
     const { error: schedErr } = await this.supabase

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, AlertTriangle, Plus } from 'lucide-react';
+import { X, AlertTriangle, Plus, Layers } from 'lucide-react';
 import { useBranding } from '../../../../core/context/BrandingContext';
 
 const DAYS = [
@@ -10,7 +10,6 @@ const DAYS = [
   { index: 4, name: 'Friday' },
 ];
 
-// Consistent subject colours for readability
 const SUBJECT_COLORS = [
   '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b',
   '#10b981', '#3b82f6', '#ef4444', '#14b8a6',
@@ -25,7 +24,10 @@ function subjectColor(subject = '') {
 // ============================================================
 // CELL MODAL — Add / edit a timetable cell
 // ============================================================
-function CellModal({ day, slot, existingEntry, assignments, allEntries, onSave, onDelete, onClose, saving }) {
+function CellModal({
+  day, slot, nextSlot, existingEntry, assignments, allEntries,
+  onSave, onDelete, onClose, saving,
+}) {
   const { primaryColor } = useBranding();
   const dayName = DAYS.find(d => d.index === day)?.name;
   const slotLabel = slot.label || `Period ${slot.slot_number}`;
@@ -42,15 +44,36 @@ function CellModal({ day, slot, existingEntry, assignments, allEntries, onSave, 
       .map(e => e.teacher_id)
   );
 
-  // Classes from assignments (that are free in this slot)
+  // Classes that are also free in the next slot (required for double class)
+  const busyClassesNextSlot = nextSlot ? new Set(
+    allEntries
+      .filter(e =>
+        e.day_of_week === day &&
+        (e.slot_number === nextSlot.slot_number ||
+          (e.is_double && e.slot_number === nextSlot.slot_number - 1)) &&
+        e.id !== existingEntry?.id
+      )
+      .map(e => e.class_name)
+  ) : new Set();
+  const busyTeachersNextSlot = nextSlot ? new Set(
+    allEntries
+      .filter(e =>
+        e.day_of_week === day &&
+        (e.slot_number === nextSlot.slot_number ||
+          (e.is_double && e.slot_number === nextSlot.slot_number - 1)) &&
+        e.id !== existingEntry?.id
+      )
+      .map(e => e.teacher_id)
+  ) : new Set();
+
   const availableClasses = [...new Set(assignments.map(a => a.class_name))]
     .filter(c => !busyClasses.has(c) || c === existingEntry?.class_name)
     .sort();
 
   const [selectedClass, setSelectedClass] = useState(existingEntry?.class_name || '');
   const [selectedAsgn, setSelectedAsgn] = useState('');
+  const [isDouble, setIsDouble] = useState(existingEntry?.is_double ?? false);
 
-  // Filter assignments for selected class — exclude busy teachers (unless it's the existing one)
   const classAssignments = assignments
     .filter(a => a.class_name === selectedClass)
     .filter(a => !busyTeachers.has(a.teacher_id) || a.teacher_id === existingEntry?.teacher_id);
@@ -67,6 +90,13 @@ function CellModal({ day, slot, existingEntry, assignments, allEntries, onSave, 
     }
   }, [existingEntry, assignments]);
 
+  // Check if double class is available for selected class/teacher
+  const selectedAsgnData = assignments.find(a => a.id === selectedAsgn);
+  const canBeDouble = nextSlot &&
+    selectedClass &&
+    !busyClassesNextSlot.has(selectedClass) &&
+    (!selectedAsgnData || !busyTeachersNextSlot.has(selectedAsgnData.teacher_id));
+
   const handleSave = () => {
     const asgn = assignments.find(a => a.id === selectedAsgn);
     if (!asgn) return;
@@ -76,6 +106,7 @@ function CellModal({ day, slot, existingEntry, assignments, allEntries, onSave, 
       class_name: asgn.class_name,
       day_of_week: day,
       slot_number: slot.slot_number,
+      is_double: canBeDouble && isDouble,
     });
   };
 
@@ -112,7 +143,7 @@ function CellModal({ day, slot, existingEntry, assignments, allEntries, onSave, 
             <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
             <select
               value={selectedClass}
-              onChange={e => { setSelectedClass(e.target.value); setSelectedAsgn(''); }}
+              onChange={e => { setSelectedClass(e.target.value); setSelectedAsgn(''); setIsDouble(false); }}
               className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2"
               style={{ '--tw-ring-color': `${primaryColor}50` }}
             >
@@ -130,7 +161,6 @@ function CellModal({ day, slot, existingEntry, assignments, allEntries, onSave, 
               {classAssignments.length === 0 ? (
                 <p className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
                   No available assignments for this class at this time slot.
-                  The teacher may already be busy or this class has no assignments.
                 </p>
               ) : (
                 <div className="space-y-1.5">
@@ -139,10 +169,7 @@ function CellModal({ day, slot, existingEntry, assignments, allEntries, onSave, 
                       key={a.id}
                       className={`
                         flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 cursor-pointer transition-all
-                        ${selectedAsgn === a.id
-                          ? 'border-current bg-opacity-10'
-                          : 'border-gray-200 hover:border-gray-300'
-                        }
+                        ${selectedAsgn === a.id ? 'border-current bg-opacity-10' : 'border-gray-200 hover:border-gray-300'}
                       `}
                       style={selectedAsgn === a.id ? {
                         borderColor: primaryColor,
@@ -169,6 +196,43 @@ function CellModal({ day, slot, existingEntry, assignments, allEntries, onSave, 
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Double class toggle */}
+          {selectedAsgn && nextSlot && (
+            <div>
+              <label
+                className={`
+                  flex items-center gap-3 px-3 py-3 rounded-xl border-2 cursor-pointer transition-all
+                  ${isDouble
+                    ? 'border-violet-400 bg-violet-50'
+                    : canBeDouble
+                      ? 'border-gray-200 hover:border-gray-300'
+                      : 'border-gray-100 opacity-50 cursor-not-allowed'
+                  }
+                `}
+              >
+                <input
+                  type="checkbox"
+                  checked={isDouble}
+                  onChange={e => canBeDouble && setIsDouble(e.target.checked)}
+                  disabled={!canBeDouble}
+                  className="rounded"
+                />
+                <Layers size={15} className={isDouble ? 'text-violet-500' : 'text-gray-400'} />
+                <div className="flex-1">
+                  <span className="text-sm font-medium text-gray-700">Double class</span>
+                  <span className="text-xs text-gray-400 ml-2">
+                    spans {slotLabel} + {nextSlot.label || `Period ${nextSlot.slot_number}`}
+                  </span>
+                  {!canBeDouble && (
+                    <p className="text-xs text-amber-600 mt-0.5">
+                      Next period is not available for this class/teacher.
+                    </p>
+                  )}
+                </div>
+              </label>
             </div>
           )}
         </div>
@@ -219,14 +283,13 @@ export default function TimetableGrid({
   viewMode, // 'draft' | 'published'
 }) {
   const { primaryColor } = useBranding();
-  const [filterType, setFilterType] = useState('class'); // 'class' | 'teacher' | 'all'
+  const [filterType, setFilterType] = useState('class');
   const [filterValue, setFilterValue] = useState('');
-  const [modalState, setModalState] = useState(null); // { day, slot, existingEntry | null }
+  const [modalState, setModalState] = useState(null);
 
   const sortedSlots = [...timeSlots].sort((a, b) => a.slot_number - b.slot_number);
   const isDraft = viewMode === 'draft';
 
-  // Apply filter to entries
   const visibleEntries = entries.filter(e => {
     if (!filterValue) return true;
     if (filterType === 'class') return e.class_name === filterValue;
@@ -234,7 +297,7 @@ export default function TimetableGrid({
     return true;
   });
 
-  // Build lookup: lookup[day][slot_number] = array of entries
+  // Build lookup[day][slot_number] = array of entries
   const lookup = {};
   DAYS.forEach(d => {
     lookup[d.index] = {};
@@ -246,10 +309,22 @@ export default function TimetableGrid({
     }
   });
 
+  // Build set of consumed cells (slot+1 for each double entry)
+  const consumed = new Set();
+  visibleEntries.filter(e => e.is_double).forEach(e => {
+    consumed.add(`${e.day_of_week}|${e.slot_number + 1}`);
+  });
+
+  const getNextSlot = (slot) => {
+    const idx = sortedSlots.findIndex(s => s.slot_number === slot.slot_number);
+    return idx >= 0 && idx < sortedSlots.length - 1 ? sortedSlots[idx + 1] : null;
+  };
+
   const openCell = (day, slot) => {
-    if (!isDraft) return; // can't edit published
+    if (!isDraft) return;
+    // Don't open if consumed by a double class above
+    if (consumed.has(`${day.index}|${slot.slot_number}`)) return;
     const existingEntries = lookup[day.index]?.[slot.slot_number] || [];
-    // If only one entry and filter is by class/teacher — edit that entry
     if (existingEntries.length === 1) {
       setModalState({ day: day.index, slot, existingEntry: existingEntries[0] });
     } else {
@@ -325,7 +400,6 @@ export default function TimetableGrid({
       {/* Grid */}
       <div className="overflow-x-auto rounded-2xl border border-gray-200 shadow-sm">
         <table className="w-full min-w-[700px] border-collapse">
-          {/* Header row: days */}
           <thead>
             <tr>
               <th
@@ -367,16 +441,24 @@ export default function TimetableGrid({
 
                 {/* Day cells */}
                 {DAYS.map(day => {
+                  const cellKey = `${day.index}|${slot.slot_number}`;
+
+                  // Skip cell — consumed by a double class from the row above
+                  if (consumed.has(cellKey)) return null;
+
                   const cellEntries = lookup[day.index]?.[slot.slot_number] || [];
                   const hasConflict = cellEntries.some(e => conflicts.has(e.id));
+                  const isDoubleCell = cellEntries.some(e => e.is_double);
 
                   return (
                     <td
                       key={day.index}
+                      rowSpan={isDoubleCell ? 2 : 1}
                       className={`
                         p-1.5 border-l border-gray-100 align-top
                         ${isDraft ? 'cursor-pointer' : 'cursor-default'}
                         ${hasConflict ? 'bg-red-50' : ''}
+                        ${isDoubleCell ? 'border-b-2 border-b-violet-200' : ''}
                       `}
                       onClick={() => isDraft && openCell(day, slot)}
                     >
@@ -413,6 +495,10 @@ export default function TimetableGrid({
       {/* Legend */}
       <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
         {isDraft && <span>Click any cell to add or edit an entry.</span>}
+        <span className="flex items-center gap-1 text-violet-500">
+          <Layers size={12} />
+          Double class spans 2 periods
+        </span>
         {conflicts.size > 0 && (
           <span className="flex items-center gap-1 text-red-500">
             <div className="w-3 h-3 rounded bg-red-200 border border-red-400" />
@@ -426,6 +512,7 @@ export default function TimetableGrid({
         <CellModal
           day={modalState.day}
           slot={modalState.slot}
+          nextSlot={getNextSlot(modalState.slot)}
           existingEntry={modalState.existingEntry}
           assignments={assignments}
           allEntries={entries}
@@ -449,12 +536,16 @@ function GridCell({ entry, isConflict, filterType, isDraft }) {
         px-2 py-1.5 rounded-lg text-xs transition-all
         ${isDraft ? 'hover:opacity-80' : ''}
         ${isConflict ? 'ring-2 ring-red-400' : ''}
+        ${entry.is_double ? 'ring-1 ring-violet-300' : ''}
       `}
       style={{ backgroundColor: `${color}15`, borderLeft: `3px solid ${color}` }}
     >
       <div className="flex items-start justify-between gap-1">
         <div className="min-w-0">
-          <div className="font-semibold text-gray-800 truncate">{entry.subject}</div>
+          <div className="font-semibold text-gray-800 truncate flex items-center gap-1">
+            {entry.subject}
+            {entry.is_double && <Layers size={10} className="text-violet-400 flex-shrink-0" />}
+          </div>
           {filterType !== 'class' && (
             <div className="text-gray-500 truncate">{entry.class_name}</div>
           )}

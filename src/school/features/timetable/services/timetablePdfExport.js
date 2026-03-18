@@ -2,7 +2,7 @@
 // TIMETABLE PDF EXPORT — Landscape A4 with school logo
 // ============================================================
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const DAYS = [0, 1, 2, 3, 4];
@@ -145,7 +145,7 @@ export async function exportTimetablePDF({
     return row;
   });
 
-  doc.autoTable({
+  autoTable(doc, {
     head,
     body,
     startY: tableStartY,

@@ -15,10 +15,9 @@ const DAYS = [0, 1, 2, 3, 4]; // Monday=0 ... Friday=4
  *   unplaced — tasks that could not be scheduled (conflicts/not enough slots)
  */
 export function generateTimetable(assignments, timeSlots, availabilityRecords) {
-  const slotNumbers = timeSlots.map(s => s.slot_number);
+  const slotNumbers = timeSlots.map(s => s.slot_number).sort((a, b) => a - b);
 
   // ---- Build blocked-slot lookup ----
-  // A record exists only when is_available=false (teacher is blocked)
   const blockedKey = (teacher_id, day, slot) => `${teacher_id}|${day}|${slot}`;
   const blocked = new Set(
     availabilityRecords
@@ -51,12 +50,12 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
         subject: a.subject,
         class_name: a.class_name,
         assignmentId: a.id,
+        periods_per_week: a.periods_per_week || 1,
       });
     }
   });
 
   // ---- Sort tasks: most constrained teachers first ----
-  // Count how many (day, slot) pairs each teacher can use
   const teacherFreeSlots = {};
   assignments.forEach(a => {
     if (teacherFreeSlots[a.teacher_id] !== undefined) return;
@@ -70,14 +69,13 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
   tasks.sort((a, b) => {
     const aFree = teacherFreeSlots[a.teacher_id] ?? 99;
     const bFree = teacherFreeSlots[b.teacher_id] ?? 99;
-    if (aFree !== bFree) return aFree - bFree; // fewer free slots → higher priority
-    return (b.periods_per_week || 0) - (a.periods_per_week || 0); // more periods → higher priority
+    if (aFree !== bFree) return aFree - bFree;
+    return (b.periods_per_week || 0) - (a.periods_per_week || 0);
   });
 
   // ---- Per-class tracking (for even distribution) ----
-  // classDayLoad[class_name][day] = number of periods already placed that day
   const classDayLoad = {};
-  // classSubjectDay[class_name|day|subject] = count (avoid same subject twice/day)
+  // Allow same subject up to 2× per day (supports double classes)
   const classSubjectDay = {};
 
   const getLoad = (class_name, day) =>
@@ -106,11 +104,17 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
         // Constraint 3: class must not already have a period in this slot
         if (grid[day][slot][task.class_name]) continue;
 
-        // Constraint 4: avoid same subject twice in the same day for the same class
-        if ((classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0) >= 1) continue;
+        // Constraint 4: same subject max 2× per day per class (allows back-to-back)
+        if ((classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0) >= 2) continue;
 
-        // Score: prefer the day with the least load for this class (even distribution)
-        const score = getLoad(task.class_name, day);
+        // Score: prefer the day with the least load (even distribution)
+        // Secondary: prefer consecutive slots when same subject already placed that day
+        const existingSameSubjectToday = classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0;
+        const loadScore = getLoad(task.class_name, day);
+        // Bonus if this slot is consecutive with an existing same-subject slot
+        const consecutiveBonus = existingSameSubjectToday > 0 ? -0.5 : 0;
+        const score = loadScore + consecutiveBonus;
+
         if (score < bestScore) {
           bestScore = score;
           bestDay = day;
@@ -120,7 +124,6 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
     }
 
     if (bestDay !== null) {
-      // Place the task
       grid[bestDay][bestSlot][task.class_name] = task;
       teacherBusy[bestDay][bestSlot].add(task.teacher_id);
 
@@ -136,6 +139,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
         class_name: task.class_name,
         day_of_week: bestDay,
         slot_number: bestSlot,
+        is_double: false,
       });
     } else {
       unplaced.push({
@@ -146,13 +150,54 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
     }
   }
 
-  return { placed, unplaced };
+  // ---- Post-process: merge consecutive same-subject entries into double classes ----
+  // For each class+day+subject group, if 2 consecutive slots exist → mark first as is_double, remove second
+  const mergedPlaced = mergeDoubleClasses(placed, slotNumbers);
+
+  return { placed: mergedPlaced, unplaced };
+}
+
+/**
+ * Scan placed entries for same class+day+subject at consecutive slots.
+ * Merges them: first entry gets is_double=true, second is removed.
+ */
+function mergeDoubleClasses(placed, slotNumbers) {
+  // Group by class+day+subject
+  const groups = {};
+  placed.forEach((e, idx) => {
+    const key = `${e.class_name}|${e.day_of_week}|${e.subject}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push({ ...e, _idx: idx });
+  });
+
+  const toRemove = new Set();
+
+  Object.values(groups).forEach(entries => {
+    if (entries.length < 2) return;
+    // Sort by slot_number
+    entries.sort((a, b) => a.slot_number - b.slot_number);
+    // Find consecutive pairs
+    for (let i = 0; i < entries.length - 1; i++) {
+      const curr = entries[i];
+      const next = entries[i + 1];
+      const currSlotIndex = slotNumbers.indexOf(curr.slot_number);
+      const nextSlotIndex = slotNumbers.indexOf(next.slot_number);
+      if (nextSlotIndex === currSlotIndex + 1 && !toRemove.has(curr._idx)) {
+        // Mark first as double, schedule second for removal
+        placed[curr._idx].is_double = true;
+        toRemove.add(next._idx);
+        i++; // skip next — already merged
+      }
+    }
+  });
+
+  return placed.filter((_, idx) => !toRemove.has(idx));
 }
 
 /**
  * Detect conflicts in a list of timetable entries.
+ * Entries with is_double=true also "occupy" slot_number+1 for conflict purposes.
  * Returns a Set of entry IDs that have conflicts.
- * Also mutates each conflicting entry to add a .conflict string.
  *
  * @param {Array} entries - timetable_entries rows (with .id)
  * @returns {Set<string>} conflictIds
@@ -160,10 +205,19 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
 export function detectConflicts(entries) {
   const conflictIds = new Set();
 
-  // Group by (day, slot)
-  const byDaySlot = {};
+  // Expand double entries to cover two slots
+  const expanded = [];
   entries.forEach(e => {
-    const key = `${e.day_of_week}|${e.slot_number}`;
+    expanded.push({ ...e, _slot: e.slot_number });
+    if (e.is_double) {
+      expanded.push({ ...e, _slot: e.slot_number + 1, _isExpanded: true });
+    }
+  });
+
+  // Group by (day, effective slot)
+  const byDaySlot = {};
+  expanded.forEach(e => {
+    const key = `${e.day_of_week}|${e._slot}`;
     if (!byDaySlot[key]) byDaySlot[key] = [];
     byDaySlot[key].push(e);
   });
