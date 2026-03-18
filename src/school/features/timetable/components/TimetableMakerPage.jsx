@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Calendar, Settings, Zap, CheckCircle, AlertTriangle,
-  Download, Send, Trash2, RefreshCw, Eye,
+  Download, Send, Trash2, RefreshCw, UserX,
 } from 'lucide-react';
 import { useBranding } from '../../../../core/context/BrandingContext';
 import { useTimetable } from '../hooks/useTimetable';
@@ -10,10 +10,12 @@ import TimeSlotsSetup from './TimeSlotsSetup';
 import TeacherAssignmentsSetup from './TeacherAssignmentsSetup';
 import TeacherAvailabilitySetup from './TeacherAvailabilitySetup';
 import TimetableGrid from './TimetableGrid';
+import SubstitutionSchedule from './SubstitutionSchedule';
 
 const TABS = [
   { id: 'setup', label: 'Setup', icon: Settings },
   { id: 'timetable', label: 'Timetable', icon: Calendar },
+  { id: 'substitutions', label: 'Substitutions', icon: UserX },
 ];
 const SETUP_SECTIONS = [
   { id: 'slots', label: 'Time Slots' },
@@ -235,6 +237,19 @@ export default function TimetableMakerPage() {
           </div>
         )}
 
+        {/* ========== SUBSTITUTIONS TAB ========== */}
+        {activeTab === 'substitutions' && (
+          <div className="p-6">
+            <SubstitutionSchedule
+              teachers={tt.teachers}
+              publishedEntries={tt.publishedEntries}
+              timeSlots={tt.timeSlots}
+              availabilityRecords={tt.availabilityRecords}
+              assignments={tt.assignments}
+            />
+          </div>
+        )}
+
         {/* ========== TIMETABLE TAB ========== */}
         {activeTab === 'timetable' && (
           <div className="p-6 space-y-5">
@@ -362,6 +377,7 @@ export default function TimetableMakerPage() {
               conflicts={viewMode === 'draft' ? tt.conflicts : new Set()}
               onSetCell={tt.manualSetCell}
               onDeleteCell={tt.deleteDraftEntry}
+              onMoveCell={tt.moveDraftEntry}
               saving={tt.saving}
               viewMode={viewMode}
             />

@@ -240,6 +240,24 @@ export class TimetableService {
     return data;
   }
 
+  // Move a draft entry to a new day+slot (drag & drop)
+  async moveDraftEntry(id, newDay, newSlot) {
+    this._require();
+    const { data, error } = await this.supabase
+      .from('timetable_entries')
+      .update({ day_of_week: newDay, slot_number: newSlot, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('school_id', this.schoolId)
+      .eq('status', 'draft')
+      .select(`
+        *,
+        teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email)
+      `)
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
   async deleteDraftEntry(id) {
     this._require();
     const { error } = await this.supabase

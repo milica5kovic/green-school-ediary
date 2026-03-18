@@ -1,5 +1,5 @@
 // ============================================================
-// TIMETABLE PDF EXPORT — Landscape A4 with school logo
+// TIMETABLE PDF EXPORT — Portrait A4 with school logo
 // ============================================================
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -11,7 +11,7 @@ function hexToRgb(hex) {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
   return result
     ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)]
-    : [34, 120, 80]; // fallback dark green
+    : [34, 120, 80];
 }
 
 async function loadImageBase64(imageUrl) {
@@ -37,7 +37,7 @@ async function loadImageBase64(imageUrl) {
 }
 
 /**
- * Export timetable to a landscape PDF.
+ * Export timetable to a portrait PDF.
  *
  * @param {Object} opts
  * @param {Array}  opts.entries       - timetable_entries (with .teacher nested)
@@ -59,13 +59,12 @@ export async function exportTimetablePDF({
   filterValue = '',
   teachers = [],
 }) {
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const W = doc.internal.pageSize.getWidth();   // 297mm
-  const H = doc.internal.pageSize.getHeight();  // 210mm
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth();   // 210mm
+  const H = doc.internal.pageSize.getHeight();  // 297mm
   const headerRgb = hexToRgb(primaryColor);
 
   // ---- Header ----
-  let logoRight = 10; // x after logo
   let headerTopY = 10;
 
   const logoData = await loadImageBase64(logoUrl);
@@ -74,10 +73,9 @@ export async function exportTimetablePDF({
     const ratio = logoData.width / logoData.height;
     const logoW = Math.min(maxH * ratio, 40);
     doc.addImage(logoData.data, 'PNG', 10, 8, logoW, maxH);
-    logoRight = 10 + logoW + 4;
   }
 
-  // School name
+  // School name — centered
   doc.setFontSize(15);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(20, 20, 20);
@@ -92,14 +90,6 @@ export async function exportTimetablePDF({
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(80, 80, 80);
   doc.text(subtitle, W / 2, headerTopY + 13, { align: 'center' });
-
-  // Date (top right)
-  const today = new Date().toLocaleDateString('en-GB', {
-    day: '2-digit', month: 'long', year: 'numeric',
-  });
-  doc.setFontSize(8);
-  doc.setTextColor(150, 150, 150);
-  doc.text(`Generated: ${today}`, W - 10, headerTopY + 6, { align: 'right' });
 
   const tableStartY = headerTopY + 20;
 
@@ -130,16 +120,17 @@ export async function exportTimetablePDF({
     DAYS.forEach(day => {
       const cellEntries = lookup[day][slot.slot_number] || [];
       if (cellEntries.length === 0) {
-        row.push('—');
+        row.push('');
       } else {
         const lines = cellEntries.map(e => {
           const teacherName =
             e.teacher?.full_name || teacherMap[e.teacher_id]?.full_name || '';
-          if (filterType === 'class') return `${e.subject}\n${teacherName}`;
-          if (filterType === 'teacher') return `${e.class_name} • ${e.subject}`;
-          return `${e.class_name}: ${e.subject}\n${teacherName}`;
+          const doubleMarker = e.is_double ? ' ×2' : '';
+          if (filterType === 'class') return `${e.subject}${doubleMarker}\n${teacherName}`;
+          if (filterType === 'teacher') return `${e.class_name} • ${e.subject}${doubleMarker}`;
+          return `${e.class_name}: ${e.subject}${doubleMarker}`;
         });
-        row.push(lines.join('\n──\n'));
+        row.push(lines.join('\n'));
       }
     });
     return row;
@@ -154,19 +145,19 @@ export async function exportTimetablePDF({
       fillColor: headerRgb,
       textColor: 255,
       fontStyle: 'bold',
-      fontSize: 9,
+      fontSize: 8,
       halign: 'center',
       cellPadding: 3,
     },
     bodyStyles: {
-      fontSize: 8,
-      cellPadding: { top: 3, right: 4, bottom: 3, left: 4 },
+      fontSize: 7,
+      cellPadding: { top: 3, right: 3, bottom: 3, left: 3 },
       valign: 'middle',
       textColor: [30, 30, 30],
     },
     columnStyles: {
       0: {
-        cellWidth: 30,
+        cellWidth: 24,
         fontStyle: 'bold',
         halign: 'center',
         fillColor: [245, 247, 245],
@@ -181,7 +172,6 @@ export async function exportTimetablePDF({
     margin: { left: 10, right: 10, top: tableStartY },
     tableWidth: W - 20,
     didParseCell(data) {
-      // Highlight header column
       if (data.column.index === 0 && data.section === 'body') {
         data.cell.styles.fillColor = [238, 248, 242];
       }
@@ -194,18 +184,15 @@ export async function exportTimetablePDF({
     doc.setPage(i);
     doc.setFontSize(7);
     doc.setTextColor(190, 190, 190);
-    doc.text(
-      `${schoolName} — SchoolHub E-Diary`,
-      W / 2, H - 5, { align: 'center' }
-    );
+    doc.text(`${schoolName}  ·  Green School Ediary`, W / 2, H - 5, { align: 'center' });
   }
 
   // ---- Save ----
   const safeName = filterValue?.replace(/\s+/g, '-') || '';
   const filename =
-    filterType === 'class'   ? `timetable-class-${safeName}-${today}.pdf` :
-    filterType === 'teacher' ? `timetable-teacher-${safeName}-${today}.pdf` :
-                               `timetable-all-${today}.pdf`;
+    filterType === 'class'   ? `timetable-class-${safeName}.pdf` :
+    filterType === 'teacher' ? `timetable-teacher-${safeName}.pdf` :
+                               `timetable-all.pdf`;
 
   doc.save(filename);
 }

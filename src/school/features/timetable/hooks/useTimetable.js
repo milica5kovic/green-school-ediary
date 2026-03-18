@@ -220,14 +220,73 @@ export function useTimetable() {
     }
   }, [service, assignments, timeSlots, availabilityRecords]);
 
-  const manualSetCell = useCallback(async ({ teacher_id, subject, class_name, day_of_week, slot_number }) => {
+  const moveDraftEntry = useCallback(async (entryId, newDay, newSlot) => {
+    const entry = draftEntries.find(e => e.id === entryId);
+    if (!entry) return false;
+
+    // If same position — no-op
+    if (entry.day_of_week === newDay && entry.slot_number === newSlot) return false;
+
+    const slotsToCheck = entry.is_double ? [newSlot, newSlot + 1] : [newSlot];
+
+    for (const slot of slotsToCheck) {
+      // Teacher double-booked?
+      const teacherBusy = draftEntries.some(
+        e => e.id !== entryId &&
+          e.teacher_id === entry.teacher_id &&
+          e.day_of_week === newDay &&
+          (e.slot_number === slot || (e.is_double && e.slot_number === slot - 1))
+      );
+      if (teacherBusy) {
+        setError(`${entry.teacher?.full_name || 'Teacher'} is already teaching at that slot.`);
+        return false;
+      }
+
+      // Class double-booked?
+      const classBusy = draftEntries.some(
+        e => e.id !== entryId &&
+          e.class_name === entry.class_name &&
+          e.day_of_week === newDay &&
+          (e.slot_number === slot || (e.is_double && e.slot_number === slot - 1))
+      );
+      if (classBusy) {
+        setError(`${entry.class_name} already has a class at that slot.`);
+        return false;
+      }
+
+      // Teacher availability?
+      const avail = availabilityRecords.find(
+        r => r.teacher_id === entry.teacher_id &&
+          r.day_of_week === newDay &&
+          r.slot_number === slot
+      );
+      if (avail && !avail.is_available) {
+        setError(`${entry.teacher?.full_name || 'Teacher'} is not available at that slot.`);
+        return false;
+      }
+    }
+
     setSaving(true);
     try {
-      const entry = await service.upsertDraftEntry({ teacher_id, subject, class_name, day_of_week, slot_number });
+      const updated = await service.moveDraftEntry(entryId, newDay, newSlot);
+      setDraftEntries(prev => prev.map(e => e.id === entryId ? updated : e));
+      return true;
+    } catch (err) {
+      setError(err.message);
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [service, draftEntries, availabilityRecords]);
+
+  const manualSetCell = useCallback(async ({ teacher_id, subject, class_name, day_of_week, slot_number, is_double = false }) => {
+    setSaving(true);
+    try {
+      const entry = await service.upsertDraftEntry({ teacher_id, subject, class_name, day_of_week, slot_number, is_double });
       setDraftEntries(prev => {
-        // Remove any existing entry for this class+day+slot
         const filtered = prev.filter(
-          e => !(e.class_name === class_name && e.day_of_week === day_of_week && e.slot_number === slot_number)
+          e => !(e.class_name === class_name && e.day_of_week === day_of_week &&
+            (e.slot_number === slot_number || (is_double && e.slot_number === slot_number + 1)))
         );
         return [...filtered, entry];
       });
@@ -320,6 +379,7 @@ export function useTimetable() {
     isTeacherAvailable,
     autoGenerate,
     manualSetCell,
+    moveDraftEntry,
     deleteDraftEntry,
     clearDraft,
     publishTimetable,
