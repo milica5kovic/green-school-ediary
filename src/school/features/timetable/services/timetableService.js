@@ -188,6 +188,7 @@ export class TimetableService {
       day_of_week: e.day_of_week,
       slot_number: e.slot_number,
       is_double: e.is_double ?? false,
+      parallel_group: e.parallel_group || null,
       status: 'draft',
     }));
 

@@ -102,10 +102,24 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
   const placed = [];
   const unplaced = [];
 
+  // Tracks which parallel_group a teacher is assigned to in each slot
+  // Allows same teacher to teach combined classes (e.g. Y5a+Y5b English together)
+  // Structure: teacherParallelGroup[day][slot][teacher_id] = parallel_group
+  const teacherParallelGroup = {};
+  DAYS.forEach(d => {
+    teacherParallelGroup[d] = {};
+    slotNumbers.forEach(s => { teacherParallelGroup[d][s] = {}; });
+  });
+
   // Helper: check if a single task can go at (day, slot)
   const canPlace = (task, day, slot) => {
     if (!isAvailable(task.teacher_id, day, slot)) return false;
-    if (teacherBusy[day][slot].has(task.teacher_id)) return false;
+    if (teacherBusy[day][slot].has(task.teacher_id)) {
+      // Allow same teacher in same slot for parallel group combined classes
+      // (e.g. Y5a and Y5b English taught together by the same teacher)
+      const existingGroup = teacherParallelGroup[day][slot][task.teacher_id];
+      if (!task.parallel_group || existingGroup !== task.parallel_group) return false;
+    }
     const existing = grid[day][slot][task.class_name];
     if (existing) {
       // Parallel group tasks may share a slot for the same class (class is split between options)
@@ -123,6 +137,9 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
     task._placed = true;  // mark this specific task instance as placed
     grid[day][slot][task.class_name] = task;
     teacherBusy[day][slot].add(task.teacher_id);
+    if (task.parallel_group) {
+      teacherParallelGroup[day][slot][task.teacher_id] = task.parallel_group;
+    }
     if (!classDayLoad[task.class_name]) classDayLoad[task.class_name] = {};
     classDayLoad[task.class_name][day] = getLoad(task.class_name, day) + 1;
     const sdk = subjectDayKey(task.class_name, day, task.subject);
@@ -134,6 +151,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
       day_of_week: day,
       slot_number: slot,
       is_double: false,
+      parallel_group: task.parallel_group || null,
     });
   };
 
@@ -296,24 +314,38 @@ export function detectConflicts(entries) {
 
   Object.values(byDaySlot).forEach(group => {
     // Teacher double-booking: same teacher_id in same slot
-    const teacherSeen = {};
+    // Exception: same teacher in same parallel_group = combined class (Y5a+Y5b together)
+    const teacherSeen = {}; // teacher_id → { id, parallel_group }
     group.forEach(e => {
-      if (teacherSeen[e.teacher_id]) {
-        conflictIds.add(e.id);
-        conflictIds.add(teacherSeen[e.teacher_id]);
+      const prev = teacherSeen[e.teacher_id];
+      if (prev) {
+        const isCombinedClass = e.parallel_group &&
+                                prev.parallel_group &&
+                                e.parallel_group === prev.parallel_group;
+        if (!isCombinedClass) {
+          conflictIds.add(e.id);
+          conflictIds.add(prev.id);
+        }
       } else {
-        teacherSeen[e.teacher_id] = e.id;
+        teacherSeen[e.teacher_id] = { id: e.id, parallel_group: e.parallel_group || null };
       }
     });
 
     // Class double-booking: same class_name in same slot
-    const classSeen = {};
+    // Exception: same class split into parallel groups (e.g. Y5a English + Y5a ESL)
+    const classSeen = {}; // class_name → { id, parallel_group }
     group.forEach(e => {
-      if (classSeen[e.class_name]) {
-        conflictIds.add(e.id);
-        conflictIds.add(classSeen[e.class_name]);
+      const prev = classSeen[e.class_name];
+      if (prev) {
+        const isSplitClass = e.parallel_group &&
+                             prev.parallel_group &&
+                             e.parallel_group === prev.parallel_group;
+        if (!isSplitClass) {
+          conflictIds.add(e.id);
+          conflictIds.add(prev.id);
+        }
       } else {
-        classSeen[e.class_name] = e.id;
+        classSeen[e.class_name] = { id: e.id, parallel_group: e.parallel_group || null };
       }
     });
   });
