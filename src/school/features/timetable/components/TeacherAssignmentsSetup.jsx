@@ -13,7 +13,7 @@ export default function TeacherAssignmentsSetup({
 }) {
   const { primaryColor } = useBranding();
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ teacher_id: '', subject: '', class_name: '', periods_per_week: 1 });
+  const [form, setForm] = useState({ teacher_id: '', subject: '', class_name: '', periods_per_week: 1, parallel_group: '' });
   const [formError, setFormError] = useState('');
   const [expandedTeachers, setExpandedTeachers] = useState({});
   const [editingId, setEditingId] = useState(null);
@@ -43,8 +43,8 @@ export default function TeacherAssignmentsSetup({
     if (duplicate) return setFormError('This assignment already exists.');
 
     try {
-      await onAdd({ ...form, subject: form.subject.trim(), periods_per_week: Number(form.periods_per_week) });
-      setForm({ teacher_id: '', subject: '', class_name: '', periods_per_week: 1 });
+      await onAdd({ ...form, subject: form.subject.trim(), periods_per_week: Number(form.periods_per_week), parallel_group: form.parallel_group.trim() || null });
+      setForm({ teacher_id: '', subject: '', class_name: '', periods_per_week: 1, parallel_group: '' });
       setShowForm(false);
     } catch (err) {
       setFormError(err.message);
@@ -163,6 +163,21 @@ export default function TeacherAssignmentsSetup({
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none"
               />
             </div>
+
+            {/* Parallel group */}
+            <div className="col-span-2">
+              <label className="text-xs text-gray-500 mb-1 block">
+                Parallel Group
+                <span className="text-gray-400 ml-1">(optional — classes with the same group name run simultaneously)</span>
+              </label>
+              <input
+                type="text"
+                value={form.parallel_group}
+                onChange={e => setForm(f => ({ ...f, parallel_group: e.target.value }))}
+                placeholder="e.g. Y7-Languages  or  Y5-Serbian"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none"
+              />
+            </div>
           </div>
 
           {formError && (
@@ -229,6 +244,11 @@ export default function TeacherAssignmentsSetup({
                         />
                         <span className="text-sm font-medium text-gray-800 w-20 flex-shrink-0">{a.class_name}</span>
                         <span className="text-sm text-gray-600 flex-1">{a.subject}</span>
+                        {a.parallel_group && (
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600 font-medium flex-shrink-0">
+                            ⇄ {a.parallel_group}
+                          </span>
+                        )}
 
                         {/* Periods per week — inline edit */}
                         {editingId === a.id ? (

@@ -78,11 +78,11 @@ export class TimetableService {
     return data || [];
   }
 
-  async addTeacherAssignment({ teacher_id, subject, class_name, periods_per_week }) {
+  async addTeacherAssignment({ teacher_id, subject, class_name, periods_per_week, parallel_group }) {
     this._require();
     const { data, error } = await this.supabase
       .from('teacher_assignments')
-      .insert([{ school_id: this.schoolId, teacher_id, subject, class_name, periods_per_week }])
+      .insert([{ school_id: this.schoolId, teacher_id, subject, class_name, periods_per_week, parallel_group: parallel_group || null }])
       .select(`
         *,
         teacher:teachers!teacher_assignments_teacher_id_fkey(id, full_name, email)
@@ -92,11 +92,13 @@ export class TimetableService {
     return data;
   }
 
-  async updateTeacherAssignment(id, { periods_per_week }) {
+  async updateTeacherAssignment(id, { periods_per_week, parallel_group }) {
     this._require();
+    const updates = { periods_per_week };
+    if (parallel_group !== undefined) updates.parallel_group = parallel_group || null;
     const { data, error } = await this.supabase
       .from('teacher_assignments')
-      .update({ periods_per_week })
+      .update(updates)
       .eq('id', id)
       .eq('school_id', this.schoolId)
       .select(`
