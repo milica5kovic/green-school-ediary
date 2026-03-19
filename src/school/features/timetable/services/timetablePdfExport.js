@@ -1,5 +1,5 @@
 // ============================================================
-// TIMETABLE PDF EXPORT — Portrait A4 with school logo
+// TIMETABLE PDF EXPORT — Landscape A4 with school logo
 // ============================================================
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -59,9 +59,9 @@ export async function exportTimetablePDF({
   filterValue = '',
   teachers = [],
 }) {
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const W = doc.internal.pageSize.getWidth();   // 210mm
-  const H = doc.internal.pageSize.getHeight();  // 297mm
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth();   // 297mm (landscape)
+  const H = doc.internal.pageSize.getHeight();  // 210mm (landscape)
   const headerRgb = hexToRgb(primaryColor);
 
   // ---- Header ----
@@ -157,7 +157,7 @@ export async function exportTimetablePDF({
     },
     columnStyles: {
       0: {
-        cellWidth: 24,
+        cellWidth: 32,
         fontStyle: 'bold',
         halign: 'center',
         fillColor: [245, 247, 245],
@@ -169,8 +169,8 @@ export async function exportTimetablePDF({
       5: { halign: 'center' },
     },
     alternateRowStyles: { fillColor: [250, 253, 250] },
-    margin: { left: 10, right: 10, top: tableStartY },
-    tableWidth: W - 20,
+    margin: { left: 12, right: 12, top: tableStartY },
+    tableWidth: W - 24,
     didParseCell(data) {
       if (data.column.index === 0 && data.section === 'body') {
         data.cell.styles.fillColor = [238, 248, 242];

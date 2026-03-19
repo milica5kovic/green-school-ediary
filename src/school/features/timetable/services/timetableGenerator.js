@@ -4,6 +4,16 @@
 
 const DAYS = [0, 1, 2, 3, 4]; // Monday=0 ... Friday=4
 
+// Subjects that must not appear more than once per day per class.
+// This prevents consecutive double-periods for high-frequency subjects.
+const SINGLE_PERIOD_SUBJECTS = new Set(['Maths', 'Mathematics', 'Math']);
+
+// Slot numbers that are "after school / extra-curricular" (15:05-15:45).
+// Generator applies a heavy score penalty so these are used ONLY as a last resort
+// when every regular slot (1-6) is blocked or already occupied for that teacher+class.
+const AFTER_SCHOOL_SLOTS = new Set([7]);
+const AFTER_SCHOOL_PENALTY = 200; // much higher than any realistic day-load score
+
 /**
  * Generate a timetable from assignments, time slots and availability.
  *
@@ -89,7 +99,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
 
   // ---- Per-class tracking (for even distribution) ----
   const classDayLoad = {};
-  // Allow same subject up to 2× per day (supports double classes)
+  // Tracks how many times a subject has been placed for a class on a given day
   const classSubjectDay = {};
 
   const getLoad = (class_name, day) =>
@@ -97,6 +107,10 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
 
   const subjectDayKey = (class_name, day, subject) =>
     `${class_name}|${day}|${subject}`;
+
+  // Max periods allowed per subject per class per day
+  // Single-period subjects (e.g. Maths) must not appear twice in one day
+  const maxPerDay = (subject) => SINGLE_PERIOD_SUBJECTS.has(subject) ? 1 : 2;
 
   // ---- Place tasks greedily ----
   const placed = [];
@@ -128,7 +142,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
                         task.parallel_group === existing.parallel_group;
       if (!sameGroup) return false;
     }
-    if ((classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0) >= 2) return false;
+    if ((classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0) >= maxPerDay(task.subject)) return false;
     return true;
   };
 
@@ -193,9 +207,11 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
           if (!canPlace(task, day, slot)) continue;
           // All siblings must also fit at this day+slot
           if (!siblings.every(s => canPlace(s, day, slot))) continue;
-          const loadScore = getLoad(task.class_name, day);
-          if (loadScore < bestScore) {
-            bestScore = loadScore;
+          // Strongly prefer regular slots (1-6) over after-school slots (7+)
+          const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
+          const score = getLoad(task.class_name, day) + afterSchoolPenalty;
+          if (score < bestScore) {
+            bestScore = score;
             bestDay = day;
             bestSlot = slot;
           }
@@ -223,8 +239,12 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
         if (!canPlace(task, day, slot)) continue;
         const existingSameSubjectToday = classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0;
         const loadScore = getLoad(task.class_name, day);
-        const consecutiveBonus = existingSameSubjectToday > 0 ? -0.5 : 0;
-        const score = loadScore + consecutiveBonus;
+        // Only encourage consecutive placement for subjects that support doubles
+        const consecutiveBonus = (existingSameSubjectToday > 0 && !SINGLE_PERIOD_SUBJECTS.has(task.subject)) ? -0.5 : 0;
+        // Strongly prefer regular slots (1-6). After-school slots (7+) are used
+        // only as a last resort when all regular slots are blocked/occupied.
+        const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
+        const score = loadScore + consecutiveBonus + afterSchoolPenalty;
         if (score < bestScore) {
           bestScore = score;
           bestDay = day;
@@ -242,6 +262,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
 
   // ---- Post-process: merge consecutive same-subject entries into double classes ----
   // For each class+day+subject group, if 2 consecutive slots exist → mark first as is_double, remove second
+  // Note: SINGLE_PERIOD_SUBJECTS can never produce doubles (max 1 per day)
   const mergedPlaced = mergeDoubleClasses(placed, slotNumbers);
 
   return { placed: mergedPlaced, unplaced };
