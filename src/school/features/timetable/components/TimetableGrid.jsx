@@ -279,7 +279,7 @@ function ChipContent({ entry, isConflict, filterType }) {
             {entry.is_double && <Layers size={10} className="text-violet-400 flex-shrink-0" />}
           </div>
           {filterType !== 'class' && <div className="text-gray-500 truncate">{entry.class_name}</div>}
-          {filterType !== 'teacher' && <div className="text-gray-400 truncate">{entry.teacher?.full_name}</div>}
+          {filterType !== 'teacher' && <div className="text-gray-400 truncate">{entry.teacher?.full_name || '—'}</div>}
         </div>
         {isConflict && <AlertTriangle size={11} className="text-red-500 flex-shrink-0 mt-0.5" />}
       </div>
@@ -498,7 +498,7 @@ export default function TimetableGrid({
 
                     return (
                       <DroppableCell
-                        key={day.index}
+                        key={cellKey}
                         id={cellKey}
                         isEmpty={cellEntries.length === 0}
                         isConsumed={false}

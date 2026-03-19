@@ -39,9 +39,12 @@ export function useTimetable() {
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState(null);
+  const [customClasses, setCustomClasses] = useState([]);
 
-  // Derived: distinct classes from students
-  const classes = [...new Set(students.map(s => s.class_name).filter(Boolean))].sort();
+  // Classes: prefer custom_classes table (authoritative); fall back to students if empty
+  const classes = customClasses.length > 0
+    ? customClasses
+    : [...new Set(students.map(s => s.class_name).filter(Boolean))].sort();
 
   // ---- Recalculate conflicts whenever draft changes ----
   useEffect(() => {
@@ -65,18 +68,27 @@ export function useTimetable() {
     setLoading(true);
     setError(null);
     try {
-      const [slots, asgn, avail, draft, published] = await Promise.all([
+      const [slots, asgn, avail, draft, published, classRows] = await Promise.all([
         service.getTimeSlots(),
         service.getTeacherAssignments(),
         service.getTeacherAvailability(),
         service.getTimetableEntries('draft'),
         service.getTimetableEntries('published'),
+        tenantSupabase
+          .from('custom_classes')
+          .select('class_name')
+          .eq('school_id', schoolId)
+          .eq('is_active', true)
+          .order('class_name'),
       ]);
       setTimeSlots(slots.length > 0 ? slots : DEFAULT_TIME_SLOTS);
       setAssignments(asgn);
       setAvailabilityRecords(avail);
       setDraftEntries(draft);
       setPublishedEntries(published);
+      setCustomClasses(
+        (classRows.data || []).map(r => r.class_name).sort()
+      );
     } catch (err) {
       setError(err.message);
     } finally {
@@ -212,7 +224,12 @@ export function useTimetable() {
       const { placed, unplaced } = generateTimetable(assignments, timeSlots, availabilityRecords);
       const saved = await service.saveDraftEntries(placed);
       setDraftEntries(saved);
-      setUnplacedTasks(unplaced);
+      // Enrich unplaced tasks with teacher name for display
+      const enriched = unplaced.map(t => ({
+        ...t,
+        teacherName: teachers.find(tc => tc.id === t.teacher_id)?.full_name || t.teacher_id,
+      }));
+      setUnplacedTasks(enriched);
     } catch (err) {
       setError(err.message);
     } finally {
