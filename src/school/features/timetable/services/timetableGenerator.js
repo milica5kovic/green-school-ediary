@@ -106,7 +106,14 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
   const canPlace = (task, day, slot) => {
     if (!isAvailable(task.teacher_id, day, slot)) return false;
     if (teacherBusy[day][slot].has(task.teacher_id)) return false;
-    if (grid[day][slot][task.class_name]) return false;
+    const existing = grid[day][slot][task.class_name];
+    if (existing) {
+      // Parallel group tasks may share a slot for the same class (class is split between options)
+      const sameGroup = task.parallel_group &&
+                        existing.parallel_group &&
+                        task.parallel_group === existing.parallel_group;
+      if (!sameGroup) return false;
+    }
     if ((classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0) >= 2) return false;
     return true;
   };
