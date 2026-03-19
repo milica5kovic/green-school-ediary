@@ -1,20 +1,26 @@
 import React, { useState } from 'react';
 import {
   Calendar, Settings, Zap, CheckCircle, AlertTriangle,
-  Download, Send, Trash2, RefreshCw, UserX,
+  Download, Send, Trash2, RefreshCw, UserX, ShieldCheck,
 } from 'lucide-react';
 import { useBranding } from '../../../../core/context/BrandingContext';
+import { useTenant } from '../../../../core/context/TenantContext';
 import { useTimetable } from '../hooks/useTimetable';
 import { exportTimetablePDF } from '../services/timetablePdfExport';
+import { exportDutiesPDF } from '../services/dutiesPdfExport';
+import { DutyService } from '../services/dutyService';
+import { tenantSupabase } from '../../../../core/infrastructure/supabaseClient';
 import TimeSlotsSetup from './TimeSlotsSetup';
 import TeacherAssignmentsSetup from './TeacherAssignmentsSetup';
 import TeacherAvailabilitySetup from './TeacherAvailabilitySetup';
 import TimetableGrid from './TimetableGrid';
 import SubstitutionSchedule from './SubstitutionSchedule';
+import DutySetup from './DutySetup';
 
 const TABS = [
   { id: 'setup', label: 'Setup', icon: Settings },
   { id: 'timetable', label: 'Timetable', icon: Calendar },
+  { id: 'duties', label: 'Duties', icon: ShieldCheck },
   { id: 'substitutions', label: 'Substitutions', icon: UserX },
 ];
 const SETUP_SECTIONS = [
@@ -26,6 +32,7 @@ const SETUP_SECTIONS = [
 export default function TimetableMakerPage() {
   const { primaryColor, name: schoolName, logoUrl } = useBranding();
   const tt = useTimetable();
+  const { schoolId } = useTenant();
 
   const [activeTab, setActiveTab] = useState('setup');
   const [setupSection, setSetupSection] = useState('slots');
@@ -33,6 +40,7 @@ export default function TimetableMakerPage() {
   const [publishConfirm, setPublishConfirm] = useState(false);
   const [clearConfirm, setClearConfirm] = useState(false);
   const [publishResult, setPublishResult] = useState(null);
+  const [exportingDuties, setExportingDuties] = useState(false);
 
   // PDF export state
   const [pdfFilter, setPdfFilter] = useState({ type: 'all', value: '' });
@@ -72,6 +80,22 @@ export default function TimetableMakerPage() {
       filterValue: pdfFilter.type === 'teacher' ? filterTeacher?.full_name : pdfFilter.value,
       teachers: tt.teachers,
     });
+  };
+
+  const handleExportDutiesPDF = async () => {
+    setExportingDuties(true);
+    try {
+      const svc = new DutyService(tenantSupabase, schoolId);
+      const [dutySlots, assignments] = await Promise.all([
+        svc.getDutySlots(),
+        svc.getDutyAssignments(),
+      ]);
+      await exportDutiesPDF({ dutySlots, assignments, schoolName, logoUrl, primaryColor });
+    } catch (e) {
+      console.error('Duties PDF error:', e);
+    } finally {
+      setExportingDuties(false);
+    }
   };
 
   // ---- Loading ----
@@ -234,6 +258,30 @@ export default function TimetableMakerPage() {
                 />
               )}
             </div>
+          </div>
+        )}
+
+        {/* ========== DUTIES TAB ========== */}
+        {activeTab === 'duties' && (
+          <div className="p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-gray-800">Staff Duty Assignments</h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Assign teachers to arrival, snack, lunch, late pick-up and other duties.
+                </p>
+              </div>
+              <button
+                onClick={handleExportDutiesPDF}
+                disabled={exportingDuties}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border-2 transition-colors disabled:opacity-50"
+                style={{ borderColor: primaryColor, color: primaryColor }}
+              >
+                <Download size={13} />
+                {exportingDuties ? 'Exporting…' : 'Export Duties PDF'}
+              </button>
+            </div>
+            <DutySetup teachers={tt.teachers} />
           </div>
         )}
 
