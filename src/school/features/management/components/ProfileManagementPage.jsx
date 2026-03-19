@@ -688,8 +688,31 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onSave }) =
 
     try {
       setSaving(true);
-      // Save logic here...
-      alert(teacher ? "✅ User updated!" : "✅ User created!");
+      const role = formData.user_type === 'super_admin' ? 'admin' : formData.user_type;
+      const subjects = formData.user_type === 'admin' ? [] : formData.subjects;
+      const class_teacher_for = formData.user_type === 'admin' ? null : (formData.class_teacher_for || null);
+
+      if (teacher) {
+        // Update existing teacher record
+        const { error } = await supabase
+          .from('teachers')
+          .update({ full_name: formData.full_name, role, subjects, class_teacher_for })
+          .eq('id', teacher.teacher_id);
+        if (error) throw error;
+
+        // Also update profile name if profile exists
+        await supabase
+          .from('profiles')
+          .update({ full_name: formData.full_name, role })
+          .eq('id', teacher.id);
+      } else {
+        // Create new teacher record
+        const { error } = await supabase
+          .from('teachers')
+          .insert([{ full_name: formData.full_name, email: formData.email, role, subjects, class_teacher_for }]);
+        if (error) throw error;
+      }
+
       onSave();
     } catch (error) {
       alert("Failed: " + error.message);

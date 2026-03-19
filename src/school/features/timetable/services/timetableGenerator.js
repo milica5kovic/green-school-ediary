@@ -51,11 +51,21 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
         class_name: a.class_name,
         assignmentId: a.id,
         periods_per_week: a.periods_per_week || 1,
+        parallel_group: a.parallel_group || null,
+        // Tag which occurrence within the group this is (for multi-period parallel groups)
+        _parallelIndex: i,
       });
     }
   });
 
-  // ---- Sort tasks: most constrained teachers first ----
+  // ---- Build parallel group membership: group → all tasks in that group ----
+  // Parallel groups: assignments sharing the same parallel_group must be placed
+  // in the same day+slot (e.g., French and German run simultaneously).
+  // parallelGroupSlots tracks which (day, slot) have been committed per group.
+  // Structure: { groupName: [ {day, slot}, ... ] }  — one entry per period occurrence
+  const parallelGroupSlots = {};
+
+  // ---- Sort tasks: most constrained teachers first, parallel groups first ----
   const teacherFreeSlots = {};
   assignments.forEach(a => {
     if (teacherFreeSlots[a.teacher_id] !== undefined) return;
@@ -67,6 +77,10 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
   });
 
   tasks.sort((a, b) => {
+    // Parallel-group tasks come first (they constrain others)
+    const aHasGroup = a.parallel_group ? 0 : 1;
+    const bHasGroup = b.parallel_group ? 0 : 1;
+    if (aHasGroup !== bHasGroup) return aHasGroup - bHasGroup;
     const aFree = teacherFreeSlots[a.teacher_id] ?? 99;
     const bFree = teacherFreeSlots[b.teacher_id] ?? 99;
     if (aFree !== bFree) return aFree - bFree;
@@ -88,33 +102,104 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
   const placed = [];
   const unplaced = [];
 
+  // Helper: check if a single task can go at (day, slot)
+  const canPlace = (task, day, slot) => {
+    if (!isAvailable(task.teacher_id, day, slot)) return false;
+    if (teacherBusy[day][slot].has(task.teacher_id)) return false;
+    if (grid[day][slot][task.class_name]) return false;
+    if ((classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0) >= 2) return false;
+    return true;
+  };
+
+  // Helper: commit a task to (day, slot)
+  const commitTask = (task, day, slot) => {
+    task._placed = true;  // mark this specific task instance as placed
+    grid[day][slot][task.class_name] = task;
+    teacherBusy[day][slot].add(task.teacher_id);
+    if (!classDayLoad[task.class_name]) classDayLoad[task.class_name] = {};
+    classDayLoad[task.class_name][day] = getLoad(task.class_name, day) + 1;
+    const sdk = subjectDayKey(task.class_name, day, task.subject);
+    classSubjectDay[sdk] = (classSubjectDay[sdk] || 0) + 1;
+    placed.push({
+      teacher_id: task.teacher_id,
+      subject: task.subject,
+      class_name: task.class_name,
+      day_of_week: day,
+      slot_number: slot,
+      is_double: false,
+    });
+  };
+
   for (const task of tasks) {
+    // ── PARALLEL GROUP LOGIC ─────────────────────────────────
+    if (task.parallel_group) {
+      const group = task.parallel_group;
+      const occurrence = task._parallelIndex;
+
+      // Check if this occurrence of the group already has a committed slot
+      const committed = parallelGroupSlots[group]?.[occurrence];
+      if (committed) {
+        // Slot already decided by another task in the group — use same slot
+        if (canPlace(task, committed.day, committed.slot)) {
+          commitTask(task, committed.day, committed.slot);
+        } else {
+          unplaced.push({ teacher_id: task.teacher_id, subject: task.subject, class_name: task.class_name });
+        }
+        continue;
+      }
+
+      // No slot committed yet for this occurrence — find one where ALL remaining
+      // unprocessed tasks in this group (same occurrence index) can also fit.
+      // Collect sibling tasks (same group, same _parallelIndex, not yet placed)
+      // Use t._placed flag (set by commitTask) to check if THIS specific task is placed
+      const siblings = tasks.filter(
+        t => t !== task &&
+             t.parallel_group === group &&
+             t._parallelIndex === occurrence &&
+             !t._placed
+      );
+
+      let bestDay = null;
+      let bestSlot = null;
+      let bestScore = Infinity;
+
+      for (const day of DAYS) {
+        for (const slot of slotNumbers) {
+          if (!canPlace(task, day, slot)) continue;
+          // All siblings must also fit at this day+slot
+          if (!siblings.every(s => canPlace(s, day, slot))) continue;
+          const loadScore = getLoad(task.class_name, day);
+          if (loadScore < bestScore) {
+            bestScore = loadScore;
+            bestDay = day;
+            bestSlot = slot;
+          }
+        }
+      }
+
+      if (bestDay !== null) {
+        // Commit this slot for the group occurrence
+        if (!parallelGroupSlots[group]) parallelGroupSlots[group] = [];
+        parallelGroupSlots[group][occurrence] = { day: bestDay, slot: bestSlot };
+        commitTask(task, bestDay, bestSlot);
+      } else {
+        unplaced.push({ teacher_id: task.teacher_id, subject: task.subject, class_name: task.class_name });
+      }
+      continue;
+    }
+
+    // ── NORMAL (non-parallel) PLACEMENT ─────────────────────
     let bestDay = null;
     let bestSlot = null;
     let bestScore = Infinity;
 
     for (const day of DAYS) {
       for (const slot of slotNumbers) {
-        // Constraint 1: teacher must be available
-        if (!isAvailable(task.teacher_id, day, slot)) continue;
-
-        // Constraint 2: teacher must not be double-booked
-        if (teacherBusy[day][slot].has(task.teacher_id)) continue;
-
-        // Constraint 3: class must not already have a period in this slot
-        if (grid[day][slot][task.class_name]) continue;
-
-        // Constraint 4: same subject max 2× per day per class (allows back-to-back)
-        if ((classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0) >= 2) continue;
-
-        // Score: prefer the day with the least load (even distribution)
-        // Secondary: prefer consecutive slots when same subject already placed that day
+        if (!canPlace(task, day, slot)) continue;
         const existingSameSubjectToday = classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0;
         const loadScore = getLoad(task.class_name, day);
-        // Bonus if this slot is consecutive with an existing same-subject slot
         const consecutiveBonus = existingSameSubjectToday > 0 ? -0.5 : 0;
         const score = loadScore + consecutiveBonus;
-
         if (score < bestScore) {
           bestScore = score;
           bestDay = day;
@@ -124,29 +209,9 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
     }
 
     if (bestDay !== null) {
-      grid[bestDay][bestSlot][task.class_name] = task;
-      teacherBusy[bestDay][bestSlot].add(task.teacher_id);
-
-      if (!classDayLoad[task.class_name]) classDayLoad[task.class_name] = {};
-      classDayLoad[task.class_name][bestDay] = getLoad(task.class_name, bestDay) + 1;
-
-      const sdk = subjectDayKey(task.class_name, bestDay, task.subject);
-      classSubjectDay[sdk] = (classSubjectDay[sdk] || 0) + 1;
-
-      placed.push({
-        teacher_id: task.teacher_id,
-        subject: task.subject,
-        class_name: task.class_name,
-        day_of_week: bestDay,
-        slot_number: bestSlot,
-        is_double: false,
-      });
+      commitTask(task, bestDay, bestSlot);
     } else {
-      unplaced.push({
-        teacher_id: task.teacher_id,
-        subject: task.subject,
-        class_name: task.class_name,
-      });
+      unplaced.push({ teacher_id: task.teacher_id, subject: task.subject, class_name: task.class_name });
     }
   }
 
