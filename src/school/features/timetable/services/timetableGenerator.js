@@ -8,6 +8,12 @@ const DAYS = [0, 1, 2, 3, 4]; // Monday=0 ... Friday=4
 // This prevents consecutive double-periods for high-frequency subjects.
 const SINGLE_PERIOD_SUBJECTS = new Set(['Maths', 'Mathematics', 'Math']);
 
+// Slot numbers that are "after school / extra-curricular" (15:05-15:45).
+// Generator applies a heavy score penalty so these are used ONLY as a last resort
+// when every regular slot (1-6) is blocked or already occupied for that teacher+class.
+const AFTER_SCHOOL_SLOTS = new Set([7]);
+const AFTER_SCHOOL_PENALTY = 200; // much higher than any realistic day-load score
+
 /**
  * Generate a timetable from assignments, time slots and availability.
  *
@@ -201,9 +207,11 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
           if (!canPlace(task, day, slot)) continue;
           // All siblings must also fit at this day+slot
           if (!siblings.every(s => canPlace(s, day, slot))) continue;
-          const loadScore = getLoad(task.class_name, day);
-          if (loadScore < bestScore) {
-            bestScore = loadScore;
+          // Strongly prefer regular slots (1-6) over after-school slots (7+)
+          const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
+          const score = getLoad(task.class_name, day) + afterSchoolPenalty;
+          if (score < bestScore) {
+            bestScore = score;
             bestDay = day;
             bestSlot = slot;
           }
@@ -233,7 +241,10 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
         const loadScore = getLoad(task.class_name, day);
         // Only encourage consecutive placement for subjects that support doubles
         const consecutiveBonus = (existingSameSubjectToday > 0 && !SINGLE_PERIOD_SUBJECTS.has(task.subject)) ? -0.5 : 0;
-        const score = loadScore + consecutiveBonus;
+        // Strongly prefer regular slots (1-6). After-school slots (7+) are used
+        // only as a last resort when all regular slots are blocked/occupied.
+        const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
+        const score = loadScore + consecutiveBonus + afterSchoolPenalty;
         if (score < bestScore) {
           bestScore = score;
           bestDay = day;
