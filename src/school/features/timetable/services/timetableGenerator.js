@@ -4,9 +4,21 @@
 
 const DAYS = [0, 1, 2, 3, 4]; // Monday=0 ... Friday=4
 
-// Subjects that must not appear more than once per day per class.
-// This prevents consecutive double-periods for high-frequency subjects.
-const SINGLE_PERIOD_SUBJECTS = new Set(['Maths', 'Mathematics', 'Math']);
+// Subjects that should NEVER appear more than once on the same day.
+// (Removed Maths — Maths forms double periods in the original school timetable)
+const SINGLE_PERIOD_SUBJECTS = new Set([]);
+
+// Subjects that should be taught in consecutive double periods wherever possible.
+// E.g., Science on Tuesday P3+P4, not P1 and P5 separately.
+// The generator applies a large bonus score for placing these back-to-back.
+const DOUBLE_PREFERRED_SUBJECTS = new Set([
+  'Maths', 'Mathematics', 'Math',
+  'PE',
+  'Art', 'ART',
+  'Science',
+  'English',
+  'ESL',
+]);
 
 // Slot numbers that are "after school / extra-curricular" (15:05-15:45).
 // Generator applies a heavy score penalty so these are used ONLY as a last resort
@@ -207,9 +219,21 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
           if (!canPlace(task, day, slot)) continue;
           // All siblings must also fit at this day+slot
           if (!siblings.every(s => canPlace(s, day, slot))) continue;
+
+          // Consecutive / double-period bonus (same logic as normal placement)
+          let consecutiveBonus = 0;
+          const existingSameSubjectToday = classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0;
+          if (existingSameSubjectToday > 0 && DOUBLE_PREFERRED_SUBJECTS.has(task.subject)) {
+            const prevSlotIdx = slotNumbers.indexOf(slot) - 1;
+            const prevSlot = prevSlotIdx >= 0 ? slotNumbers[prevSlotIdx] : null;
+            const prevEntry = prevSlot !== null ? grid[day][prevSlot][task.class_name] : null;
+            const isDirectlyAfter = prevEntry && prevEntry.subject === task.subject;
+            consecutiveBonus = isDirectlyAfter ? -50 : -10;
+          }
+
           // Strongly prefer regular slots (1-6) over after-school slots (7+)
           const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
-          const score = getLoad(task.class_name, day) + afterSchoolPenalty;
+          const score = getLoad(task.class_name, day) + consecutiveBonus + afterSchoolPenalty;
           if (score < bestScore) {
             bestScore = score;
             bestDay = day;
@@ -239,8 +263,24 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
         if (!canPlace(task, day, slot)) continue;
         const existingSameSubjectToday = classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0;
         const loadScore = getLoad(task.class_name, day);
-        // Only encourage consecutive placement for subjects that support doubles
-        const consecutiveBonus = (existingSameSubjectToday > 0 && !SINGLE_PERIOD_SUBJECTS.has(task.subject)) ? -0.5 : 0;
+
+        // Consecutive / double-period bonus
+        let consecutiveBonus = 0;
+        if (existingSameSubjectToday > 0) {
+          if (DOUBLE_PREFERRED_SUBJECTS.has(task.subject)) {
+            // Check if this slot is directly adjacent to an existing same-subject slot
+            const prevSlotIdx = slotNumbers.indexOf(slot) - 1;
+            const prevSlot = prevSlotIdx >= 0 ? slotNumbers[prevSlotIdx] : null;
+            const prevEntry = prevSlot !== null ? grid[day][prevSlot][task.class_name] : null;
+            const isDirectlyAfter = prevEntry && prevEntry.subject === task.subject;
+            // Directly consecutive → very strong pull (forces a double period)
+            // Same day but not adjacent → moderate pull (keeps related periods close)
+            consecutiveBonus = isDirectlyAfter ? -50 : -10;
+          } else {
+            consecutiveBonus = -0.5; // slight same-day nudge for non-double subjects
+          }
+        }
+
         // Strongly prefer regular slots (1-6). After-school slots (7+) are used
         // only as a last resort when all regular slots are blocked/occupied.
         const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
