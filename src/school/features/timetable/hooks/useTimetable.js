@@ -342,6 +342,66 @@ export function useTimetable() {
     }
   }, [service, draftEntries, availabilityRecords]);
 
+  // Swap two draft entries: A moves to B's position, B moves to A's position.
+  // Returns { ok: true } on success or { ok: false, reason: '...' } on conflict.
+  const swapDraftEntries = useCallback(async (id1, id2) => {
+    const e1 = draftEntries.find(e => e.id === id1);
+    const e2 = draftEntries.find(e => e.id === id2);
+    if (!e1 || !e2) return { ok: false, reason: 'Entry not found.' };
+
+    // All OTHER entries (excluding the two being swapped)
+    const others = draftEntries.filter(e => e.id !== id1 && e.id !== id2);
+
+    const occupies = (entry, day, slot) => {
+      // Returns true if 'entry' occupies 'slot' on 'day'
+      return entry.day_of_week === day &&
+        (entry.slot_number === slot || (entry.is_double && entry.slot_number === slot - 1));
+    };
+
+    const conflictsAt = (movingEntry, targetDay, targetSlot) => {
+      const slots = movingEntry.is_double
+        ? [targetSlot, targetSlot + 1]
+        : [targetSlot];
+      for (const s of slots) {
+        if (others.some(o => o.teacher_id === movingEntry.teacher_id && occupies(o, targetDay, s)))
+          return `${movingEntry.teacher?.full_name || 'Teacher'} is already busy at that slot.`;
+        if (others.some(o => o.class_name === movingEntry.class_name && occupies(o, targetDay, s)))
+          return `${movingEntry.class_name} already has a class at that slot.`;
+        const avail = availabilityRecords.find(
+          r => r.teacher_id === movingEntry.teacher_id && r.day_of_week === targetDay && r.slot_number === s
+        );
+        if (avail && !avail.is_available)
+          return `${movingEntry.teacher?.full_name || 'Teacher'} is not available at that slot.`;
+      }
+      return null;
+    };
+
+    const err1 = conflictsAt(e1, e2.day_of_week, e2.slot_number);
+    if (err1) return { ok: false, reason: err1 };
+    const err2 = conflictsAt(e2, e1.day_of_week, e1.slot_number);
+    if (err2) return { ok: false, reason: err2 };
+
+    setSaving(true);
+    try {
+      // Perform both moves in parallel — each row is updated by its own id
+      const [updated1, updated2] = await Promise.all([
+        service.moveDraftEntry(id1, e2.day_of_week, e2.slot_number),
+        service.moveDraftEntry(id2, e1.day_of_week, e1.slot_number),
+      ]);
+      setDraftEntries(prev => prev.map(e => {
+        if (e.id === id1) return updated1;
+        if (e.id === id2) return updated2;
+        return e;
+      }));
+      return { ok: true };
+    } catch (err) {
+      setError(err.message);
+      return { ok: false, reason: err.message };
+    } finally {
+      setSaving(false);
+    }
+  }, [service, draftEntries, availabilityRecords]);
+
   const manualSetCell = useCallback(async ({ teacher_id, subject, class_name, day_of_week, slot_number, is_double = false }) => {
     setSaving(true);
     try {
@@ -444,6 +504,7 @@ export function useTimetable() {
     fillGaps,
     manualSetCell,
     moveDraftEntry,
+    swapDraftEntries,
     deleteDraftEntry,
     clearDraft,
     publishTimetable,

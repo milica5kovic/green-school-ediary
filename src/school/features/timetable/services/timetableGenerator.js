@@ -29,7 +29,9 @@ const CG_SUBJECTS = new Set(['Cooking and Gardening', 'Cooking & Gardening', 'C&
 // Generator applies a heavy score penalty so these are used ONLY as a last resort
 // when every regular slot (1-6) is blocked or already occupied for that teacher+class.
 const AFTER_SCHOOL_SLOTS = new Set([7]);
-const AFTER_SCHOOL_PENALTY = 200; // much higher than any realistic day-load score
+// Must be > max possible gap penalty (5 gaps × 80 = 400) so ANY regular slot,
+// even with gaps, is always preferred over using an after-school slot.
+const AFTER_SCHOOL_PENALTY = 2000;
 
 /**
  * Generate a timetable from assignments, time slots and availability.

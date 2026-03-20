@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { X, AlertTriangle, Plus, Layers } from 'lucide-react';
+import { X, AlertTriangle, Plus, Layers, ArrowLeftRight } from 'lucide-react';
 import {
   DndContext,
   DragOverlay,
@@ -150,121 +150,111 @@ function CellModal({
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
-            <select
-              value={selectedClass}
-              onChange={e => { setSelectedClass(e.target.value); setSelectedAsgn(''); setIsDouble(false); }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none"
-            >
-              <option value="">Select class…</option>
-              {availableClasses.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+        {/* Two-column layout: left = class+subject picker, right = availability grid */}
+        <div className="p-4 flex gap-4">
+          {/* LEFT: selectors */}
+          <div className="flex-1 min-w-0 space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Class</label>
+              <select
+                value={selectedClass}
+                onChange={e => { setSelectedClass(e.target.value); setSelectedAsgn(''); setIsDouble(false); }}
+                className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none"
+              >
+                <option value="">Select class…</option>
+                {availableClasses.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            {selectedClass && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Subject & Teacher</label>
+                {classAssignments.length === 0 ? (
+                  <p className="text-xs text-amber-600 bg-amber-50 px-2.5 py-2 rounded-lg">
+                    No available assignments for this class at this time slot.
+                  </p>
+                ) : (
+                  <div className="space-y-1 max-h-48 overflow-y-auto pr-0.5">
+                    {classAssignments.map(a => (
+                      <label
+                        key={a.id}
+                        className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border-2 cursor-pointer transition-all ${
+                          selectedAsgn === a.id ? 'border-current' : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                        style={selectedAsgn === a.id ? { borderColor: primaryColor, backgroundColor: `${primaryColor}10` } : {}}
+                      >
+                        <input type="radio" name="assignment" value={a.id} checked={selectedAsgn === a.id}
+                          onChange={() => setSelectedAsgn(a.id)} className="sr-only" />
+                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor(a.subject) }} />
+                        <div className="flex-1 min-w-0 leading-tight">
+                          <span className="font-medium text-gray-800 text-xs block truncate">{a.subject}</span>
+                          <span className="text-gray-400 text-[11px] truncate block">{a.teacher?.full_name}</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {selectedAsgn && nextSlot && (
+              <label className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border-2 cursor-pointer transition-all text-xs ${
+                isDouble ? 'border-violet-400 bg-violet-50' : canBeDouble ? 'border-gray-200 hover:border-gray-300' : 'border-gray-100 opacity-50 cursor-not-allowed'
+              }`}>
+                <input type="checkbox" checked={isDouble} onChange={e => canBeDouble && setIsDouble(e.target.checked)}
+                  disabled={!canBeDouble} className="rounded" />
+                <Layers size={13} className={isDouble ? 'text-violet-500' : 'text-gray-400'} />
+                <span className="font-medium text-gray-700">Double</span>
+                <span className="text-gray-400">{slotLabel}+{nextSlot.label || `P${nextSlot.slot_number}`}</span>
+                {!canBeDouble && <span className="text-amber-600 ml-1">Next slot busy</span>}
+              </label>
+            )}
           </div>
 
-          {selectedClass && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Subject & Teacher</label>
-              {classAssignments.length === 0 ? (
-                <p className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
-                  No available assignments for this class at this time slot.
-                </p>
-              ) : (
-                <div className="space-y-1.5">
-                  {classAssignments.map(a => (
-                    <label
-                      key={a.id}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 cursor-pointer transition-all ${
-                        selectedAsgn === a.id ? 'border-current bg-opacity-10' : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                      style={selectedAsgn === a.id ? { borderColor: primaryColor, backgroundColor: `${primaryColor}10` } : {}}
-                    >
-                      <input type="radio" name="assignment" value={a.id} checked={selectedAsgn === a.id}
-                        onChange={() => setSelectedAsgn(a.id)} className="sr-only" />
-                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor(a.subject) }} />
-                      <div className="flex-1 min-w-0">
-                        <span className="font-medium text-gray-800 text-sm">{a.subject}</span>
-                        <span className="text-gray-400 text-xs ml-2">— {a.teacher?.full_name}</span>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
+          {/* RIGHT: teacher week availability mini-grid */}
           {selectedAsgnData && allSlots?.length > 0 && (
-            <div className="mt-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
-              <p className="text-[11px] font-semibold text-gray-500 mb-2 uppercase tracking-wide">
-                {selectedAsgnData.teacher?.full_name ?? 'Teacher'} — week availability
+            <div className="flex-shrink-0 bg-gray-50 rounded-lg border border-gray-100 p-2">
+              <p className="text-[10px] font-semibold text-gray-400 mb-1.5 truncate max-w-[130px]">
+                {selectedAsgnData.teacher?.full_name?.split(' ').slice(-1)[0] ?? 'Teacher'}
               </p>
-              <div className="overflow-x-auto">
-                <table className="text-[10px] border-collapse">
-                  <thead>
-                    <tr>
-                      <th className="w-5" />
-                      {['Mon','Tue','Wed','Thu','Fri'].map(d => (
-                        <th key={d} className="text-center text-gray-400 font-normal pb-1 px-1 text-[9px]">{d}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allSlots.map(s => (
-                      <tr key={s.slot_number}>
-                        <td className="text-gray-300 text-right pr-1.5 text-[9px]">P{s.slot_number}</td>
-                        {[0,1,2,3,4].map(dayIdx => {
-                          const isBusy = teacherBusySlots.has(`${dayIdx}|${s.slot_number}`);
-                          const isCurrentSlot = dayIdx === day && s.slot_number === slot?.slot_number;
-                          return (
-                            <td key={dayIdx} className="px-0.5 py-0.5">
-                              <div
-                                className={`w-5 h-3.5 rounded-sm border ${
-                                  isCurrentSlot
-                                    ? 'border-blue-400 bg-blue-100'
-                                    : isBusy
-                                    ? 'border-red-200 bg-red-100'
-                                    : 'border-green-200 bg-green-50'
-                                }`}
-                                title={isBusy ? 'Busy' : 'Free'}
-                              />
-                            </td>
-                          );
-                        })}
-                      </tr>
+              <table className="text-[10px] border-collapse">
+                <thead>
+                  <tr>
+                    <th className="w-4" />
+                    {['M','T','W','T','F'].map((d, i) => (
+                      <th key={i} className="text-center text-gray-400 font-normal pb-0.5 px-0.5 text-[9px] w-5">{d}</th>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex gap-3 mt-1.5">
-                <span className="flex items-center gap-1 text-[9px] text-gray-400">
-                  <span className="inline-block w-3 h-2 rounded-sm bg-green-50 border border-green-200" /> Free
-                </span>
-                <span className="flex items-center gap-1 text-[9px] text-gray-400">
-                  <span className="inline-block w-3 h-2 rounded-sm bg-red-100 border border-red-200" /> Busy
-                </span>
-                <span className="flex items-center gap-1 text-[9px] text-gray-400">
-                  <span className="inline-block w-3 h-2 rounded-sm bg-blue-100 border border-blue-400" /> This slot
-                </span>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allSlots.map(s => (
+                    <tr key={s.slot_number}>
+                      <td className="text-gray-300 text-right pr-1 text-[9px] leading-none py-0.5">{s.slot_number}</td>
+                      {[0,1,2,3,4].map(dayIdx => {
+                        const isBusy = teacherBusySlots.has(`${dayIdx}|${s.slot_number}`);
+                        const isCurrent = dayIdx === day && s.slot_number === slot?.slot_number;
+                        return (
+                          <td key={dayIdx} className="px-0.5 py-0.5">
+                            <div className={`w-4 h-3 rounded-sm border ${
+                              isCurrent ? 'border-blue-400 bg-blue-100' :
+                              isBusy    ? 'border-red-200 bg-red-100' :
+                                          'border-green-200 bg-green-50'
+                            }`} />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="flex gap-2 mt-1">
+                {[['bg-green-50 border-green-200','Free'],['bg-red-100 border-red-200','Busy'],['bg-blue-100 border-blue-400','Now']].map(([cls,lbl]) => (
+                  <span key={lbl} className="flex items-center gap-0.5 text-[9px] text-gray-400">
+                    <span className={`inline-block w-2.5 h-2 rounded-sm border ${cls}`} />{lbl}
+                  </span>
+                ))}
               </div>
             </div>
-          )}
-
-          {selectedAsgn && nextSlot && (
-            <label className={`flex items-center gap-3 px-3 py-3 rounded-xl border-2 cursor-pointer transition-all ${
-              isDouble ? 'border-violet-400 bg-violet-50' : canBeDouble ? 'border-gray-200 hover:border-gray-300' : 'border-gray-100 opacity-50 cursor-not-allowed'
-            }`}>
-              <input type="checkbox" checked={isDouble} onChange={e => canBeDouble && setIsDouble(e.target.checked)}
-                disabled={!canBeDouble} className="rounded" />
-              <Layers size={15} className={isDouble ? 'text-violet-500' : 'text-gray-400'} />
-              <div className="flex-1">
-                <span className="text-sm font-medium text-gray-700">Double class</span>
-                <span className="text-xs text-gray-400 ml-2">
-                  spans {slotLabel} + {nextSlot.label || `Period ${nextSlot.slot_number}`}
-                </span>
-                {!canBeDouble && <p className="text-xs text-amber-600 mt-0.5">Next period is not available.</p>}
-              </div>
-            </label>
           )}
         </div>
 
@@ -370,6 +360,7 @@ export default function TimetableGrid({
   onSetCell,
   onDeleteCell,
   onMoveCell,
+  onSwapCells,
   saving,
   viewMode,
 }) {
@@ -377,6 +368,7 @@ export default function TimetableGrid({
   const [filterType, setFilterType] = useState('class');
   const [filterValue, setFilterValue] = useState('');
   const [modalState, setModalState] = useState(null);
+  const [swapModal, setSwapModal] = useState(null); // { dragged, target, canSwap, reason }
   const [activeEntry, setActiveEntry] = useState(null); // entry being dragged
   const [dragValidTarget, setDragValidTarget] = useState(null); // 'valid' | 'invalid' | null
 
@@ -451,6 +443,30 @@ export default function TimetableGrid({
     return true;
   };
 
+  // Check if two entries can be swapped (each can go to the other's slot, excluding both from conflicts)
+  const checkCanSwap = (dragged, target) => {
+    const others = entries.filter(e => e.id !== dragged.id && e.id !== target.id);
+    const occupies = (e, day, slot) =>
+      e.day_of_week === day && (e.slot_number === slot || (e.is_double && e.slot_number === slot - 1));
+
+    const conflictMsg = (moving, toDay, toSlot) => {
+      const slots = moving.is_double ? [toSlot, toSlot + 1] : [toSlot];
+      for (const s of slots) {
+        if (others.some(o => o.teacher_id === moving.teacher_id && occupies(o, toDay, s)))
+          return `${moving.teacher?.full_name || 'Teacher'} is busy at that slot.`;
+        if (others.some(o => o.class_name === moving.class_name && occupies(o, toDay, s)))
+          return `${moving.class_name} already has a class at that slot.`;
+      }
+      return null;
+    };
+
+    const r1 = conflictMsg(dragged, target.day_of_week, target.slot_number);
+    if (r1) return { canSwap: false, reason: r1 };
+    const r2 = conflictMsg(target, dragged.day_of_week, dragged.slot_number);
+    if (r2) return { canSwap: false, reason: r2 };
+    return { canSwap: true, reason: null };
+  };
+
   const handleDragStart = ({ active }) => {
     const entry = entries.find(e => e.id === active.id);
     setActiveEntry(entry || null);
@@ -466,7 +482,22 @@ export default function TimetableGrid({
     setActiveEntry(null);
     setDragValidTarget(null);
     if (!over || !isDraft) return;
+
     const [targetDay, targetSlot] = over.id.toString().split('|').map(Number);
+    const dragged = entries.find(e => e.id === active.id);
+
+    // Check if there's exactly one other entry in the target cell
+    const targetCellEntries = (allLookup[targetDay]?.[targetSlot] || [])
+      .filter(e => e.id !== active.id);
+
+    if (targetCellEntries.length === 1 && !isValidDropTarget(dragged, targetDay, targetSlot)) {
+      // Target is occupied with exactly one entry — offer a swap
+      const target = targetCellEntries[0];
+      const { canSwap, reason } = checkCanSwap(dragged, target);
+      setSwapModal({ dragged, target, canSwap, reason });
+      return;
+    }
+
     await onMoveCell(active.id, targetDay, targetSlot);
   };
 
@@ -632,7 +663,87 @@ export default function TimetableGrid({
         ) : null}
       </DragOverlay>
 
-      {/* Modal */}
+      {/* Swap Modal */}
+      {swapModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 bg-violet-50 border-b border-violet-100">
+              <h3 className="font-bold text-gray-800 flex items-center gap-2 text-sm">
+                <ArrowLeftRight size={15} className="text-violet-500" />
+                Swap entries?
+              </h3>
+              <button onClick={() => setSwapModal(null)} className="p-1.5 rounded-lg hover:bg-violet-100 text-gray-400 transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              {/* Visual swap: dragged ↔ target */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 p-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor(swapModal.dragged.subject) }} />
+                    <span className="font-semibold text-gray-800 truncate">{swapModal.dragged.subject}</span>
+                  </div>
+                  <div className="text-gray-500 truncate">{swapModal.dragged.class_name}</div>
+                  <div className="text-gray-400 truncate">{swapModal.dragged.teacher?.full_name}</div>
+                  <div className="text-gray-300 mt-0.5 text-[10px]">
+                    {['Mon','Tue','Wed','Thu','Fri'][swapModal.dragged.day_of_week]} · P{swapModal.dragged.slot_number}
+                  </div>
+                </div>
+
+                <ArrowLeftRight size={18} className="text-violet-400 flex-shrink-0" />
+
+                <div className="flex-1 p-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor(swapModal.target.subject) }} />
+                    <span className="font-semibold text-gray-800 truncate">{swapModal.target.subject}</span>
+                  </div>
+                  <div className="text-gray-500 truncate">{swapModal.target.class_name}</div>
+                  <div className="text-gray-400 truncate">{swapModal.target.teacher?.full_name}</div>
+                  <div className="text-gray-300 mt-0.5 text-[10px]">
+                    {['Mon','Tue','Wed','Thu','Fri'][swapModal.target.day_of_week]} · P{swapModal.target.slot_number}
+                  </div>
+                </div>
+              </div>
+
+              {!swapModal.canSwap && (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
+                  <AlertTriangle size={13} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-700">{swapModal.reason || 'Swap not possible — conflict exists.'}</p>
+                </div>
+              )}
+              {swapModal.canSwap && (
+                <p className="text-xs text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded-lg">
+                  ✓ Both teachers are free at their new slots — swap is valid.
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-2 px-4 pb-4">
+              <button onClick={() => setSwapModal(null)}
+                className="flex-1 px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">
+                Cancel
+              </button>
+              {swapModal.canSwap && (
+                <button
+                  onClick={async () => {
+                    const { dragged, target } = swapModal;
+                    setSwapModal(null);
+                    await onSwapCells(dragged.id, target.id);
+                  }}
+                  disabled={saving}
+                  className="flex-1 px-4 py-2 text-sm font-medium rounded-xl bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 transition-colors"
+                >
+                  {saving ? 'Swapping…' : 'Swap'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cell Edit Modal */}
       {modalState && (
         <CellModal
           day={modalState.day}
