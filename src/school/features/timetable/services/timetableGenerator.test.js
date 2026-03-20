@@ -53,7 +53,10 @@ describe('generateTimetable', () => {
       SLOTS,
       []
     );
-    expect(placed.length).toBe(5);
+    // 5 Maths periods → merged into doubles where consecutive:
+    // 2 doubles (each covers 2 slots) + 1 single = 3 placed entries, 5 total periods
+    const totalPeriods = placed.reduce((sum, p) => sum + (p.is_double ? 2 : 1), 0);
+    expect(totalPeriods).toBe(5);
     expect(unplaced).toHaveLength(0);
   });
 
