@@ -237,6 +237,52 @@ export function useTimetable() {
     }
   }, [service, assignments, timeSlots, availabilityRecords]);
 
+  const fillGaps = useCallback(async () => {
+    if (!assignments.length || !timeSlots.length) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      // Count how many periods are already placed per assignment
+      const placedCount = {};
+      draftEntries.forEach(e => {
+        const k = `${e.teacher_id}|${e.subject}|${e.class_name}`;
+        placedCount[k] = (placedCount[k] || 0) + (e.is_double ? 2 : 1);
+      });
+
+      // Build reduced assignments for only the remaining unplaced periods
+      const remaining = assignments
+        .map(a => {
+          const k = `${a.teacher_id}|${a.subject}|${a.class_name}`;
+          const left = (a.periods_per_week || 1) - (placedCount[k] || 0);
+          return left > 0 ? { ...a, periods_per_week: left } : null;
+        })
+        .filter(Boolean);
+
+      if (!remaining.length) {
+        setError('All assignments are already placed.');
+        return;
+      }
+
+      // Pass existing draft entries as locked — generator works around them
+      const { placed, unplaced } = generateTimetable(
+        remaining, timeSlots, availabilityRecords, draftEntries
+      );
+
+      const saved = await service.saveDraftEntriesIncremental(placed);
+      setDraftEntries(prev => [...prev, ...saved]);
+
+      const enriched = unplaced.map(t => ({
+        ...t,
+        teacherName: teachers?.find(tc => tc.id === t.teacher_id)?.full_name ?? t.teacher_id,
+      }));
+      setUnplacedTasks(enriched);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGenerating(false);
+    }
+  }, [service, assignments, timeSlots, availabilityRecords, draftEntries, teachers]);
+
   const moveDraftEntry = useCallback(async (entryId, newDay, newSlot) => {
     const entry = draftEntries.find(e => e.id === entryId);
     if (!entry) return false;
@@ -395,6 +441,7 @@ export function useTimetable() {
     toggleAvailability,
     isTeacherAvailable,
     autoGenerate,
+    fillGaps,
     manualSetCell,
     moveDraftEntry,
     deleteDraftEntry,

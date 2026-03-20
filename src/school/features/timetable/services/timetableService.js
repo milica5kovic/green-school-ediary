@@ -203,6 +203,28 @@ export class TimetableService {
     return data;
   }
 
+  async saveDraftEntriesIncremental(entries) {
+    this._require();
+    if (!entries.length) return [];
+    const toInsert = entries.map(e => ({
+      school_id: this.schoolId,
+      teacher_id: e.teacher_id,
+      subject: e.subject,
+      class_name: e.class_name,
+      day_of_week: e.day_of_week,
+      slot_number: e.slot_number,
+      is_double: e.is_double ?? false,
+      parallel_group: e.parallel_group || null,
+      status: 'draft',
+    }));
+    const { data, error } = await this.supabase
+      .from('timetable_entries')
+      .insert(toInsert)
+      .select(`*, teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email)`);
+    if (error) throw error;
+    return data ?? [];
+  }
+
   // Upsert a single draft cell (replaces any existing entry for that class+day+slot)
   async upsertDraftEntry({ teacher_id, subject, class_name, day_of_week, slot_number, is_double = false }) {
     this._require();

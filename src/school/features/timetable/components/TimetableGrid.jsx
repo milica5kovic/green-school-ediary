@@ -34,7 +34,7 @@ function subjectColor(subject = '') {
 // CELL MODAL — Add / edit a timetable cell
 // ============================================================
 function CellModal({
-  day, slot, nextSlot, existingEntry, assignments, allEntries,
+  day, slot, nextSlot, existingEntry, assignments, allEntries, allSlots,
   onSave, onDelete, onClose, saving,
 }) {
   const { primaryColor } = useBranding();
@@ -98,6 +98,20 @@ function CellModal({
   }, [existingEntry, assignments]);
 
   const selectedAsgnData = assignments.find(a => a.id === selectedAsgn);
+
+  const teacherBusySlots = useMemo(() => {
+    if (!selectedAsgnData?.teacher_id) return new Set();
+    return new Set(
+      allEntries
+        .filter(e => e.teacher_id === selectedAsgnData.teacher_id && e.id !== existingEntry?.id)
+        .flatMap(e => {
+          const keys = [`${e.day_of_week}|${e.slot_number}`];
+          if (e.is_double) keys.push(`${e.day_of_week}|${e.slot_number + 1}`);
+          return keys;
+        })
+    );
+  }, [selectedAsgnData, allEntries, existingEntry]);
+
   const canBeDouble = nextSlot &&
     selectedClass &&
     !busyClassesNextSlot.has(selectedClass) &&
@@ -177,6 +191,62 @@ function CellModal({
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {selectedAsgnData && allSlots?.length > 0 && (
+            <div className="mt-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+              <p className="text-[11px] font-semibold text-gray-500 mb-2 uppercase tracking-wide">
+                {selectedAsgnData.teacher?.full_name ?? 'Teacher'} — week availability
+              </p>
+              <div className="overflow-x-auto">
+                <table className="text-[10px] border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="w-5" />
+                      {['Mon','Tue','Wed','Thu','Fri'].map(d => (
+                        <th key={d} className="text-center text-gray-400 font-normal pb-1 px-1 text-[9px]">{d}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allSlots.map(s => (
+                      <tr key={s.slot_number}>
+                        <td className="text-gray-300 text-right pr-1.5 text-[9px]">P{s.slot_number}</td>
+                        {[0,1,2,3,4].map(dayIdx => {
+                          const isBusy = teacherBusySlots.has(`${dayIdx}|${s.slot_number}`);
+                          const isCurrentSlot = dayIdx === day && s.slot_number === slot?.slot_number;
+                          return (
+                            <td key={dayIdx} className="px-0.5 py-0.5">
+                              <div
+                                className={`w-5 h-3.5 rounded-sm border ${
+                                  isCurrentSlot
+                                    ? 'border-blue-400 bg-blue-100'
+                                    : isBusy
+                                    ? 'border-red-200 bg-red-100'
+                                    : 'border-green-200 bg-green-50'
+                                }`}
+                                title={isBusy ? 'Busy' : 'Free'}
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex gap-3 mt-1.5">
+                <span className="flex items-center gap-1 text-[9px] text-gray-400">
+                  <span className="inline-block w-3 h-2 rounded-sm bg-green-50 border border-green-200" /> Free
+                </span>
+                <span className="flex items-center gap-1 text-[9px] text-gray-400">
+                  <span className="inline-block w-3 h-2 rounded-sm bg-red-100 border border-red-200" /> Busy
+                </span>
+                <span className="flex items-center gap-1 text-[9px] text-gray-400">
+                  <span className="inline-block w-3 h-2 rounded-sm bg-blue-100 border border-blue-400" /> This slot
+                </span>
+              </div>
             </div>
           )}
 
@@ -571,6 +641,7 @@ export default function TimetableGrid({
           existingEntry={modalState.existingEntry}
           assignments={assignments}
           allEntries={entries}
+          allSlots={sortedSlots}
           onSave={async (data) => { await onSetCell(data); setModalState(null); }}
           onDelete={async (id) => { await onDeleteCell(id); setModalState(null); }}
           onClose={() => setModalState(null)}

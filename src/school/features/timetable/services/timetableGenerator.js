@@ -37,11 +37,12 @@ const AFTER_SCHOOL_PENALTY = 200; // much higher than any realistic day-load sco
  * @param {Array} assignments    - teacher_assignments rows (with .teacher nested)
  * @param {Array} timeSlots      - time_slots rows (sorted by slot_number)
  * @param {Array} availabilityRecords - teacher_availability rows (is_available=false = blocked)
+ * @param {Array} lockedEntries  - existing timetable entries to treat as fixed (Fill Gaps mode)
  * @returns {{ placed: Array, unplaced: Array }}
  *   placed  — entries ready to be saved as draft (no id yet)
  *   unplaced — tasks that could not be scheduled (conflicts/not enough slots)
  */
-export function generateTimetable(assignments, timeSlots, availabilityRecords) {
+export function generateTimetable(assignments, timeSlots, availabilityRecords, lockedEntries = []) {
   const slotNumbers = timeSlots.map(s => s.slot_number).sort((a, b) => a - b);
 
   // Regular slots (P1–P6) vs after-school (slot 7+)
@@ -52,6 +53,14 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
   const cgAllowedSlots = regularSlotNums.length >= 2
     ? [regularSlotNums[0], regularSlotNums[regularSlotNums.length - 1]]
     : regularSlotNums;
+
+  // Valid double pairs: pairs of adjacent regular slots at even indices
+  // → (regularSlotNums[0], regularSlotNums[1]), (regularSlotNums[2], regularSlotNums[3]), (regularSlotNums[4], regularSlotNums[5])
+  // This gives P1+P2, P3+P4, P5+P6 — never crossing snack or lunch breaks
+  const validDoublePairs = [];
+  for (let i = 0; i + 1 < regularSlotNums.length; i += 2) {
+    validDoublePairs.push([regularSlotNums[i], regularSlotNums[i + 1]]);
+  }
 
   // ---- Build blocked-slot lookup ----
   const blockedKey = (teacher_id, day, slot) => `${teacher_id}|${day}|${slot}`;
@@ -77,59 +86,25 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
     });
   });
 
-  // ---- Expand assignments into individual "tasks" ----
-  const tasks = [];
-  assignments.forEach(a => {
-    for (let i = 0; i < (a.periods_per_week || 1); i++) {
-      tasks.push({
-        teacher_id: a.teacher_id,
-        subject: a.subject,
-        class_name: a.class_name,
-        assignmentId: a.id,
-        periods_per_week: a.periods_per_week || 1,
-        parallel_group: a.parallel_group || null,
-        // Tag which occurrence within the group this is (for multi-period parallel groups)
-        _parallelIndex: i,
-      });
-    }
-  });
-
-  // ---- Build parallel group membership: group → all tasks in that group ----
-  // Parallel groups: assignments sharing the same parallel_group must be placed
-  // in the same day+slot (e.g., French and German run simultaneously).
-  // parallelGroupSlots tracks which (day, slot) have been committed per group.
-  // Structure: { groupName: [ {day, slot}, ... ] }  — one entry per period occurrence
+  // ---- Build parallel group membership ----
   const parallelGroupSlots = {};
-
-  // ---- Sort tasks: most constrained teachers first, parallel groups first ----
-  const teacherFreeSlots = {};
-  assignments.forEach(a => {
-    if (teacherFreeSlots[a.teacher_id] !== undefined) return;
-    let count = 0;
-    DAYS.forEach(day => slotNumbers.forEach(slot => {
-      if (isAvailable(a.teacher_id, day, slot)) count++;
-    }));
-    teacherFreeSlots[a.teacher_id] = count;
-  });
-
-  tasks.sort((a, b) => {
-    // Parallel-group tasks come first (they constrain others)
-    const aHasGroup = a.parallel_group ? 0 : 1;
-    const bHasGroup = b.parallel_group ? 0 : 1;
-    if (aHasGroup !== bHasGroup) return aHasGroup - bHasGroup;
-    const aFree = teacherFreeSlots[a.teacher_id] ?? 99;
-    const bFree = teacherFreeSlots[b.teacher_id] ?? 99;
-    if (aFree !== bFree) return aFree - bFree;
-    return (b.periods_per_week || 0) - (a.periods_per_week || 0);
-  });
 
   // ---- Per-class tracking (for even distribution) ----
   const classDayLoad = {};
   // Tracks how many times a subject has been placed for a class on a given day
   const classSubjectDay = {};
   // Tracks how many periods each TEACHER already has on a given day (for balancing)
-  // Keeps Y1–Y4 class teachers from having one very full day and one empty day.
   const teacherDayLoad = {};
+
+  // Tracks which days each subject has been placed for a class (for weekly spread)
+  const subjectDayMap = new Map(); // key: `${class_name}|${subject}` → Set of days already placed
+
+  // Tracks which parallel_group a teacher is assigned to in each slot
+  const teacherParallelGroup = {};
+  DAYS.forEach(d => {
+    teacherParallelGroup[d] = {};
+    slotNumbers.forEach(s => { teacherParallelGroup[d][s] = {}; });
+  });
 
   const getLoad = (class_name, day) =>
     (classDayLoad[class_name] || {})[day] || 0;
@@ -141,30 +116,68 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
     `${class_name}|${day}|${subject}`;
 
   // Max periods allowed per subject per class per day
-  // Single-period subjects (e.g. Maths) must not appear twice in one day
+  // Single-period subjects must not appear twice in one day
   const maxPerDay = (subject) => SINGLE_PERIOD_SUBJECTS.has(subject) ? 1 : 2;
 
-  // ---- Place tasks greedily ----
-  const placed = [];
-  const unplaced = [];
-  // Full task objects that failed Phase 2 — retried in Phase 3 without sibling-sync
-  const unplacedTaskRefs = [];
+  // ---- Pre-populate grid from lockedEntries ----
+  lockedEntries.forEach(e => {
+    if (!grid[e.day_of_week] || !grid[e.day_of_week][e.slot_number]) return;
+    grid[e.day_of_week][e.slot_number][e.class_name] = e;
+    if (e.is_double && grid[e.day_of_week][e.slot_number + 1]) {
+      grid[e.day_of_week][e.slot_number + 1][e.class_name] = e;
+    }
+    teacherBusy[e.day_of_week][e.slot_number].add(e.teacher_id);
+    if (e.is_double && teacherBusy[e.day_of_week][e.slot_number + 1]) {
+      teacherBusy[e.day_of_week][e.slot_number + 1].add(e.teacher_id);
+    }
 
-  // Tracks which parallel_group a teacher is assigned to in each slot
-  // Allows same teacher to teach combined classes (e.g. Y5a+Y5b English together)
-  // Structure: teacherParallelGroup[day][slot][teacher_id] = parallel_group
-  const teacherParallelGroup = {};
-  DAYS.forEach(d => {
-    teacherParallelGroup[d] = {};
-    slotNumbers.forEach(s => { teacherParallelGroup[d][s] = {}; });
+    // Update classSubjectDay
+    const sdk = subjectDayKey(e.class_name, e.day_of_week, e.subject);
+    classSubjectDay[sdk] = (classSubjectDay[sdk] || 0) + (e.is_double ? 2 : 1);
+
+    // Update classDayLoad
+    if (!classDayLoad[e.class_name]) classDayLoad[e.class_name] = {};
+    classDayLoad[e.class_name][e.day_of_week] = (classDayLoad[e.class_name][e.day_of_week] || 0) + (e.is_double ? 2 : 1);
+
+    // Update teacherDayLoad
+    if (!teacherDayLoad[e.teacher_id]) teacherDayLoad[e.teacher_id] = {};
+    teacherDayLoad[e.teacher_id][e.day_of_week] = (teacherDayLoad[e.teacher_id][e.day_of_week] || 0) + (e.is_double ? 2 : 1);
+
+    // Update subjectDayMap
+    const spreadKey = `${e.class_name}|${e.subject}`;
+    if (!subjectDayMap.has(spreadKey)) subjectDayMap.set(spreadKey, new Set());
+    subjectDayMap.get(spreadKey).add(e.day_of_week);
+
+    // Update parallelGroupSlots if applicable
+    if (e.parallel_group) {
+      if (!parallelGroupSlots[e.parallel_group]) parallelGroupSlots[e.parallel_group] = [];
+      if (e.is_double) {
+        parallelGroupSlots[e.parallel_group].push({ day: e.day_of_week, slotA: e.slot_number, slotB: e.slot_number + 1 });
+      } else {
+        parallelGroupSlots[e.parallel_group].push({ day: e.day_of_week, slot: e.slot_number });
+      }
+    }
   });
 
-  // Helper: check if a single task can go at (day, slot)
+  // ---- Weekly spread penalty helper ----
+  const weeklySpreadPenalty = (class_name, subject, day) => {
+    const key = `${class_name}|${subject}`;
+    const usedDays = subjectDayMap.get(key) || new Set();
+    let penalty = 0;
+    for (const usedDay of usedDays) {
+      const dist = Math.abs(day - usedDay);
+      if (dist === 1) penalty += 4; // adjacent day — heavy penalty
+      if (dist === 2) penalty += 1; // 2 days apart — light penalty
+      // 3+ days apart = no penalty (ideal spread)
+    }
+    return penalty;
+  };
+
+  // ---- Helper: check if a single task can go at (day, slot) ----
   const canPlace = (task, day, slot) => {
     if (!isAvailable(task.teacher_id, day, slot)) return false;
     if (teacherBusy[day][slot].has(task.teacher_id)) {
       // Allow same teacher in same slot for parallel group combined classes
-      // (e.g. Y5a and Y5b English taught together by the same teacher)
       const existingGroup = teacherParallelGroup[day][slot][task.teacher_id];
       if (!task.parallel_group || existingGroup !== task.parallel_group) return false;
     }
@@ -180,7 +193,14 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
     return true;
   };
 
-  // Helper: commit a task to (day, slot)
+  // ---- canPlaceDouble helper ----
+  const canPlaceDouble = (task, day, slotA, slotB) => {
+    return canPlace(task, day, slotA) && canPlace(task, day, slotB) &&
+      (classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0) === 0;
+    // The last condition ensures at most one double per subject per day per class
+  };
+
+  // ---- Helper: commit a single task to (day, slot) ----
   const commitTask = (task, day, slot) => {
     task._placed = true;  // mark this specific task instance as placed
     grid[day][slot][task.class_name] = task;
@@ -194,6 +214,10 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
     teacherDayLoad[task.teacher_id][day] = getTeacherLoad(task.teacher_id, day) + 1;
     const sdk = subjectDayKey(task.class_name, day, task.subject);
     classSubjectDay[sdk] = (classSubjectDay[sdk] || 0) + 1;
+    // Update subjectDayMap
+    const spreadKey = `${task.class_name}|${task.subject}`;
+    if (!subjectDayMap.has(spreadKey)) subjectDayMap.set(spreadKey, new Set());
+    subjectDayMap.get(spreadKey).add(day);
     placed.push({
       teacher_id: task.teacher_id,
       subject: task.subject,
@@ -205,35 +229,217 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
     });
   };
 
-  for (const task of tasks) {
+  // ---- commitDouble helper ----
+  const commitDouble = (task, day, slotA, slotB) => {
+    task._placed = true;
+    grid[day][slotA][task.class_name] = { ...task, _doubleHalf: 'first' };
+    grid[day][slotB][task.class_name] = { ...task, _doubleHalf: 'second' };
+    teacherBusy[day][slotA].add(task.teacher_id);
+    teacherBusy[day][slotB].add(task.teacher_id);
+    if (task.parallel_group) {
+      teacherParallelGroup[day][slotA][task.teacher_id] = task.parallel_group;
+      teacherParallelGroup[day][slotB][task.teacher_id] = task.parallel_group;
+    }
+    if (!classDayLoad[task.class_name]) classDayLoad[task.class_name] = {};
+    classDayLoad[task.class_name][day] = (classDayLoad[task.class_name][day] || 0) + 2;
+    if (!teacherDayLoad[task.teacher_id]) teacherDayLoad[task.teacher_id] = {};
+    teacherDayLoad[task.teacher_id][day] = (teacherDayLoad[task.teacher_id][day] || 0) + 2;
+    const sdk = subjectDayKey(task.class_name, day, task.subject);
+    classSubjectDay[sdk] = (classSubjectDay[sdk] || 0) + 2;
+    const spreadKey = `${task.class_name}|${task.subject}`;
+    if (!subjectDayMap.has(spreadKey)) subjectDayMap.set(spreadKey, new Set());
+    subjectDayMap.get(spreadKey).add(day);
+    placed.push({
+      teacher_id: task.teacher_id,
+      subject: task.subject,
+      class_name: task.class_name,
+      day_of_week: day,
+      slot_number: slotA,
+      is_double: true,
+      parallel_group: task.parallel_group || null,
+    });
+  };
+
+  // ---- Placed / unplaced accumulators ----
+  const placed = [];
+  const unplaced = [];
+  // Full task objects that failed Phase 2 — retried in Phase 3 without sibling-sync
+  const unplacedTaskRefs = [];
+
+  // ---- Sort helper ----
+  const teacherFreeSlots = {};
+  assignments.forEach(a => {
+    if (teacherFreeSlots[a.teacher_id] !== undefined) return;
+    let count = 0;
+    DAYS.forEach(day => slotNumbers.forEach(slot => {
+      if (isAvailable(a.teacher_id, day, slot)) count++;
+    }));
+    teacherFreeSlots[a.teacher_id] = count;
+  });
+
+  const taskSortFn = (a, b) => {
+    const aHasGroup = a.parallel_group ? 0 : 1;
+    const bHasGroup = b.parallel_group ? 0 : 1;
+    if (aHasGroup !== bHasGroup) return aHasGroup - bHasGroup;
+    const aFree = teacherFreeSlots[a.teacher_id] ?? 99;
+    const bFree = teacherFreeSlots[b.teacher_id] ?? 99;
+    if (aFree !== bFree) return aFree - bFree;
+    return (b.periods_per_week || 0) - (a.periods_per_week || 0);
+  };
+
+  // ---- Separate tasks into double tasks and single tasks ----
+  const doubleTasks = [];
+  const singleTasks = [];
+
+  assignments.forEach(a => {
+    const isDoubleSubject = DOUBLE_PREFERRED_SUBJECTS.has(a.subject);
+    const n = a.periods_per_week || 1;
+
+    if (isDoubleSubject && validDoublePairs.length > 0 && !CG_SUBJECTS.has(a.subject)) {
+      const numDoubles = Math.floor(n / 2);
+      const numSingles = n % 2;
+      for (let i = 0; i < numDoubles; i++) {
+        doubleTasks.push({
+          teacher_id: a.teacher_id,
+          subject: a.subject,
+          class_name: a.class_name,
+          assignmentId: a.id,
+          periods_per_week: a.periods_per_week,
+          parallel_group: a.parallel_group || null,
+          _isDouble: true,
+          _parallelIndex: i,
+        });
+      }
+      for (let i = 0; i < numSingles; i++) {
+        singleTasks.push({
+          teacher_id: a.teacher_id,
+          subject: a.subject,
+          class_name: a.class_name,
+          assignmentId: a.id,
+          periods_per_week: a.periods_per_week,
+          parallel_group: a.parallel_group || null,
+          _isDouble: false,
+          _parallelIndex: numDoubles + i,
+        });
+      }
+    } else {
+      for (let i = 0; i < n; i++) {
+        singleTasks.push({
+          teacher_id: a.teacher_id,
+          subject: a.subject,
+          class_name: a.class_name,
+          assignmentId: a.id,
+          periods_per_week: a.periods_per_week,
+          parallel_group: a.parallel_group || null,
+          _isDouble: false,
+          _parallelIndex: i,
+        });
+      }
+    }
+  });
+
+  doubleTasks.sort(taskSortFn);
+  singleTasks.sort(taskSortFn);
+
+  // ---- Process double tasks FIRST ----
+  for (const task of doubleTasks) {
+    if (task._placed) continue;
+
+    if (task.parallel_group) {
+      const group = task.parallel_group;
+      const occurrence = task._parallelIndex;
+      if (task._placed) continue;
+      const committed = parallelGroupSlots[group]?.[occurrence];
+      if (committed) {
+        // committed stores {day, slotA, slotB} for doubles
+        if (committed.slotB !== undefined) {
+          if (canPlaceDouble(task, committed.day, committed.slotA, committed.slotB)) {
+            commitDouble(task, committed.day, committed.slotA, committed.slotB);
+          } else {
+            unplacedTaskRefs.push(task);
+          }
+        } else {
+          // committed as single - place as single
+          if (canPlace(task, committed.day, committed.slot)) {
+            commitTask(task, committed.day, committed.slot);
+          } else {
+            unplacedTaskRefs.push(task);
+          }
+        }
+        continue;
+      }
+
+      const siblings = doubleTasks.filter(
+        t => t !== task && t.parallel_group === group && t._parallelIndex === occurrence && !t._placed
+      );
+
+      let bestDay = null, bestSlotA = null, bestSlotB = null, bestScore = Infinity;
+      for (const day of DAYS) {
+        for (const [slotA, slotB] of validDoublePairs) {
+          if (!canPlaceDouble(task, day, slotA, slotB)) continue;
+          if (!siblings.every(s => canPlaceDouble(s, day, slotA, slotB))) continue;
+          const score = getLoad(task.class_name, day) + weeklySpreadPenalty(task.class_name, task.subject, day) + 0.4 * getTeacherLoad(task.teacher_id, day);
+          if (score < bestScore) { bestScore = score; bestDay = day; bestSlotA = slotA; bestSlotB = slotB; }
+        }
+      }
+      if (bestDay !== null) {
+        if (!parallelGroupSlots[group]) parallelGroupSlots[group] = [];
+        parallelGroupSlots[group][occurrence] = { day: bestDay, slotA: bestSlotA, slotB: bestSlotB };
+        commitDouble(task, bestDay, bestSlotA, bestSlotB);
+        siblings.forEach(s => { if (!s._placed) commitDouble(s, bestDay, bestSlotA, bestSlotB); });
+      } else {
+        unplacedTaskRefs.push(task);
+      }
+      continue;
+    }
+
+    // Non-parallel double task
+    let bestDay = null, bestSlotA = null, bestSlotB = null, bestScore = Infinity;
+    for (const day of DAYS) {
+      for (const [slotA, slotB] of validDoublePairs) {
+        if (!canPlaceDouble(task, day, slotA, slotB)) continue;
+        const score = getLoad(task.class_name, day) + weeklySpreadPenalty(task.class_name, task.subject, day) + 0.4 * getTeacherLoad(task.teacher_id, day);
+        if (score < bestScore) { bestScore = score; bestDay = day; bestSlotA = slotA; bestSlotB = slotB; }
+      }
+    }
+    if (bestDay !== null) {
+      commitDouble(task, bestDay, bestSlotA, bestSlotB);
+    } else {
+      unplacedTaskRefs.push(task);
+    }
+  }
+
+  // ---- Process single tasks ----
+  for (const task of singleTasks) {
     // ── PARALLEL GROUP LOGIC ─────────────────────────────────
     if (task.parallel_group) {
       const group = task.parallel_group;
       const occurrence = task._parallelIndex;
 
-      // Check if this occurrence of the group already has a committed slot.
-      // IMPORTANT: siblings are committed immediately when the lead task commits
-      // (see below), so task._placed will already be true if it was a sibling.
-      // Skip already-placed tasks to avoid double-committing.
       if (task._placed) continue;
 
       const committed = parallelGroupSlots[group]?.[occurrence];
       if (committed) {
-        // Slot already decided — this task was NOT committed as a sibling
-        // (e.g. it had a higher _parallelIndex at the time the slot was found,
-        // or is a German/French task whose parallel partner teaches Serbian here).
-        if (canPlace(task, committed.day, committed.slot)) {
-          commitTask(task, committed.day, committed.slot);
+        // Slot already decided
+        if (committed.slotB !== undefined) {
+          // was committed as double — try to place as double
+          if (canPlaceDouble(task, committed.day, committed.slotA, committed.slotB)) {
+            commitDouble(task, committed.day, committed.slotA, committed.slotB);
+          } else {
+            unplacedTaskRefs.push(task);
+          }
         } else {
-          // Teacher conflict at the committed slot → Phase 3 relaxed retry
-          unplacedTaskRefs.push(task);
+          if (canPlace(task, committed.day, committed.slot)) {
+            commitTask(task, committed.day, committed.slot);
+          } else {
+            unplacedTaskRefs.push(task);
+          }
         }
         continue;
       }
 
       // No slot committed yet for this occurrence.
-      // Collect ALL siblings (same group, same _parallelIndex, not yet placed).
-      const siblings = tasks.filter(
+      const siblings = singleTasks.filter(
         t => t !== task &&
              t.parallel_group === group &&
              t._parallelIndex === occurrence &&
@@ -247,7 +453,6 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
       for (const day of DAYS) {
         for (const slot of slotNumbers) {
           if (!canPlace(task, day, slot)) continue;
-          // Every sibling must also fit — this verifies all teachers are free
           if (!siblings.every(s => canPlace(s, day, slot))) continue;
 
           // Consecutive / double-period bonus (same logic as normal placement)
@@ -275,21 +480,9 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
       if (bestDay !== null) {
         if (!parallelGroupSlots[group]) parallelGroupSlots[group] = [];
         parallelGroupSlots[group][occurrence] = { day: bestDay, slot: bestSlot };
-        // ── CRITICAL FIX ─────────────────────────────────────────────────────
-        // Commit the lead task AND all siblings immediately in one atomic step.
-        //
-        // Without this, sibling slots are only "verified free" but not reserved.
-        // Another parallel group (e.g. Y3-English) can then claim the same slot
-        // for a shared specialist teacher (e.g. Williams ESL), causing her to be
-        // double-booked when her own tasks are processed later in the sort order.
-        //
-        // By committing everyone at once, teacherBusy is updated for all members
-        // immediately, so subsequent parallel groups see the correct free/busy state.
-        // ─────────────────────────────────────────────────────────────────────
         commitTask(task, bestDay, bestSlot);
         siblings.forEach(s => { if (!s._placed) commitTask(s, bestDay, bestSlot); });
       } else {
-        // Could not satisfy constraint — queue for Phase 3 relaxed retry
         unplacedTaskRefs.push(task);
       }
       continue;
@@ -310,11 +503,6 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
         const existingSameSubjectToday = classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0;
         const loadScore = getLoad(task.class_name, day);
 
-        // Teacher day-load balance (weight 0.4):
-        // Spreads each teacher's periods evenly across the week so Y1–Y4 class
-        // teachers don't end up with one packed day and one nearly empty day.
-        // Weight is low enough that the consecutive-period bonus still dominates
-        // (e.g. -50 for a direct double >> 0.4 × 6 = 2.4 for a busy day).
         const teacherLoadScore = 0.4 * getTeacherLoad(task.teacher_id, day);
 
         // Consecutive / double-period bonus
@@ -332,7 +520,8 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
         }
 
         const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
-        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty;
+        const spreadPenalty = weeklySpreadPenalty(task.class_name, task.subject, day);
+        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty + spreadPenalty;
         if (score < bestScore) {
           bestScore = score;
           bestDay = day;
@@ -350,26 +539,6 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
 
   // ============================================================
   // PHASE 3: Relaxed fallback — ONLY for French / German
-  //
-  // German and French are language-choice subjects (students pick one).
-  // The ideal is that all French students and all German students have
-  // their lesson at the same time (parallel_group Y{n}-FG).  However, when
-  // Marina Ristic also teaches Serbian for the same year group she cannot
-  // be in two places at once, so the F/G sync cannot always be satisfied.
-  //
-  // In that case it is acceptable to schedule German (or French) at a
-  // different slot — the students still get their lesson, just not
-  // perfectly synchronised with the other language group that week.
-  //
-  // ESL, Serbian, and all other parallel-group subjects are NOT relaxed
-  // here because:
-  //   • ESL must happen at exactly the same time as the English lesson
-  //     (the class physically splits: some students go to ESL, the rest
-  //     stay for English — they MUST be in the same period).
-  //   • Serbian ability groups (Beg/Mid/Native) must run simultaneously
-  //     so all students return to the main class together.
-  // Those tasks that still cannot be placed are left as unplaced so the
-  // admin can resolve the underlying data conflict manually.
   // ============================================================
   const PHASE3_SUBJECTS = new Set(['French', 'German']);
 
@@ -412,17 +581,14 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
     }
   }
 
-  // ---- Post-process: merge consecutive same-subject entries into double classes ----
-  // For each class+day+subject group, if 2 consecutive slots exist → mark first as is_double, remove second
-  // Note: SINGLE_PERIOD_SUBJECTS can never produce doubles (max 1 per day)
-  const mergedPlaced = mergeDoubleClasses(placed, slotNumbers);
-
-  return { placed: mergedPlaced, unplaced };
+  // Doubles are now placed atomically with is_double: true — no merging needed.
+  return { placed, unplaced };
 }
 
 /**
  * Scan placed entries for same class+day+subject at consecutive slots.
  * Merges them: first entry gets is_double=true, second is removed.
+ * Kept for reference / test compatibility — not called from generateTimetable.
  */
 function mergeDoubleClasses(placed, slotNumbers) {
   // Group by class+day+subject

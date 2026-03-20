@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Calendar, Settings, Zap, CheckCircle, AlertTriangle,
-  Download, Send, Trash2, RefreshCw, UserX, ShieldCheck,
+  Download, Send, Trash2, RefreshCw, UserX, ShieldCheck, Layers,
 } from 'lucide-react';
 import { useBranding } from '../../../../core/context/BrandingContext';
 import { useTenant } from '../../../../core/context/TenantContext';
@@ -332,6 +332,17 @@ export default function TimetableMakerPage() {
               >
                 <Zap size={15} />
                 {tt.generating ? 'Generating…' : 'Auto-Generate'}
+              </button>
+
+              {/* Fill Gaps */}
+              <button
+                onClick={tt.fillGaps}
+                disabled={tt.generating || tt.assignments.length === 0}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border-2 transition-opacity disabled:opacity-50"
+                style={{ borderColor: primaryColor, color: primaryColor }}
+              >
+                <Layers size={15} />
+                {tt.generating ? 'Generating…' : 'Fill Gaps'}
               </button>
 
               {/* Clear draft */}
