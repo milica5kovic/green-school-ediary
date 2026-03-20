@@ -20,6 +20,11 @@ const DOUBLE_PREFERRED_SUBJECTS = new Set([
   'ESL',
 ]);
 
+// Cooking & Gardening: 1 period/week but MUST land in P1 (first regular slot)
+// or P6 (last regular slot) so it connects with Morning Session or Extra-Curricular.
+// The generator restricts C&G to only those two slots during placement.
+const CG_SUBJECTS = new Set(['Cooking and Gardening', 'Cooking & Gardening', 'C&G']);
+
 // Slot numbers that are "after school / extra-curricular" (15:05-15:45).
 // Generator applies a heavy score penalty so these are used ONLY as a last resort
 // when every regular slot (1-6) is blocked or already occupied for that teacher+class.
@@ -38,6 +43,15 @@ const AFTER_SCHOOL_PENALTY = 200; // much higher than any realistic day-load sco
  */
 export function generateTimetable(assignments, timeSlots, availabilityRecords) {
   const slotNumbers = timeSlots.map(s => s.slot_number).sort((a, b) => a - b);
+
+  // Regular slots (P1–P6) vs after-school (slot 7+)
+  const regularSlotNums = slotNumbers.filter(s => !AFTER_SCHOOL_SLOTS.has(s));
+
+  // C&G may only go in P1 (first regular slot) or P6 (last regular slot)
+  // so the school day connects with Morning Session or Extra-Curricular.
+  const cgAllowedSlots = regularSlotNums.length >= 2
+    ? [regularSlotNums[0], regularSlotNums[regularSlotNums.length - 1]]
+    : regularSlotNums;
 
   // ---- Build blocked-slot lookup ----
   const blockedKey = (teacher_id, day, slot) => `${teacher_id}|${day}|${slot}`;
@@ -113,9 +127,15 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
   const classDayLoad = {};
   // Tracks how many times a subject has been placed for a class on a given day
   const classSubjectDay = {};
+  // Tracks how many periods each TEACHER already has on a given day (for balancing)
+  // Keeps Y1–Y4 class teachers from having one very full day and one empty day.
+  const teacherDayLoad = {};
 
   const getLoad = (class_name, day) =>
     (classDayLoad[class_name] || {})[day] || 0;
+
+  const getTeacherLoad = (teacher_id, day) =>
+    (teacherDayLoad[teacher_id] || {})[day] || 0;
 
   const subjectDayKey = (class_name, day, subject) =>
     `${class_name}|${day}|${subject}`;
@@ -127,6 +147,8 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
   // ---- Place tasks greedily ----
   const placed = [];
   const unplaced = [];
+  // Full task objects that failed Phase 2 — retried in Phase 3 without sibling-sync
+  const unplacedTaskRefs = [];
 
   // Tracks which parallel_group a teacher is assigned to in each slot
   // Allows same teacher to teach combined classes (e.g. Y5a+Y5b English together)
@@ -168,6 +190,8 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
     }
     if (!classDayLoad[task.class_name]) classDayLoad[task.class_name] = {};
     classDayLoad[task.class_name][day] = getLoad(task.class_name, day) + 1;
+    if (!teacherDayLoad[task.teacher_id]) teacherDayLoad[task.teacher_id] = {};
+    teacherDayLoad[task.teacher_id][day] = getTeacherLoad(task.teacher_id, day) + 1;
     const sdk = subjectDayKey(task.class_name, day, task.subject);
     classSubjectDay[sdk] = (classSubjectDay[sdk] || 0) + 1;
     placed.push({
@@ -187,22 +211,28 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
       const group = task.parallel_group;
       const occurrence = task._parallelIndex;
 
-      // Check if this occurrence of the group already has a committed slot
+      // Check if this occurrence of the group already has a committed slot.
+      // IMPORTANT: siblings are committed immediately when the lead task commits
+      // (see below), so task._placed will already be true if it was a sibling.
+      // Skip already-placed tasks to avoid double-committing.
+      if (task._placed) continue;
+
       const committed = parallelGroupSlots[group]?.[occurrence];
       if (committed) {
-        // Slot already decided by another task in the group — use same slot
+        // Slot already decided — this task was NOT committed as a sibling
+        // (e.g. it had a higher _parallelIndex at the time the slot was found,
+        // or is a German/French task whose parallel partner teaches Serbian here).
         if (canPlace(task, committed.day, committed.slot)) {
           commitTask(task, committed.day, committed.slot);
         } else {
-          unplaced.push({ teacher_id: task.teacher_id, subject: task.subject, class_name: task.class_name });
+          // Teacher conflict at the committed slot → Phase 3 relaxed retry
+          unplacedTaskRefs.push(task);
         }
         continue;
       }
 
-      // No slot committed yet for this occurrence — find one where ALL remaining
-      // unprocessed tasks in this group (same occurrence index) can also fit.
-      // Collect sibling tasks (same group, same _parallelIndex, not yet placed)
-      // Use t._placed flag (set by commitTask) to check if THIS specific task is placed
+      // No slot committed yet for this occurrence.
+      // Collect ALL siblings (same group, same _parallelIndex, not yet placed).
       const siblings = tasks.filter(
         t => t !== task &&
              t.parallel_group === group &&
@@ -217,7 +247,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
       for (const day of DAYS) {
         for (const slot of slotNumbers) {
           if (!canPlace(task, day, slot)) continue;
-          // All siblings must also fit at this day+slot
+          // Every sibling must also fit — this verifies all teachers are free
           if (!siblings.every(s => canPlace(s, day, slot))) continue;
 
           // Consecutive / double-period bonus (same logic as normal placement)
@@ -243,17 +273,114 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
       }
 
       if (bestDay !== null) {
-        // Commit this slot for the group occurrence
         if (!parallelGroupSlots[group]) parallelGroupSlots[group] = [];
         parallelGroupSlots[group][occurrence] = { day: bestDay, slot: bestSlot };
+        // ── CRITICAL FIX ─────────────────────────────────────────────────────
+        // Commit the lead task AND all siblings immediately in one atomic step.
+        //
+        // Without this, sibling slots are only "verified free" but not reserved.
+        // Another parallel group (e.g. Y3-English) can then claim the same slot
+        // for a shared specialist teacher (e.g. Williams ESL), causing her to be
+        // double-booked when her own tasks are processed later in the sort order.
+        //
+        // By committing everyone at once, teacherBusy is updated for all members
+        // immediately, so subsequent parallel groups see the correct free/busy state.
+        // ─────────────────────────────────────────────────────────────────────
         commitTask(task, bestDay, bestSlot);
+        siblings.forEach(s => { if (!s._placed) commitTask(s, bestDay, bestSlot); });
       } else {
-        unplaced.push({ teacher_id: task.teacher_id, subject: task.subject, class_name: task.class_name });
+        // Could not satisfy constraint — queue for Phase 3 relaxed retry
+        unplacedTaskRefs.push(task);
       }
       continue;
     }
 
     // ── NORMAL (non-parallel) PLACEMENT ─────────────────────
+    // C&G is restricted to P1 or P6 only (connects with Morning Session / Extra-Curricular)
+    const isCG = CG_SUBJECTS.has(task.subject);
+    const slotsToTry = isCG ? cgAllowedSlots : slotNumbers;
+
+    let bestDay = null;
+    let bestSlot = null;
+    let bestScore = Infinity;
+
+    for (const day of DAYS) {
+      for (const slot of slotsToTry) {
+        if (!canPlace(task, day, slot)) continue;
+        const existingSameSubjectToday = classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0;
+        const loadScore = getLoad(task.class_name, day);
+
+        // Teacher day-load balance (weight 0.4):
+        // Spreads each teacher's periods evenly across the week so Y1–Y4 class
+        // teachers don't end up with one packed day and one nearly empty day.
+        // Weight is low enough that the consecutive-period bonus still dominates
+        // (e.g. -50 for a direct double >> 0.4 × 6 = 2.4 for a busy day).
+        const teacherLoadScore = 0.4 * getTeacherLoad(task.teacher_id, day);
+
+        // Consecutive / double-period bonus
+        let consecutiveBonus = 0;
+        if (existingSameSubjectToday > 0) {
+          if (DOUBLE_PREFERRED_SUBJECTS.has(task.subject)) {
+            const prevSlotIdx = slotNumbers.indexOf(slot) - 1;
+            const prevSlot = prevSlotIdx >= 0 ? slotNumbers[prevSlotIdx] : null;
+            const prevEntry = prevSlot !== null ? grid[day][prevSlot][task.class_name] : null;
+            const isDirectlyAfter = prevEntry && prevEntry.subject === task.subject;
+            consecutiveBonus = isDirectlyAfter ? -50 : -10;
+          } else {
+            consecutiveBonus = -0.5;
+          }
+        }
+
+        const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
+        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty;
+        if (score < bestScore) {
+          bestScore = score;
+          bestDay = day;
+          bestSlot = slot;
+        }
+      }
+    }
+
+    if (bestDay !== null) {
+      commitTask(task, bestDay, bestSlot);
+    } else {
+      unplacedTaskRefs.push(task);
+    }
+  }
+
+  // ============================================================
+  // PHASE 3: Relaxed fallback — ONLY for French / German
+  //
+  // German and French are language-choice subjects (students pick one).
+  // The ideal is that all French students and all German students have
+  // their lesson at the same time (parallel_group Y{n}-FG).  However, when
+  // Marina Ristic also teaches Serbian for the same year group she cannot
+  // be in two places at once, so the F/G sync cannot always be satisfied.
+  //
+  // In that case it is acceptable to schedule German (or French) at a
+  // different slot — the students still get their lesson, just not
+  // perfectly synchronised with the other language group that week.
+  //
+  // ESL, Serbian, and all other parallel-group subjects are NOT relaxed
+  // here because:
+  //   • ESL must happen at exactly the same time as the English lesson
+  //     (the class physically splits: some students go to ESL, the rest
+  //     stay for English — they MUST be in the same period).
+  //   • Serbian ability groups (Beg/Mid/Native) must run simultaneously
+  //     so all students return to the main class together.
+  // Those tasks that still cannot be placed are left as unplaced so the
+  // admin can resolve the underlying data conflict manually.
+  // ============================================================
+  const PHASE3_SUBJECTS = new Set(['French', 'German']);
+
+  for (const task of unplacedTaskRefs) {
+    if (!PHASE3_SUBJECTS.has(task.subject)) {
+      // Must keep parallel-group timing — leave for manual placement
+      unplaced.push({ teacher_id: task.teacher_id, subject: task.subject, class_name: task.class_name });
+      continue;
+    }
+
+    // French / German: find the best free slot ignoring sibling sync
     let bestDay = null;
     let bestSlot = null;
     let bestScore = Infinity;
@@ -261,35 +388,20 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords) {
     for (const day of DAYS) {
       for (const slot of slotNumbers) {
         if (!canPlace(task, day, slot)) continue;
+
         const existingSameSubjectToday = classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0;
         const loadScore = getLoad(task.class_name, day);
-
-        // Consecutive / double-period bonus
         let consecutiveBonus = 0;
-        if (existingSameSubjectToday > 0) {
-          if (DOUBLE_PREFERRED_SUBJECTS.has(task.subject)) {
-            // Check if this slot is directly adjacent to an existing same-subject slot
-            const prevSlotIdx = slotNumbers.indexOf(slot) - 1;
-            const prevSlot = prevSlotIdx >= 0 ? slotNumbers[prevSlotIdx] : null;
-            const prevEntry = prevSlot !== null ? grid[day][prevSlot][task.class_name] : null;
-            const isDirectlyAfter = prevEntry && prevEntry.subject === task.subject;
-            // Directly consecutive → very strong pull (forces a double period)
-            // Same day but not adjacent → moderate pull (keeps related periods close)
-            consecutiveBonus = isDirectlyAfter ? -50 : -10;
-          } else {
-            consecutiveBonus = -0.5; // slight same-day nudge for non-double subjects
-          }
+        if (existingSameSubjectToday > 0 && DOUBLE_PREFERRED_SUBJECTS.has(task.subject)) {
+          const prevSlotIdx = slotNumbers.indexOf(slot) - 1;
+          const prevSlot   = prevSlotIdx >= 0 ? slotNumbers[prevSlotIdx] : null;
+          const prevEntry  = prevSlot !== null ? grid[day][prevSlot][task.class_name] : null;
+          consecutiveBonus = (prevEntry && prevEntry.subject === task.subject) ? -50 : -10;
         }
-
-        // Strongly prefer regular slots (1-6). After-school slots (7+) are used
-        // only as a last resort when all regular slots are blocked/occupied.
+        const teacherLoadScore = 0.4 * getTeacherLoad(task.teacher_id, day);
         const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
-        const score = loadScore + consecutiveBonus + afterSchoolPenalty;
-        if (score < bestScore) {
-          bestScore = score;
-          bestDay = day;
-          bestSlot = slot;
-        }
+        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty;
+        if (score < bestScore) { bestScore = score; bestDay = day; bestSlot = slot; }
       }
     }
 
