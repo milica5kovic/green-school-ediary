@@ -173,13 +173,43 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     return penalty;
   };
 
+  // ---- Gap penalty helper ----
+  // Penalise placements that leave free periods BETWEEN a class's classes on the same day.
+  // e.g. class has P1 and P5 → placing at P3 extends the range without gap (OK),
+  //      but placing at P7 leaves P6 empty (penalty).
+  // This keeps each class's timetable compact so students never have unexplained free periods.
+  const getGapPenalty = (class_name, day, slot) => {
+    if (AFTER_SCHOOL_SLOTS.has(slot)) return 0; // after-school sits outside regular hours
+    const slotIdx = regularSlotNums.indexOf(slot);
+    if (slotIdx < 0) return 0;
+    const occupiedIndices = regularSlotNums
+      .map((s, i) => (grid[day][s]?.[class_name] ? i : -1))
+      .filter(i => i >= 0);
+    if (occupiedIndices.length === 0) return 0;
+    const minOcc = Math.min(...occupiedIndices);
+    const maxOcc = Math.max(...occupiedIndices);
+    let gaps = 0;
+    if (slotIdx < minOcc) gaps = minOcc - slotIdx - 1;       // placing before current range
+    else if (slotIdx > maxOcc) gaps = slotIdx - maxOcc - 1;  // placing after current range
+    // placing inside the range (filling a gap) → penalty = 0 (encouraged)
+    return gaps * 80;
+  };
+
+  // For double classes, take the larger gap of the two slots
+  const getGapPenaltyDouble = (class_name, day, slotA, slotB) =>
+    Math.max(getGapPenalty(class_name, day, slotA), getGapPenalty(class_name, day, slotB));
+
   // ---- Helper: check if a single task can go at (day, slot) ----
   const canPlace = (task, day, slot) => {
     if (!isAvailable(task.teacher_id, day, slot)) return false;
     if (teacherBusy[day][slot].has(task.teacher_id)) {
-      // Allow same teacher in same slot for parallel group combined classes
+      // Allow same teacher in same slot ONLY for parallel group combined classes
       const existingGroup = teacherParallelGroup[day][slot][task.teacher_id];
       if (!task.parallel_group || existingGroup !== task.parallel_group) return false;
+      // Even within the same parallel group, the same teacher cannot revisit the same class
+      // in the same slot — this would create a duplicate entry.
+      // (Happens when teacher's periods_per_week > sibling teacher's periods_per_week)
+      if (grid[day][slot][task.class_name]) return false;
     }
     const existing = grid[day][slot][task.class_name];
     if (existing) {
@@ -378,7 +408,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
         for (const [slotA, slotB] of validDoublePairs) {
           if (!canPlaceDouble(task, day, slotA, slotB)) continue;
           if (!siblings.every(s => canPlaceDouble(s, day, slotA, slotB))) continue;
-          const score = getLoad(task.class_name, day) + weeklySpreadPenalty(task.class_name, task.subject, day) + 0.4 * getTeacherLoad(task.teacher_id, day);
+          const score = getLoad(task.class_name, day) + weeklySpreadPenalty(task.class_name, task.subject, day) + 0.4 * getTeacherLoad(task.teacher_id, day) + getGapPenaltyDouble(task.class_name, day, slotA, slotB);
           if (score < bestScore) { bestScore = score; bestDay = day; bestSlotA = slotA; bestSlotB = slotB; }
         }
       }
@@ -398,7 +428,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     for (const day of DAYS) {
       for (const [slotA, slotB] of validDoublePairs) {
         if (!canPlaceDouble(task, day, slotA, slotB)) continue;
-        const score = getLoad(task.class_name, day) + weeklySpreadPenalty(task.class_name, task.subject, day) + 0.4 * getTeacherLoad(task.teacher_id, day);
+        const score = getLoad(task.class_name, day) + weeklySpreadPenalty(task.class_name, task.subject, day) + 0.4 * getTeacherLoad(task.teacher_id, day) + getGapPenaltyDouble(task.class_name, day, slotA, slotB);
         if (score < bestScore) { bestScore = score; bestDay = day; bestSlotA = slotA; bestSlotB = slotB; }
       }
     }
@@ -468,7 +498,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
 
           // Strongly prefer regular slots (1-6) over after-school slots (7+)
           const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
-          const score = getLoad(task.class_name, day) + consecutiveBonus + afterSchoolPenalty;
+          const score = getLoad(task.class_name, day) + consecutiveBonus + afterSchoolPenalty + getGapPenalty(task.class_name, day, slot);
           if (score < bestScore) {
             bestScore = score;
             bestDay = day;
@@ -521,7 +551,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
 
         const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
         const spreadPenalty = weeklySpreadPenalty(task.class_name, task.subject, day);
-        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty + spreadPenalty;
+        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty + spreadPenalty + getGapPenalty(task.class_name, day, slot);
         if (score < bestScore) {
           bestScore = score;
           bestDay = day;
@@ -569,7 +599,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
         }
         const teacherLoadScore = 0.4 * getTeacherLoad(task.teacher_id, day);
         const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
-        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty;
+        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty + getGapPenalty(task.class_name, day, slot);
         if (score < bestScore) { bestScore = score; bestDay = day; bestSlot = slot; }
       }
     }
