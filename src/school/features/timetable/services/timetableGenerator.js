@@ -307,25 +307,33 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     teacherFreeSlots[a.teacher_id] = count;
   });
 
-  const taskSortFn = (a, b) => {
-    const aHasGroup = a.parallel_group ? 0 : 1;
-    const bHasGroup = b.parallel_group ? 0 : 1;
-    if (aHasGroup !== bHasGroup) return aHasGroup - bHasGroup;
-    const aFree = teacherFreeSlots[a.teacher_id] ?? 99;
-    const bFree = teacherFreeSlots[b.teacher_id] ?? 99;
-    if (aFree !== bFree) return aFree - bFree;
-    return (b.periods_per_week || 0) - (a.periods_per_week || 0);
-  };
-
-  // ---- Separate tasks into double tasks and single tasks ----
+  // ---- Separate tasks into three buckets ----
+  // cgTasks    — C&G (P1/P6 only): scheduled FIRST so doubles don't steal those slots
+  // doubleTasks — subjects that should be consecutive double periods
+  // singleTasks — everything else
+  const cgTasks = [];
   const doubleTasks = [];
   const singleTasks = [];
 
   assignments.forEach(a => {
-    const isDoubleSubject = DOUBLE_PREFERRED_SUBJECTS.has(a.subject);
+    const isCG = CG_SUBJECTS.has(a.subject);
+    const isDoubleSubject = DOUBLE_PREFERRED_SUBJECTS.has(a.subject) && !isCG;
     const n = a.periods_per_week || 1;
 
-    if (isDoubleSubject && validDoublePairs.length > 0 && !CG_SUBJECTS.has(a.subject)) {
+    if (isCG) {
+      for (let i = 0; i < n; i++) {
+        cgTasks.push({
+          teacher_id: a.teacher_id,
+          subject: a.subject,
+          class_name: a.class_name,
+          assignmentId: a.id,
+          periods_per_week: a.periods_per_week,
+          parallel_group: a.parallel_group || null,
+          _isDouble: false,
+          _parallelIndex: i,
+        });
+      }
+    } else if (isDoubleSubject && validDoublePairs.length > 0) {
       const numDoubles = Math.floor(n / 2);
       const numSingles = n % 2;
       for (let i = 0; i < numDoubles; i++) {
@@ -368,10 +376,93 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     }
   });
 
+  // ---- Sibling count map: more siblings = more constrained = schedule earlier ----
+  // e.g. Y5ab-English has 6 tasks/occurrence (Jelena+Ashlie+Sneza × Y5a+Y5b)
+  // vs Y3-SerbianSec with 2 tasks/occurrence. Y5ab-English must go first.
+  const siblingCountMap = {};
+  [...cgTasks, ...doubleTasks, ...singleTasks].forEach(t => {
+    if (!t.parallel_group) return;
+    const k = `${t.parallel_group}|${t._parallelIndex}`;
+    siblingCountMap[k] = (siblingCountMap[k] || 0) + 1;
+  });
+
+  const taskSortFn = (a, b) => {
+    // Most siblings first (most constrained parallel groups first)
+    const aSib = a.parallel_group ? (siblingCountMap[`${a.parallel_group}|${a._parallelIndex}`] || 1) : 0;
+    const bSib = b.parallel_group ? (siblingCountMap[`${b.parallel_group}|${b._parallelIndex}`] || 1) : 0;
+    if (aSib !== bSib) return bSib - aSib;
+    const aHasGroup = a.parallel_group ? 0 : 1;
+    const bHasGroup = b.parallel_group ? 0 : 1;
+    if (aHasGroup !== bHasGroup) return aHasGroup - bHasGroup;
+    const aFree = teacherFreeSlots[a.teacher_id] ?? 99;
+    const bFree = teacherFreeSlots[b.teacher_id] ?? 99;
+    if (aFree !== bFree) return aFree - bFree;
+    return (b.periods_per_week || 0) - (a.periods_per_week || 0);
+  };
+
+  cgTasks.sort(taskSortFn);
   doubleTasks.sort(taskSortFn);
   singleTasks.sort(taskSortFn);
 
-  // ---- Process double tasks FIRST ----
+  // ---- Process C&G tasks FIRST (most slot-restricted: P1 or P6 only) ----
+  // Must run before doubles so English/ESL doubles don't claim P1+P2 or P5+P6
+  // and leave no legal C&G slot for that class.
+  for (const task of cgTasks) {
+    if (task._placed) continue;
+
+    if (task.parallel_group) {
+      // Parallel C&G (Y12-CG, Y34-CG, Y789-CG) — same logic as parallel singles
+      const group = task.parallel_group;
+      const occurrence = task._parallelIndex;
+      const committed = parallelGroupSlots[group]?.[occurrence];
+      if (committed) {
+        if (canPlace(task, committed.day, committed.slot)) {
+          commitTask(task, committed.day, committed.slot);
+        } else {
+          unplacedTaskRefs.push(task);
+        }
+        continue;
+      }
+      const siblings = cgTasks.filter(
+        t => t !== task && t.parallel_group === group && t._parallelIndex === occurrence && !t._placed
+      );
+      let bestDay = null, bestSlot = null, bestScore = Infinity;
+      for (const day of DAYS) {
+        for (const slot of cgAllowedSlots) {
+          if (!canPlace(task, day, slot)) continue;
+          if (!siblings.every(s => canPlace(s, day, slot))) continue;
+          const score = getLoad(task.class_name, day) + 0.4 * getTeacherLoad(task.teacher_id, day) + getGapPenalty(task.class_name, day, slot);
+          if (score < bestScore) { bestScore = score; bestDay = day; bestSlot = slot; }
+        }
+      }
+      if (bestDay !== null) {
+        if (!parallelGroupSlots[group]) parallelGroupSlots[group] = [];
+        parallelGroupSlots[group][occurrence] = { day: bestDay, slot: bestSlot };
+        commitTask(task, bestDay, bestSlot);
+        siblings.forEach(s => { if (!s._placed) commitTask(s, bestDay, bestSlot); });
+      } else {
+        unplacedTaskRefs.push(task);
+      }
+      continue;
+    }
+
+    // Non-parallel C&G (Y5a, Y5b, Y6 go alone)
+    let bestDay = null, bestSlot = null, bestScore = Infinity;
+    for (const day of DAYS) {
+      for (const slot of cgAllowedSlots) {
+        if (!canPlace(task, day, slot)) continue;
+        const score = getLoad(task.class_name, day) + 0.4 * getTeacherLoad(task.teacher_id, day) + getGapPenalty(task.class_name, day, slot);
+        if (score < bestScore) { bestScore = score; bestDay = day; bestSlot = slot; }
+      }
+    }
+    if (bestDay !== null) {
+      commitTask(task, bestDay, bestSlot);
+    } else {
+      unplacedTaskRefs.push(task);
+    }
+  }
+
+  // ---- Process double tasks NEXT ----
   for (const task of doubleTasks) {
     if (task._placed) continue;
 
@@ -519,9 +610,8 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     }
 
     // ── NORMAL (non-parallel) PLACEMENT ─────────────────────
-    // C&G is restricted to P1 or P6 only (connects with Morning Session / Extra-Curricular)
-    const isCG = CG_SUBJECTS.has(task.subject);
-    const slotsToTry = isCG ? cgAllowedSlots : slotNumbers;
+    // (C&G tasks are pre-processed in the cgTasks loop above — not present here)
+    const slotsToTry = slotNumbers;
 
     let bestDay = null;
     let bestSlot = null;
