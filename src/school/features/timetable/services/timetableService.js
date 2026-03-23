@@ -337,25 +337,18 @@ export class TimetableService {
     }, {});
 
     // Build teacher_schedule rows.
-    // IMPORTANT: teacher_schedule.teacher_id stores auth.users.id, which is
-    // teachers.user_id — NOT teachers.id (the teachers table PK).
-    // Teachers who haven't signed in yet have user_id = null and are skipped.
-    const noUserIdNames = [];
+    // teacher_schedule.teacher_id references teachers.id (the PK) — not user_id.
+    // This way all teachers are synced regardless of whether they have an auth account.
     const scheduleRows = [];
     entriesToPublish.forEach(e => {
       if (!e.teacher?.id) return; // teacher record was deleted
-      if (!e.teacher.user_id) {
-        // Teacher exists but hasn't linked their auth account yet
-        noUserIdNames.push(e.teacher.full_name);
-        return;
-      }
       const slot = slotMap[e.slot_number];
       const timeLabel = slot
         ? `${slot.start_time.slice(0, 5)} - ${slot.end_time.slice(0, 5)}`
         : `Period ${e.slot_number}`;
       scheduleRows.push({
         school_id: this.schoolId,
-        teacher_id: e.teacher.user_id,
+        teacher_id: e.teacher.id,
         day_of_week: DAY_NAMES[e.day_of_week],
         time_slot: timeLabel,
         class_name: e.class_name,
@@ -371,7 +364,7 @@ export class TimetableService {
           : `Period ${e.slot_number + 1}`;
         scheduleRows.push({
           school_id: this.schoolId,
-          teacher_id: e.teacher.user_id,
+          teacher_id: e.teacher.id,
           day_of_week: DAY_NAMES[e.day_of_week],
           time_slot: nextLabel,
           class_name: e.class_name,
@@ -424,11 +417,9 @@ export class TimetableService {
       if (promoteErr) throw promoteErr;
     }
 
-    const uniqueNoUserIdNames = [...new Set(noUserIdNames)];
     return {
       published: entriesToPublish.length,
       synced: deduplicatedRows.length,
-      unsyncedTeachers: uniqueNoUserIdNames, // teachers without auth accounts yet
     };
   }
 }

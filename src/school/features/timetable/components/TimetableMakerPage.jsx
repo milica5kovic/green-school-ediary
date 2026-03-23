@@ -161,15 +161,7 @@ export default function TimetableMakerPage() {
       {/* ---- Publish success banner ---- */}
       {publishResult && (
         <div className="flex items-center justify-between bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-sm">
-          <span>
-            ✓ Timetable published — {publishResult.synced ?? publishResult.published} schedule rows synced.
-            {publishResult.unsyncedTeachers?.length > 0 && (
-              <span className="ml-2 text-amber-600">
-                ⚠ {publishResult.unsyncedTeachers.length} teacher(s) have no login account yet and were skipped: {publishResult.unsyncedTeachers.join(', ')}.
-                Invite them via Management → Profiles.
-              </span>
-            )}
-          </span>
+          <span>✓ Timetable published — {publishResult.synced ?? publishResult.published} entries synced to teacher schedules.</span>
           <button onClick={() => setPublishResult(null)} className="text-green-500 hover:text-green-700">✕</button>
         </div>
       )}
