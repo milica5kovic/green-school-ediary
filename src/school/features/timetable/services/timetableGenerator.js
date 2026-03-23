@@ -703,6 +703,93 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     }
   }
 
+  // ============================================================
+  // POST-PROCESS: compact gaps in each class's daily schedule.
+  //
+  // The greedy pass sometimes leaves a class with e.g. P1 and P5 on Monday
+  // (gap at P2-P4) because the teachers for those subjects were busy at the
+  // adjacent slots (teaching other year groups) when the algorithm ran.
+  //
+  // Strategy: look for entries that sit in ISOLATION (the only entry for that
+  // class on their day).  If the teacher is free at a gap slot on a day where
+  // the class already has other entries, move the isolated entry there.
+  // This fills the gap without introducing new gaps elsewhere (the source day
+  // simply becomes empty — not a problem).
+  //
+  // We skip doubles, C&G (slot-restricted), and parallel-group entries
+  // (re-timing these would desync the group).
+  // ============================================================
+  for (let pass = 0; pass < 4; pass++) {
+    let changed = false;
+
+    // Group non-double, non-CG, non-parallel placed entries by (class, day)
+    const byClassDay = {};
+    placed.forEach(p => {
+      if (p.is_double) return;
+      if (p.parallel_group) return;
+      if (CG_SUBJECTS.has(p.subject)) return;
+      if (AFTER_SCHOOL_SLOTS.has(p.slot_number)) return;
+      const key = `${p.class_name}|${p.day_of_week}`;
+      if (!byClassDay[key]) byClassDay[key] = [];
+      byClassDay[key].push(p);
+    });
+
+    for (const class_name of new Set(placed.map(p => p.class_name))) {
+      // Find days where this class has a gap (at least 2 entries, non-consecutive)
+      for (const targetDay of DAYS) {
+        const dayEntries = (byClassDay[`${class_name}|${targetDay}`] || [])
+          .sort((a, b) => a.slot_number - b.slot_number);
+        if (dayEntries.length < 2) continue;
+
+        const minIdx = regularSlotNums.indexOf(dayEntries[0].slot_number);
+        const maxIdx = regularSlotNums.indexOf(dayEntries[dayEntries.length - 1].slot_number);
+        if (maxIdx - minIdx + 1 === dayEntries.length) continue; // already compact
+
+        // Find the first gap slot
+        let gapSlot = null;
+        for (let i = minIdx; i <= maxIdx; i++) {
+          if (!grid[targetDay][regularSlotNums[i]]?.[class_name]) {
+            gapSlot = regularSlotNums[i];
+            break;
+          }
+        }
+        if (gapSlot === null) continue;
+
+        // Look for an ISOLATED entry (only entry for this class on that day)
+        // that can be moved to (targetDay, gapSlot)
+        for (const srcDay of DAYS) {
+          if (srcDay === targetDay) continue;
+          const srcEntries = byClassDay[`${class_name}|${srcDay}`] || [];
+          if (srcEntries.length !== 1) continue; // only move truly isolated entries
+          const src = srcEntries[0];
+
+          if (!isAvailable(src.teacher_id, targetDay, gapSlot)) continue;
+          if (teacherBusy[targetDay][gapSlot].has(src.teacher_id)) continue;
+
+          // Move src from (srcDay, src.slot_number) → (targetDay, gapSlot)
+          delete grid[srcDay][src.slot_number][class_name];
+          teacherBusy[srcDay][src.slot_number].delete(src.teacher_id);
+          grid[targetDay][gapSlot][class_name] = src;
+          teacherBusy[targetDay][gapSlot].add(src.teacher_id);
+
+          // Mutate the placed entry in-place (placed[] holds object references)
+          src.day_of_week = targetDay;
+          src.slot_number = gapSlot;
+
+          // Update byClassDay so next iterations see the new state
+          byClassDay[`${class_name}|${srcDay}`] = [];
+          if (!byClassDay[`${class_name}|${targetDay}`]) byClassDay[`${class_name}|${targetDay}`] = [];
+          byClassDay[`${class_name}|${targetDay}`].push(src);
+
+          changed = true;
+          break;
+        }
+      }
+    }
+
+    if (!changed) break; // converged
+  }
+
   // Doubles are now placed atomically with is_double: true — no merging needed.
   return { placed, unplaced };
 }
