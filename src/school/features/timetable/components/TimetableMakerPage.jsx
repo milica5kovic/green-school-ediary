@@ -437,6 +437,7 @@ export default function TimetableMakerPage() {
               onSetCell={tt.manualSetCell}
               onDeleteCell={tt.deleteDraftEntry}
               onMoveCell={tt.moveDraftEntry}
+              onMoveCells={tt.moveDraftGroup}
               onSwapCells={tt.swapDraftEntries}
               saving={tt.saving}
               viewMode={viewMode}

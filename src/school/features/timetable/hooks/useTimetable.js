@@ -342,26 +342,44 @@ export function useTimetable() {
     }
   }, [service, draftEntries, availabilityRecords]);
 
-  // Swap two draft entries: A moves to B's position, B moves to A's position.
+  // Move multiple draft entries (same parallel/split group) to a new slot.
+  const moveDraftGroup = useCallback(async (ids, newDay, newSlot) => {
+    setSaving(true);
+    try {
+      const results = await Promise.all(ids.map(id => service.moveDraftEntry(id, newDay, newSlot)));
+      const updatedMap = new Map(results.map(e => [e.id, e]));
+      setDraftEntries(prev => prev.map(e => updatedMap.has(e.id) ? updatedMap.get(e.id) : e));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }, [service]);
+
+  // Swap two groups of draft entries: group1 goes to group2's slot, vice versa.
+  // Accepts single IDs or arrays of IDs.
   // Returns { ok: true } on success or { ok: false, reason: '...' } on conflict.
-  const swapDraftEntries = useCallback(async (id1, id2) => {
-    const e1 = draftEntries.find(e => e.id === id1);
-    const e2 = draftEntries.find(e => e.id === id2);
+  const swapDraftEntries = useCallback(async (ids1, ids2) => {
+    const idArr1 = Array.isArray(ids1) ? ids1 : [ids1];
+    const idArr2 = Array.isArray(ids2) ? ids2 : [ids2];
+    const group1 = idArr1.map(id => draftEntries.find(e => e.id === id)).filter(Boolean);
+    const group2 = idArr2.map(id => draftEntries.find(e => e.id === id)).filter(Boolean);
+    if (group1.length !== idArr1.length || group2.length !== idArr2.length)
+      return { ok: false, reason: 'Entry not found.' };
+    const e1 = group1[0];
+    const e2 = group2[0];
     if (!e1 || !e2) return { ok: false, reason: 'Entry not found.' };
 
-    // All OTHER entries (excluding the two being swapped)
-    const others = draftEntries.filter(e => e.id !== id1 && e.id !== id2);
+    // All OTHER entries (excluding both groups being swapped)
+    const allSwappedIds = new Set([...idArr1, ...idArr2]);
+    const others = draftEntries.filter(e => !allSwappedIds.has(e.id));
 
-    const occupies = (entry, day, slot) => {
-      // Returns true if 'entry' occupies 'slot' on 'day'
-      return entry.day_of_week === day &&
-        (entry.slot_number === slot || (entry.is_double && entry.slot_number === slot - 1));
-    };
+    const occupies = (entry, day, slot) =>
+      entry.day_of_week === day &&
+      (entry.slot_number === slot || (entry.is_double && entry.slot_number === slot - 1));
 
     const conflictsAt = (movingEntry, targetDay, targetSlot) => {
-      const slots = movingEntry.is_double
-        ? [targetSlot, targetSlot + 1]
-        : [targetSlot];
+      const slots = movingEntry.is_double ? [targetSlot, targetSlot + 1] : [targetSlot];
       for (const s of slots) {
         if (others.some(o => o.teacher_id === movingEntry.teacher_id && occupies(o, targetDay, s)))
           return `${movingEntry.teacher?.full_name || 'Teacher'} is already busy at that slot.`;
@@ -376,23 +394,24 @@ export function useTimetable() {
       return null;
     };
 
-    const err1 = conflictsAt(e1, e2.day_of_week, e2.slot_number);
-    if (err1) return { ok: false, reason: err1 };
-    const err2 = conflictsAt(e2, e1.day_of_week, e1.slot_number);
-    if (err2) return { ok: false, reason: err2 };
+    // group1 → e2's slot, group2 → e1's slot
+    for (const entry of group1) {
+      const err = conflictsAt(entry, e2.day_of_week, e2.slot_number);
+      if (err) return { ok: false, reason: err };
+    }
+    for (const entry of group2) {
+      const err = conflictsAt(entry, e1.day_of_week, e1.slot_number);
+      if (err) return { ok: false, reason: err };
+    }
 
     setSaving(true);
     try {
-      // Perform both moves in parallel — each row is updated by its own id
-      const [updated1, updated2] = await Promise.all([
-        service.moveDraftEntry(id1, e2.day_of_week, e2.slot_number),
-        service.moveDraftEntry(id2, e1.day_of_week, e1.slot_number),
+      const results = await Promise.all([
+        ...group1.map(e => service.moveDraftEntry(e.id, e2.day_of_week, e2.slot_number)),
+        ...group2.map(e => service.moveDraftEntry(e.id, e1.day_of_week, e1.slot_number)),
       ]);
-      setDraftEntries(prev => prev.map(e => {
-        if (e.id === id1) return updated1;
-        if (e.id === id2) return updated2;
-        return e;
-      }));
+      const updatedMap = new Map(results.map(e => [e.id, e]));
+      setDraftEntries(prev => prev.map(e => updatedMap.has(e.id) ? updatedMap.get(e.id) : e));
       return { ok: true };
     } catch (err) {
       setError(err.message);
@@ -504,6 +523,7 @@ export function useTimetable() {
     fillGaps,
     manualSetCell,
     moveDraftEntry,
+    moveDraftGroup,
     swapDraftEntries,
     deleteDraftEntry,
     clearDraft,

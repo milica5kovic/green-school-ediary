@@ -380,8 +380,10 @@ export class TimetableService {
     // Parallel group entries (same teacher teaching multiple combined classes at the same slot,
     // e.g. Y1+Y2 C&G with Zoran) produce duplicate rows — the unique constraint on
     // teacher_schedule (teacher_id, day_of_week, time_slot) rejects them.
+    // Also skip rows with null/missing teacher_id (FK constraint violation).
     const seenScheduleKeys = new Set();
     const deduplicatedRows = scheduleRows.filter(row => {
+      if (!row.teacher_id) return false;
       const key = `${row.teacher_id}|${row.day_of_week}|${row.time_slot}`;
       if (seenScheduleKeys.has(key)) return false;
       seenScheduleKeys.add(key);

@@ -360,6 +360,7 @@ export default function TimetableGrid({
   onSetCell,
   onDeleteCell,
   onMoveCell,
+  onMoveCells,
   onSwapCells,
   saving,
   viewMode,
@@ -430,25 +431,46 @@ export default function TimetableGrid({
     return idx >= 0 && idx < sortedSlots.length - 1 ? sortedSlots[idx + 1] : null;
   };
 
-  // Check if dropping activeEntry at [targetDay, targetSlot] is valid
-  const isValidDropTarget = (entry, targetDay, targetSlot) => {
-    if (!entry) return false;
-    const slotsToCheck = entry.is_double ? [targetSlot, targetSlot + 1] : [targetSlot];
-    for (const slot of slotsToCheck) {
-      const cellEntries = allLookup[targetDay]?.[slot] || [];
-      const otherEntries = cellEntries.filter(e => e.id !== entry.id);
-      if (otherEntries.some(e => e.teacher_id === entry.teacher_id)) return false;
-      if (otherEntries.some(e => e.class_name === entry.class_name)) return false;
+  // Get all sibling entries sharing the same cell (class+day+slot) as the given entry
+  const getSiblings = (entry) =>
+    entries.filter(e =>
+      e.id !== entry.id &&
+      e.class_name === entry.class_name &&
+      e.day_of_week === entry.day_of_week &&
+      e.slot_number === entry.slot_number
+    );
+
+  // Check if a group of entries can all move to targetDay/targetSlot (no conflicts)
+  const isValidGroupDrop = (draggedGroup, targetDay, targetSlot) => {
+    if (!draggedGroup.length) return false;
+    const draggedIds = new Set(draggedGroup.map(e => e.id));
+    for (const entry of draggedGroup) {
+      const slotsToCheck = entry.is_double ? [targetSlot, targetSlot + 1] : [targetSlot];
+      for (const slot of slotsToCheck) {
+        const others = (allLookup[targetDay]?.[slot] || []).filter(e => !draggedIds.has(e.id));
+        if (others.some(e => e.teacher_id === entry.teacher_id)) return false;
+        if (others.some(e => e.class_name === entry.class_name)) return false;
+      }
     }
     return true;
   };
 
-  // Check if two entries can be swapped (each can go to the other's slot, excluding both from conflicts)
-  const checkCanSwap = (dragged, target) => {
-    const others = entries.filter(e => e.id !== dragged.id && e.id !== target.id);
+  // For drag highlight: single-entry check (used in DroppableCell isValidDrop)
+  const isValidDropTarget = (entry, targetDay, targetSlot) => {
+    if (!entry) return false;
+    return isValidGroupDrop([entry], targetDay, targetSlot);
+  };
+
+  // Check if two groups can swap positions
+  const checkCanSwapGroups = (group1, group2) => {
+    const allIds = new Set([...group1.map(e => e.id), ...group2.map(e => e.id)]);
+    const others = entries.filter(e => !allIds.has(e.id));
+    const toDay1 = group2[0].day_of_week;
+    const toSlot1 = group2[0].slot_number;
+    const toDay2 = group1[0].day_of_week;
+    const toSlot2 = group1[0].slot_number;
     const occupies = (e, day, slot) =>
       e.day_of_week === day && (e.slot_number === slot || (e.is_double && e.slot_number === slot - 1));
-
     const conflictMsg = (moving, toDay, toSlot) => {
       const slots = moving.is_double ? [toSlot, toSlot + 1] : [toSlot];
       for (const s of slots) {
@@ -459,11 +481,14 @@ export default function TimetableGrid({
       }
       return null;
     };
-
-    const r1 = conflictMsg(dragged, target.day_of_week, target.slot_number);
-    if (r1) return { canSwap: false, reason: r1 };
-    const r2 = conflictMsg(target, dragged.day_of_week, dragged.slot_number);
-    if (r2) return { canSwap: false, reason: r2 };
+    for (const e of group1) {
+      const r = conflictMsg(e, toDay1, toSlot1);
+      if (r) return { canSwap: false, reason: r };
+    }
+    for (const e of group2) {
+      const r = conflictMsg(e, toDay2, toSlot2);
+      if (r) return { canSwap: false, reason: r };
+    }
     return { canSwap: true, reason: null };
   };
 
@@ -485,20 +510,33 @@ export default function TimetableGrid({
 
     const [targetDay, targetSlot] = over.id.toString().split('|').map(Number);
     const dragged = entries.find(e => e.id === active.id);
+    if (!dragged) return;
 
-    // Check if there's exactly one other entry in the target cell
+    // Build the full group being dragged (dragged entry + any siblings at same cell)
+    const draggedGroup = [dragged, ...getSiblings(dragged)];
+    const draggedIds = new Set(draggedGroup.map(e => e.id));
+
+    // Entries at target cell, excluding the dragged group
     const targetCellEntries = (allLookup[targetDay]?.[targetSlot] || [])
-      .filter(e => e.id !== active.id);
+      .filter(e => !draggedIds.has(e.id));
 
-    if (targetCellEntries.length === 1 && !isValidDropTarget(dragged, targetDay, targetSlot)) {
-      // Target is occupied with exactly one entry — offer a swap
-      const target = targetCellEntries[0];
-      const { canSwap, reason } = checkCanSwap(dragged, target);
-      setSwapModal({ dragged, target, canSwap, reason });
+    const isValid = isValidGroupDrop(draggedGroup, targetDay, targetSlot);
+
+    if (targetCellEntries.length > 0 && !isValid) {
+      // Target occupied — offer swap between both groups
+      const { canSwap, reason } = checkCanSwapGroups(draggedGroup, targetCellEntries);
+      setSwapModal({ draggedGroup, targetGroup: targetCellEntries, canSwap, reason });
       return;
     }
 
-    await onMoveCell(active.id, targetDay, targetSlot);
+    // Move the whole group
+    if (draggedGroup.length === 1) {
+      await onMoveCell(active.id, targetDay, targetSlot);
+    } else if (onMoveCells) {
+      await onMoveCells(draggedGroup.map(e => e.id), targetDay, targetSlot);
+    } else {
+      await onMoveCell(active.id, targetDay, targetSlot);
+    }
   };
 
   const openCell = (day, slot) => {
@@ -678,31 +716,39 @@ export default function TimetableGrid({
             </div>
 
             <div className="p-4 space-y-3">
-              {/* Visual swap: dragged ↔ target */}
+              {/* Visual swap: draggedGroup ↔ targetGroup */}
               <div className="flex items-center gap-2">
-                <div className="flex-1 p-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor(swapModal.dragged.subject) }} />
-                    <span className="font-semibold text-gray-800 truncate">{swapModal.dragged.subject}</span>
-                  </div>
-                  <div className="text-gray-500 truncate">{swapModal.dragged.class_name}</div>
-                  <div className="text-gray-400 truncate">{swapModal.dragged.teacher?.full_name}</div>
+                <div className="flex-1 p-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs space-y-1">
+                  {swapModal.draggedGroup.map(e => (
+                    <div key={e.id}>
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor(e.subject) }} />
+                        <span className="font-semibold text-gray-800 truncate">{e.subject}</span>
+                      </div>
+                      <div className="text-gray-500 truncate">{e.class_name}</div>
+                      <div className="text-gray-400 truncate">{e.teacher?.full_name}</div>
+                    </div>
+                  ))}
                   <div className="text-gray-300 mt-0.5 text-[10px]">
-                    {['Mon','Tue','Wed','Thu','Fri'][swapModal.dragged.day_of_week]} · P{swapModal.dragged.slot_number}
+                    {['Mon','Tue','Wed','Thu','Fri'][swapModal.draggedGroup[0].day_of_week]} · P{swapModal.draggedGroup[0].slot_number}
                   </div>
                 </div>
 
                 <ArrowLeftRight size={18} className="text-violet-400 flex-shrink-0" />
 
-                <div className="flex-1 p-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor(swapModal.target.subject) }} />
-                    <span className="font-semibold text-gray-800 truncate">{swapModal.target.subject}</span>
-                  </div>
-                  <div className="text-gray-500 truncate">{swapModal.target.class_name}</div>
-                  <div className="text-gray-400 truncate">{swapModal.target.teacher?.full_name}</div>
+                <div className="flex-1 p-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs space-y-1">
+                  {swapModal.targetGroup.map(e => (
+                    <div key={e.id}>
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor(e.subject) }} />
+                        <span className="font-semibold text-gray-800 truncate">{e.subject}</span>
+                      </div>
+                      <div className="text-gray-500 truncate">{e.class_name}</div>
+                      <div className="text-gray-400 truncate">{e.teacher?.full_name}</div>
+                    </div>
+                  ))}
                   <div className="text-gray-300 mt-0.5 text-[10px]">
-                    {['Mon','Tue','Wed','Thu','Fri'][swapModal.target.day_of_week]} · P{swapModal.target.slot_number}
+                    {['Mon','Tue','Wed','Thu','Fri'][swapModal.targetGroup[0].day_of_week]} · P{swapModal.targetGroup[0].slot_number}
                   </div>
                 </div>
               </div>
@@ -728,9 +774,9 @@ export default function TimetableGrid({
               {swapModal.canSwap && (
                 <button
                   onClick={async () => {
-                    const { dragged, target } = swapModal;
+                    const { draggedGroup, targetGroup } = swapModal;
                     setSwapModal(null);
-                    await onSwapCells(dragged.id, target.id);
+                    await onSwapCells(draggedGroup.map(e => e.id), targetGroup.map(e => e.id));
                   }}
                   disabled={saving}
                   className="flex-1 px-4 py-2 text-sm font-medium rounded-xl bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 transition-colors"

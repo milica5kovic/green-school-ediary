@@ -755,34 +755,64 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
         }
         if (gapSlot === null) continue;
 
-        // Look for an ISOLATED entry (only entry for this class on that day)
-        // that can be moved to (targetDay, gapSlot)
+        // Strategy 1: move an ISOLATED entry (only entry for this class on that day)
+        let movedSrc = false;
         for (const srcDay of DAYS) {
           if (srcDay === targetDay) continue;
           const srcEntries = byClassDay[`${class_name}|${srcDay}`] || [];
-          if (srcEntries.length !== 1) continue; // only move truly isolated entries
+          if (srcEntries.length !== 1) continue;
           const src = srcEntries[0];
 
           if (!isAvailable(src.teacher_id, targetDay, gapSlot)) continue;
           if (teacherBusy[targetDay][gapSlot].has(src.teacher_id)) continue;
 
-          // Move src from (srcDay, src.slot_number) → (targetDay, gapSlot)
           delete grid[srcDay][src.slot_number][class_name];
           teacherBusy[srcDay][src.slot_number].delete(src.teacher_id);
           grid[targetDay][gapSlot][class_name] = src;
           teacherBusy[targetDay][gapSlot].add(src.teacher_id);
-
-          // Mutate the placed entry in-place (placed[] holds object references)
           src.day_of_week = targetDay;
           src.slot_number = gapSlot;
-
-          // Update byClassDay so next iterations see the new state
           byClassDay[`${class_name}|${srcDay}`] = [];
           if (!byClassDay[`${class_name}|${targetDay}`]) byClassDay[`${class_name}|${targetDay}`] = [];
           byClassDay[`${class_name}|${targetDay}`].push(src);
-
           changed = true;
+          movedSrc = true;
           break;
+        }
+
+        if (movedSrc) continue;
+
+        // Strategy 2: steal from a multi-entry day only if the remaining
+        // entries on that day are still consecutive after removal.
+        for (const srcDay of DAYS) {
+          if (srcDay === targetDay) continue;
+          const srcEntries = (byClassDay[`${class_name}|${srcDay}`] || [])
+            .sort((a, b) => a.slot_number - b.slot_number);
+          if (srcEntries.length < 2) continue;
+
+          for (const src of srcEntries) {
+            const remaining = srcEntries.filter(e => e !== src);
+            const remIdxs = remaining.map(e => regularSlotNums.indexOf(e.slot_number));
+            const remMin = Math.min(...remIdxs);
+            const remMax = Math.max(...remIdxs);
+            if (remMax - remMin + 1 !== remaining.length) continue; // removing src would leave gaps
+
+            if (!isAvailable(src.teacher_id, targetDay, gapSlot)) continue;
+            if (teacherBusy[targetDay][gapSlot].has(src.teacher_id)) continue;
+
+            delete grid[srcDay][src.slot_number][class_name];
+            teacherBusy[srcDay][src.slot_number].delete(src.teacher_id);
+            grid[targetDay][gapSlot][class_name] = src;
+            teacherBusy[targetDay][gapSlot].add(src.teacher_id);
+            src.day_of_week = targetDay;
+            src.slot_number = gapSlot;
+            byClassDay[`${class_name}|${srcDay}`] = remaining;
+            if (!byClassDay[`${class_name}|${targetDay}`]) byClassDay[`${class_name}|${targetDay}`] = [];
+            byClassDay[`${class_name}|${targetDay}`].push(src);
+            changed = true;
+            break;
+          }
+          if (changed) break;
         }
       }
     }
