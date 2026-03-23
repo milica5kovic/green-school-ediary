@@ -48,8 +48,9 @@ describe('generateTimetable', () => {
   });
 
   test('places all periods for a multi-period assignment', () => {
+    // Use History (not in DOUBLE_PREFERRED_SUBJECTS) so no double-period merging occurs
     const { placed, unplaced } = generateTimetable(
-      [makeAssignment({ periods_per_week: 5 })],
+      [makeAssignment({ subject: 'History', periods_per_week: 5 })],
       SLOTS,
       []
     );

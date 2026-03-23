@@ -376,9 +376,21 @@ export class TimetableService {
       }
     });
 
+    // Deduplicate by (teacher_id, day_of_week, time_slot) before inserting.
+    // Parallel group entries (same teacher teaching multiple combined classes at the same slot,
+    // e.g. Y1+Y2 C&G with Zoran) produce duplicate rows — the unique constraint on
+    // teacher_schedule (teacher_id, day_of_week, time_slot) rejects them.
+    const seenScheduleKeys = new Set();
+    const deduplicatedRows = scheduleRows.filter(row => {
+      const key = `${row.teacher_id}|${row.day_of_week}|${row.time_slot}`;
+      if (seenScheduleKeys.has(key)) return false;
+      seenScheduleKeys.add(key);
+      return true;
+    });
+
     const { error: schedErr } = await this.supabase
       .from('teacher_schedule')
-      .insert(scheduleRows);
+      .insert(deduplicatedRows);
     if (schedErr) throw schedErr;
 
     return { published: draftEntries.length };
