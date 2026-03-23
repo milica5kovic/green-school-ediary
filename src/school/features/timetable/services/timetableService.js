@@ -159,7 +159,7 @@ export class TimetableService {
       .from('timetable_entries')
       .select(`
         *,
-        teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email)
+        teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email, user_id)
       `)
       .eq('school_id', this.schoolId)
       .eq('status', status)
@@ -197,7 +197,7 @@ export class TimetableService {
       .insert(toInsert)
       .select(`
         *,
-        teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email)
+        teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email, user_id)
       `);
     if (error) throw error;
     return data;
@@ -220,7 +220,7 @@ export class TimetableService {
     const { data, error } = await this.supabase
       .from('timetable_entries')
       .insert(toInsert)
-      .select(`*, teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email)`);
+      .select(`*, teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email, user_id)`);
     if (error) throw error;
     return data ?? [];
   }
@@ -258,7 +258,7 @@ export class TimetableService {
       }])
       .select(`
         *,
-        teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email)
+        teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email, user_id)
       `)
       .single();
     if (error) throw error;
@@ -276,7 +276,7 @@ export class TimetableService {
       .eq('status', 'draft')
       .select(`
         *,
-        teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email)
+        teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email, user_id)
       `)
       .single();
     if (error) throw error;
@@ -336,19 +336,26 @@ export class TimetableService {
       return acc;
     }, {});
 
-    // Build teacher_schedule rows — skip entries whose teacher was deleted.
-    // Use e.teacher?.id (from the join) not just e.teacher_id (raw FK value):
-    // Supabase can return {} instead of null for a broken join, and !{} is false.
+    // Build teacher_schedule rows.
+    // IMPORTANT: teacher_schedule.teacher_id stores auth.users.id, which is
+    // teachers.user_id — NOT teachers.id (the teachers table PK).
+    // Teachers who haven't signed in yet have user_id = null and are skipped.
+    const noUserIdNames = [];
     const scheduleRows = [];
     entriesToPublish.forEach(e => {
-      if (!e.teacher_id || !e.teacher?.id) return;
+      if (!e.teacher?.id) return; // teacher record was deleted
+      if (!e.teacher.user_id) {
+        // Teacher exists but hasn't linked their auth account yet
+        noUserIdNames.push(e.teacher.full_name);
+        return;
+      }
       const slot = slotMap[e.slot_number];
       const timeLabel = slot
         ? `${slot.start_time.slice(0, 5)} - ${slot.end_time.slice(0, 5)}`
         : `Period ${e.slot_number}`;
       scheduleRows.push({
         school_id: this.schoolId,
-        teacher_id: e.teacher.id,
+        teacher_id: e.teacher.user_id,
         day_of_week: DAY_NAMES[e.day_of_week],
         time_slot: timeLabel,
         class_name: e.class_name,
@@ -364,7 +371,7 @@ export class TimetableService {
           : `Period ${e.slot_number + 1}`;
         scheduleRows.push({
           school_id: this.schoolId,
-          teacher_id: e.teacher.id,
+          teacher_id: e.teacher.user_id,
           day_of_week: DAY_NAMES[e.day_of_week],
           time_slot: nextLabel,
           class_name: e.class_name,
@@ -380,6 +387,7 @@ export class TimetableService {
     const seenScheduleKeys = new Set();
     const deduplicatedRows = scheduleRows.filter(row => {
       if (!row.teacher_id) return false;
+
       const key = `${row.teacher_id}|${row.day_of_week}|${row.time_slot}`;
       if (seenScheduleKeys.has(key)) return false;
       seenScheduleKeys.add(key);
@@ -416,6 +424,11 @@ export class TimetableService {
       if (promoteErr) throw promoteErr;
     }
 
-    return { published: entriesToPublish.length };
+    const uniqueNoUserIdNames = [...new Set(noUserIdNames)];
+    return {
+      published: entriesToPublish.length,
+      synced: deduplicatedRows.length,
+      unsyncedTeachers: uniqueNoUserIdNames, // teachers without auth accounts yet
+    };
   }
 }
