@@ -421,59 +421,6 @@ export function useTimetable() {
     }
   }, [service]);
 
-  // Swap two draft entries (exchange their day+slot positions).
-  // Returns true if swap succeeded, false if a conflict prevents it.
-  const swapDraftEntries = useCallback(async (id1, id2) => {
-    const e1 = draftEntries.find(e => e.id === id1);
-    const e2 = draftEntries.find(e => e.id === id2);
-    if (!e1 || !e2) return false;
-
-    // Entries other than the two being swapped — used to check conflicts
-    const others = draftEntries.filter(e => e.id !== id1 && e.id !== id2);
-
-    const conflictsAt = (entry, targetDay, targetSlot) => {
-      const slots = entry.is_double ? [targetSlot, targetSlot + 1] : [targetSlot];
-      for (const slot of slots) {
-        if (others.some(e =>
-          e.teacher_id === entry.teacher_id &&
-          e.day_of_week === targetDay &&
-          (e.slot_number === slot || (e.is_double && e.slot_number === slot - 1))
-        )) return `${entry.teacher?.full_name || 'Teacher'} is already teaching at that slot.`;
-        if (others.some(e =>
-          e.class_name === entry.class_name &&
-          e.day_of_week === targetDay &&
-          (e.slot_number === slot || (e.is_double && e.slot_number === slot - 1))
-        )) return `${entry.class_name} already has a class at that slot.`;
-      }
-      return null;
-    };
-
-    const err1 = conflictsAt(e1, e2.day_of_week, e2.slot_number);
-    if (err1) { setError(err1); return false; }
-    const err2 = conflictsAt(e2, e1.day_of_week, e1.slot_number);
-    if (err2) { setError(err2); return false; }
-
-    setSaving(true);
-    try {
-      // Swap both rows simultaneously
-      const [upd1, upd2] = await Promise.all([
-        service.moveDraftEntry(id1, e2.day_of_week, e2.slot_number),
-        service.moveDraftEntry(id2, e1.day_of_week, e1.slot_number),
-      ]);
-      setDraftEntries(prev => prev.map(e => {
-        if (e.id === id1) return upd1;
-        if (e.id === id2) return upd2;
-        return e;
-      }));
-      return true;
-    } catch (err) {
-      setError(err.message);
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  }, [service, draftEntries]);
-
   const deleteDraftEntry = useCallback(async (id) => {
     setSaving(true);
     try {
