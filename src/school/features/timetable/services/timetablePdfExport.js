@@ -1,5 +1,5 @@
 // ============================================================
-// TIMETABLE PDF EXPORT — Landscape A4 with school logo
+// TIMETABLE PDF EXPORT — Landscape A4, multi-page support
 // ============================================================
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -37,67 +37,34 @@ async function loadImageBase64(imageUrl) {
 }
 
 /**
- * Export timetable to a portrait PDF.
- *
- * @param {Object} opts
- * @param {Array}  opts.entries       - timetable_entries (with .teacher nested)
- * @param {Array}  opts.timeSlots     - time_slots (sorted)
- * @param {string} opts.schoolName
- * @param {string} opts.logoUrl
- * @param {string} opts.primaryColor  - hex color for table header
- * @param {'all'|'class'|'teacher'} opts.filterType
- * @param {string} opts.filterValue   - class name or teacher name
- * @param {Array}  opts.teachers      - all teachers (for name lookup)
+ * Render one timetable page (header + table) into an existing jsPDF document.
  */
-export async function exportTimetablePDF({
-  entries = [],
-  timeSlots = [],
-  schoolName = 'School',
-  logoUrl = null,
-  primaryColor = '#22c55e',
-  filterType = 'all',
-  filterValue = '',
-  teachers = [],
-}) {
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const W = doc.internal.pageSize.getWidth();   // 297mm (landscape)
-  const H = doc.internal.pageSize.getHeight();  // 210mm (landscape)
+function renderTimetablePage(doc, { entries, timeSlots, schoolName, logoData, primaryColor, subtitle, filterType }) {
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
   const headerRgb = hexToRgb(primaryColor);
 
-  // ---- Header ----
-  let headerTopY = 10;
-
-  const logoData = await loadImageBase64(logoUrl);
+  // Header
+  const headerTopY = 10;
   if (logoData) {
     const maxH = 18;
     const ratio = logoData.width / logoData.height;
     const logoW = Math.min(maxH * ratio, 40);
     doc.addImage(logoData.data, 'PNG', 10, 8, logoW, maxH);
   }
-
-  // School name — centered
   doc.setFontSize(15);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(20, 20, 20);
   doc.text(schoolName, W / 2, headerTopY + 6, { align: 'center' });
-
-  // Subtitle
-  let subtitle = 'School Timetable';
-  if (filterType === 'class' && filterValue) subtitle = `Class Timetable — ${filterValue}`;
-  if (filterType === 'teacher' && filterValue) subtitle = `Teacher Timetable — ${filterValue}`;
-
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(80, 80, 80);
   doc.text(subtitle, W / 2, headerTopY + 13, { align: 'center' });
 
   const tableStartY = headerTopY + 20;
-
-  // ---- Build table ----
   const sortedSlots = [...timeSlots].sort((a, b) => a.slot_number - b.slot_number);
-  const teacherMap = teachers.reduce((acc, t) => { acc[t.id] = t; return acc; }, {});
 
-  // Lookup: lookup[day][slot_number] = array of entries
+  // Build lookup
   const lookup = {};
   DAYS.forEach(d => {
     lookup[d] = {};
@@ -110,12 +77,10 @@ export async function exportTimetablePDF({
   });
 
   const head = [['Period / Time', ...DAY_NAMES]];
-
   const body = sortedSlots.map(slot => {
     const periodLabel =
       `${slot.label || `Period ${slot.slot_number}`}\n` +
       `${slot.start_time.slice(0, 5)} – ${slot.end_time.slice(0, 5)}`;
-
     const row = [periodLabel];
     DAYS.forEach(day => {
       const cellEntries = lookup[day][slot.slot_number] || [];
@@ -123,12 +88,11 @@ export async function exportTimetablePDF({
         row.push('');
       } else {
         const lines = cellEntries.map(e => {
-          const teacherName =
-            e.teacher?.full_name || teacherMap[e.teacher_id]?.full_name || '';
-          const doubleMarker = e.is_double ? ' ×2' : '';
-          if (filterType === 'class') return `${e.subject}${doubleMarker}\n${teacherName}`;
-          if (filterType === 'teacher') return `${e.class_name} • ${e.subject}${doubleMarker}`;
-          return `${e.class_name}: ${e.subject}${doubleMarker}`;
+          const teacherName = e.teacher?.full_name || '';
+          const dbl = e.is_double ? ' ×2' : '';
+          if (filterType === 'class') return `${e.subject}${dbl}\n${teacherName}`;
+          if (filterType === 'teacher') return `${e.class_name} • ${e.subject}${dbl}`;
+          return `${e.class_name}: ${e.subject}${dbl}\n${teacherName}`;
         });
         row.push(lines.join('\n'));
       }
@@ -156,12 +120,7 @@ export async function exportTimetablePDF({
       textColor: [30, 30, 30],
     },
     columnStyles: {
-      0: {
-        cellWidth: 32,
-        fontStyle: 'bold',
-        halign: 'center',
-        fillColor: [245, 247, 245],
-      },
+      0: { cellWidth: 32, fontStyle: 'bold', halign: 'center', fillColor: [245, 247, 245] },
       1: { halign: 'center' },
       2: { halign: 'center' },
       3: { halign: 'center' },
@@ -178,21 +137,111 @@ export async function exportTimetablePDF({
     },
   });
 
-  // ---- Footer ----
-  const pageCount = doc.internal.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.setFontSize(7);
-    doc.setTextColor(190, 190, 190);
-    doc.text(`${schoolName}  ·  Green School Ediary`, W / 2, H - 5, { align: 'center' });
+  // Footer
+  doc.setFontSize(7);
+  doc.setTextColor(190, 190, 190);
+  doc.text(`${schoolName}  ·  Green School Ediary`, W / 2, H - 5, { align: 'center' });
+}
+
+/**
+ * Export timetable to PDF.
+ *
+ * filterType: 'class' | 'teacher' | 'all'
+ * filterValue: specific class name or teacher ID, or '' for all
+ *
+ * When filterValue is '' (showing all), generates one page per class or teacher.
+ * When filterValue is set, generates a single page for that entity.
+ */
+export async function exportTimetablePDF({
+  entries = [],
+  timeSlots = [],
+  schoolName = 'School',
+  logoUrl = null,
+  primaryColor = '#22c55e',
+  filterType = 'all',
+  filterValue = '',
+  teachers = [],
+  classes = [],
+}) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const logoData = await loadImageBase64(logoUrl);
+  const teacherMap = teachers.reduce((acc, t) => { acc[t.id] = t; return acc; }, {});
+
+  // Build the list of "pages" to render
+  let pages = [];
+
+  if (filterType === 'teacher' && filterValue) {
+    // Single teacher
+    const teacher = teacherMap[filterValue];
+    pages = [{
+      entries: entries.filter(e => e.teacher_id === filterValue),
+      subtitle: `Teacher Timetable — ${teacher?.full_name || filterValue}`,
+    }];
+  } else if (filterType === 'teacher' && !filterValue) {
+    // All teachers — one page each
+    pages = [...teachers]
+      .sort((a, b) => a.full_name.localeCompare(b.full_name))
+      .map(t => ({
+        entries: entries.filter(e => e.teacher_id === t.id),
+        subtitle: `Teacher Timetable — ${t.full_name}`,
+      }))
+      .filter(p => p.entries.length > 0);
+  } else if (filterType === 'class' && filterValue) {
+    // Single class
+    pages = [{
+      entries: entries.filter(e => e.class_name === filterValue),
+      subtitle: `Class Timetable — ${filterValue}`,
+    }];
+  } else if (filterType === 'class' && !filterValue) {
+    // All classes — one page each
+    const sortedClasses = [...classes].sort();
+    pages = sortedClasses
+      .map(c => ({
+        entries: entries.filter(e => e.class_name === c),
+        subtitle: `Class Timetable — ${c}`,
+      }))
+      .filter(p => p.entries.length > 0);
+  } else {
+    // 'all' — single overview page
+    pages = [{ entries, subtitle: 'Complete School Timetable' }];
   }
 
-  // ---- Save ----
-  const safeName = filterValue?.replace(/\s+/g, '-') || '';
+  if (pages.length === 0) {
+    pages = [{ entries: [], subtitle: 'No timetable data found' }];
+  }
+
+  // Render pages
+  for (let i = 0; i < pages.length; i++) {
+    if (i > 0) doc.addPage();
+    renderTimetablePage(doc, {
+      entries: pages[i].entries,
+      timeSlots,
+      schoolName,
+      logoData,
+      primaryColor,
+      subtitle: pages[i].subtitle,
+      filterType,
+    });
+  }
+
+  // Add page numbers if multiple pages
+  if (pages.length > 1) {
+    const totalPages = doc.internal.getNumberOfPages();
+    const W = doc.internal.pageSize.getWidth();
+    const H = doc.internal.pageSize.getHeight();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(7);
+      doc.setTextColor(190, 190, 190);
+      doc.text(`Page ${i} of ${totalPages}`, W - 15, H - 5, { align: 'right' });
+    }
+  }
+
+  // Save
+  const safeName = filterValue?.replace(/\s+/g, '-') || 'all';
   const filename =
     filterType === 'class'   ? `timetable-class-${safeName}.pdf` :
     filterType === 'teacher' ? `timetable-teacher-${safeName}.pdf` :
                                `timetable-all.pdf`;
-
   doc.save(filename);
 }

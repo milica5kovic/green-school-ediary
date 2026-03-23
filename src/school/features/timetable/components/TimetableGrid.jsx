@@ -370,10 +370,17 @@ export default function TimetableGrid({
   onSwapCells,
   saving,
   viewMode,
+  onFilterChange,
 }) {
   const { primaryColor } = useBranding();
   const [filterType, setFilterType] = useState('class');
   const [filterValue, setFilterValue] = useState('');
+
+  const updateFilter = (type, value) => {
+    setFilterType(type);
+    setFilterValue(value);
+    onFilterChange?.({ type, value });
+  };
   const [modalState, setModalState] = useState(null);
   const [swapModal, setSwapModal] = useState(null); // { draggedGroup, targetGroup }
   const [activeEntry, setActiveEntry] = useState(null); // entry being dragged
@@ -603,7 +610,7 @@ export default function TimetableGrid({
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <div className="flex bg-gray-100 rounded-xl p-1">
             {['class', 'teacher', 'all'].map(type => (
-              <button key={type} onClick={() => { setFilterType(type); setFilterValue(''); }}
+              <button key={type} onClick={() => updateFilter(type, '')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
                   filterType === type ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'
                 }`}>
@@ -613,7 +620,7 @@ export default function TimetableGrid({
           </div>
 
           {filterType !== 'all' && (
-            <select value={filterValue} onChange={e => setFilterValue(e.target.value)}
+            <select value={filterValue} onChange={e => updateFilter(filterType, e.target.value)}
               className="px-3 py-2 text-sm border border-gray-300 rounded-xl focus:outline-none">
               <option value="">— Show all —</option>
               {filterOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}

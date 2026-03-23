@@ -43,8 +43,7 @@ export default function TimetableMakerPage() {
   const [exportingDuties, setExportingDuties] = useState(false);
   const [genSeed, setGenSeed] = useState(0);
 
-  // PDF export state
-  const [pdfFilter, setPdfFilter] = useState({ type: 'all', value: '' });
+  const [gridFilter, setGridFilter] = useState({ type: 'class', value: '' });
 
   // ---- Derived ----
   const hasDraft = tt.draftEntries.length > 0;
@@ -70,16 +69,16 @@ export default function TimetableMakerPage() {
 
   const handleExportPDF = async () => {
     const exportEntries = viewMode === 'draft' ? tt.draftEntries : tt.publishedEntries;
-    const filterTeacher = tt.teachers.find(t => t.id === pdfFilter.value);
     await exportTimetablePDF({
       entries: exportEntries,
       timeSlots: tt.timeSlots,
       schoolName,
       logoUrl,
       primaryColor,
-      filterType: pdfFilter.type,
-      filterValue: pdfFilter.type === 'teacher' ? filterTeacher?.full_name : pdfFilter.value,
+      filterType: gridFilter.type,
+      filterValue: gridFilter.value,
       teachers: tt.teachers,
+      classes: tt.classes,
     });
   };
 
@@ -406,29 +405,16 @@ export default function TimetableMakerPage() {
                 </div>
               )}
 
-              {/* Export PDF */}
+              {/* Export PDF — uses current grid filter */}
               {(hasDraft || hasPublished) && (
                 <div className="flex items-center gap-2 ml-auto">
-                  <select
-                    value={`${pdfFilter.type}:${pdfFilter.value}`}
-                    onChange={e => {
-                      const [type, ...rest] = e.target.value.split(':');
-                      setPdfFilter({ type, value: rest.join(':') });
-                    }}
-                    className="text-xs px-2 py-1.5 border border-gray-300 rounded-lg"
-                  >
-                    <option value="all:">All classes</option>
-                    <optgroup label="By Class">
-                      {tt.classes.map(c => (
-                        <option key={c} value={`class:${c}`}>Class {c}</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="By Teacher">
-                      {tt.teachers.map(t => (
-                        <option key={t.id} value={`teacher:${t.id}`}>{t.full_name}</option>
-                      ))}
-                    </optgroup>
-                  </select>
+                  <span className="text-xs text-gray-400">
+                    {gridFilter.type === 'all'
+                      ? 'Exporting: full timetable'
+                      : gridFilter.value
+                        ? `Exporting: ${gridFilter.type === 'teacher' ? tt.teachers.find(t => t.id === gridFilter.value)?.full_name : gridFilter.value}`
+                        : `Exporting: all ${gridFilter.type === 'teacher' ? 'teachers' : 'classes'}`}
+                  </span>
                   <button
                     onClick={handleExportPDF}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border-2 transition-colors"
@@ -454,6 +440,7 @@ export default function TimetableMakerPage() {
               onMoveCell={tt.moveDraftEntry}
               onMoveCells={tt.moveDraftGroup}
               onSwapCells={tt.swapDraftEntries}
+              onFilterChange={setGridFilter}
               saving={tt.saving}
               viewMode={viewMode}
             />
