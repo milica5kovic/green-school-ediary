@@ -33,6 +33,18 @@ const AFTER_SCHOOL_SLOTS = new Set([7]);
 // even with gaps, is always preferred over using an after-school slot.
 const AFTER_SCHOOL_PENALTY = 2000;
 
+/** Deterministic Fisher-Yates shuffle using an integer seed. */
+function shuffleDeterministic(arr, seed) {
+  const result = [...arr];
+  let s = (seed + 1) * 1664525 + 1013904223;
+  for (let i = result.length - 1; i > 0; i--) {
+    s = (Math.imul(s, 1664525) + 1013904223) | 0;
+    const j = ((s >>> 0) % (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
 /**
  * Generate a timetable from assignments, time slots and availability.
  *
@@ -40,11 +52,12 @@ const AFTER_SCHOOL_PENALTY = 2000;
  * @param {Array} timeSlots      - time_slots rows (sorted by slot_number)
  * @param {Array} availabilityRecords - teacher_availability rows (is_available=false = blocked)
  * @param {Array} lockedEntries  - existing timetable entries to treat as fixed (Fill Gaps mode)
+ * @param {number} seed          - integer seed for deterministic jitter (0 = no jitter)
  * @returns {{ placed: Array, unplaced: Array }}
  *   placed  — entries ready to be saved as draft (no id yet)
  *   unplaced — tasks that could not be scheduled (conflicts/not enough slots)
  */
-export function generateTimetable(assignments, timeSlots, availabilityRecords, lockedEntries = []) {
+export function generateTimetable(assignments, timeSlots, availabilityRecords, lockedEntries = [], seed = 0) {
   const slotNumbers = timeSlots.map(s => s.slot_number).sort((a, b) => a - b);
 
   // Regular slots (P1–P6) vs after-school (slot 7+)
@@ -194,7 +207,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     if (slotIdx < minOcc) gaps = minOcc - slotIdx - 1;       // placing before current range
     else if (slotIdx > maxOcc) gaps = slotIdx - maxOcc - 1;  // placing after current range
     // placing inside the range (filling a gap) → penalty = 0 (encouraged)
-    return gaps * 80;
+    return gaps * 200;
   };
 
   // For double classes, take the larger gap of the two slots
@@ -402,9 +415,21 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     return (b.periods_per_week || 0) - (a.periods_per_week || 0);
   };
 
-  cgTasks.sort(taskSortFn);
-  doubleTasks.sort(taskSortFn);
-  singleTasks.sort(taskSortFn);
+  // When seed > 0 add a tiny deterministic jitter so each regenerate attempt
+  // explores a different (but equally constrained) ordering.
+  const jitter = seed > 0
+    ? (idx) => (Math.sin(seed * 9301 + idx * 49297 + 12345) * 0.4)
+    : () => 0;
+
+  const makeJitteredSort = (arr) => arr.sort((a, b) => {
+    const base = taskSortFn(a, b);
+    if (base !== 0) return base;
+    return jitter(arr.indexOf(a)) - jitter(arr.indexOf(b));
+  });
+
+  makeJitteredSort(cgTasks);
+  makeJitteredSort(doubleTasks);
+  makeJitteredSort(singleTasks);
 
   // ---- Process C&G tasks FIRST (most slot-restricted: P1 or P6 only) ----
   // Must run before doubles so English/ESL doubles don't claim P1+P2 or P5+P6
@@ -704,45 +729,48 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
   }
 
   // ============================================================
-  // POST-PROCESS: compact gaps in each class's daily schedule.
+  // POST-PROCESS: compact gaps — unified, includes parallel groups
   //
-  // The greedy pass sometimes leaves a class with e.g. P1 and P5 on Monday
-  // (gap at P2-P4) because the teachers for those subjects were busy at the
-  // adjacent slots (teaching other year groups) when the algorithm ran.
+  // For each class on each day that has a gap between its entries:
+  //   Try to find an entry for that class on a DIFFERENT day that:
+  //     a) Is NOT a double-period entry (those are locked as pairs)
+  //     b) If parallel group → all siblings move together
+  //     c) After removal, that day's remaining entries are still compact
+  //     d) The teacher(s) are free at the gap slot on the target day
   //
-  // Strategy: look for entries that sit in ISOLATION (the only entry for that
-  // class on their day).  If the teacher is free at a gap slot on a day where
-  // the class already has other entries, move the isolated entry there.
-  // This fills the gap without introducing new gaps elsewhere (the source day
-  // simply becomes empty — not a problem).
-  //
-  // We skip doubles, C&G (slot-restricted), and parallel-group entries
-  // (re-timing these would desync the group).
+  // Run up to 10 passes until no more moves are possible.
   // ============================================================
-  for (let pass = 0; pass < 4; pass++) {
+  for (let pass = 0; pass < 10; pass++) {
     let changed = false;
 
-    // Group non-double, non-CG, non-parallel placed entries by (class, day)
-    const byClassDay = {};
-    placed.forEach(p => {
-      if (p.is_double) return;
-      if (p.parallel_group) return;
-      if (CG_SUBJECTS.has(p.subject)) return;
-      if (AFTER_SCHOOL_SLOTS.has(p.slot_number)) return;
-      const key = `${p.class_name}|${p.day_of_week}`;
-      if (!byClassDay[key]) byClassDay[key] = [];
-      byClassDay[key].push(p);
-    });
+    // Build (class, day) → entries index (refresh each pass)
+    const buildIdx = () => {
+      const idx = {};
+      for (const p of placed) {
+        const key = `${p.class_name}|${p.day_of_week}`;
+        if (!idx[key]) idx[key] = [];
+        idx[key].push(p);
+      }
+      return idx;
+    };
+    const byClassDay = buildIdx();
 
     for (const class_name of new Set(placed.map(p => p.class_name))) {
-      // Find days where this class has a gap (at least 2 entries, non-consecutive)
+      if (changed) break; // restart pass after any move
+
       for (const targetDay of DAYS) {
+        if (changed) break;
+
+        // All entries for this class on targetDay (non-double, regular slots)
         const dayEntries = (byClassDay[`${class_name}|${targetDay}`] || [])
+          .filter(p => !p.is_double && !AFTER_SCHOOL_SLOTS.has(p.slot_number))
           .sort((a, b) => a.slot_number - b.slot_number);
+
         if (dayEntries.length < 2) continue;
 
-        const minIdx = regularSlotNums.indexOf(dayEntries[0].slot_number);
-        const maxIdx = regularSlotNums.indexOf(dayEntries[dayEntries.length - 1].slot_number);
+        const idxOf = (slot) => regularSlotNums.indexOf(slot);
+        const minIdx = idxOf(dayEntries[0].slot_number);
+        const maxIdx = idxOf(dayEntries[dayEntries.length - 1].slot_number);
         if (maxIdx - minIdx + 1 === dayEntries.length) continue; // already compact
 
         // Find the first gap slot
@@ -755,64 +783,58 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
         }
         if (gapSlot === null) continue;
 
-        // Strategy 1: move an ISOLATED entry (only entry for this class on that day)
-        let movedSrc = false;
+        // Try to fill gapSlot by moving an entry from another day
         for (const srcDay of DAYS) {
-          if (srcDay === targetDay) continue;
-          const srcEntries = byClassDay[`${class_name}|${srcDay}`] || [];
-          if (srcEntries.length !== 1) continue;
-          const src = srcEntries[0];
+          if (srcDay === targetDay || changed) continue;
 
-          if (!isAvailable(src.teacher_id, targetDay, gapSlot)) continue;
-          if (teacherBusy[targetDay][gapSlot].has(src.teacher_id)) continue;
+          const srcAllEntries = (byClassDay[`${class_name}|${srcDay}`] || [])
+            .filter(p => !p.is_double && !AFTER_SCHOOL_SLOTS.has(p.slot_number));
 
-          delete grid[srcDay][src.slot_number][class_name];
-          teacherBusy[srcDay][src.slot_number].delete(src.teacher_id);
-          grid[targetDay][gapSlot][class_name] = src;
-          teacherBusy[targetDay][gapSlot].add(src.teacher_id);
-          src.day_of_week = targetDay;
-          src.slot_number = gapSlot;
-          byClassDay[`${class_name}|${srcDay}`] = [];
-          if (!byClassDay[`${class_name}|${targetDay}`]) byClassDay[`${class_name}|${targetDay}`] = [];
-          byClassDay[`${class_name}|${targetDay}`].push(src);
-          changed = true;
-          movedSrc = true;
-          break;
-        }
+          for (const src of srcAllEntries) {
+            // Find siblings (same parallel_group, same day, same slot)
+            const siblings = src.parallel_group
+              ? placed.filter(p =>
+                  p !== src &&
+                  p.parallel_group === src.parallel_group &&
+                  p.day_of_week === srcDay &&
+                  p.slot_number === src.slot_number
+                )
+              : [];
+            const allToMove = [src, ...siblings];
 
-        if (movedSrc) continue;
+            // Check that removing src leaves this class's entries on srcDay compact
+            const remaining = srcAllEntries.filter(e => e !== src);
+            if (remaining.length >= 2) {
+              const remIdxs = remaining
+                .map(e => idxOf(e.slot_number))
+                .filter(i => i >= 0)
+                .sort((a, b) => a - b);
+              const remMin = remIdxs[0], remMax = remIdxs[remIdxs.length - 1];
+              if (remMax - remMin + 1 !== remIdxs.length) continue; // would leave a gap
+            }
 
-        // Strategy 2: steal from a multi-entry day only if the remaining
-        // entries on that day are still consecutive after removal.
-        for (const srcDay of DAYS) {
-          if (srcDay === targetDay) continue;
-          const srcEntries = (byClassDay[`${class_name}|${srcDay}`] || [])
-            .sort((a, b) => a.slot_number - b.slot_number);
-          if (srcEntries.length < 2) continue;
+            // Check all allToMove can go to (targetDay, gapSlot)
+            if (!allToMove.every(p => isAvailable(p.teacher_id, targetDay, gapSlot))) continue;
+            if (allToMove.some(p => teacherBusy[targetDay][gapSlot].has(p.teacher_id))) continue;
 
-          for (const src of srcEntries) {
-            const remaining = srcEntries.filter(e => e !== src);
-            const remIdxs = remaining.map(e => regularSlotNums.indexOf(e.slot_number));
-            const remMin = Math.min(...remIdxs);
-            const remMax = Math.max(...remIdxs);
-            if (remMax - remMin + 1 !== remaining.length) continue; // removing src would leave gaps
+            // Perform the move
+            for (const p of allToMove) {
+              delete grid[srcDay][p.slot_number][p.class_name];
+              teacherBusy[srcDay][p.slot_number].delete(p.teacher_id);
+              grid[targetDay][gapSlot][p.class_name] = p;
+              teacherBusy[targetDay][gapSlot].add(p.teacher_id);
+              p.day_of_week = targetDay;
+              p.slot_number = gapSlot;
+            }
 
-            if (!isAvailable(src.teacher_id, targetDay, gapSlot)) continue;
-            if (teacherBusy[targetDay][gapSlot].has(src.teacher_id)) continue;
-
-            delete grid[srcDay][src.slot_number][class_name];
-            teacherBusy[srcDay][src.slot_number].delete(src.teacher_id);
-            grid[targetDay][gapSlot][class_name] = src;
-            teacherBusy[targetDay][gapSlot].add(src.teacher_id);
-            src.day_of_week = targetDay;
-            src.slot_number = gapSlot;
+            // Update index
             byClassDay[`${class_name}|${srcDay}`] = remaining;
             if (!byClassDay[`${class_name}|${targetDay}`]) byClassDay[`${class_name}|${targetDay}`] = [];
             byClassDay[`${class_name}|${targetDay}`].push(src);
+
             changed = true;
             break;
           }
-          if (changed) break;
         }
       }
     }

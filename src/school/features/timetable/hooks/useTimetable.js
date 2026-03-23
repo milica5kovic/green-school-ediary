@@ -209,7 +209,29 @@ export function useTimetable() {
   // ============================================================
   // DRAFT MANAGEMENT
   // ============================================================
-  const autoGenerate = useCallback(async () => {
+  // Count gap slots across all class-day combos (lower = better schedule)
+  const countGapSlots = (placed) => {
+    const regularSlots = timeSlots
+      .map(s => s.slot_number)
+      .filter(s => s < 7)
+      .sort((a, b) => a - b);
+    let gaps = 0;
+    const classes = [...new Set(placed.map(p => p.class_name))];
+    for (const cls of classes) {
+      for (let day = 0; day < 5; day++) {
+        const idxs = placed
+          .filter(p => p.class_name === cls && p.day_of_week === day && !p.is_double && p.slot_number < 7)
+          .map(p => regularSlots.indexOf(p.slot_number))
+          .filter(i => i >= 0)
+          .sort((a, b) => a - b);
+        if (idxs.length < 2) continue;
+        gaps += (idxs[idxs.length - 1] - idxs[0] + 1) - idxs.length;
+      }
+    }
+    return gaps;
+  };
+
+  const autoGenerate = useCallback(async (seed = 0) => {
     if (assignments.length === 0) {
       setError('Add teacher assignments before generating.');
       return;
@@ -221,10 +243,17 @@ export function useTimetable() {
     setGenerating(true);
     setError(null);
     try {
-      const { placed, unplaced } = generateTimetable(assignments, timeSlots, availabilityRecords);
+      // Try 3 seeds, pick the result with fewest unplaced then fewest gaps
+      let best = null;
+      let bestScore = Infinity;
+      for (let s = seed; s < seed + 3; s++) {
+        const result = generateTimetable(assignments, timeSlots, availabilityRecords, [], s);
+        const score = result.unplaced.length * 10000 + countGapSlots(result.placed);
+        if (score < bestScore) { bestScore = score; best = result; }
+      }
+      const { placed, unplaced } = best;
       const saved = await service.saveDraftEntries(placed);
       setDraftEntries(saved);
-      // Enrich unplaced tasks with teacher name for display
       const enriched = unplaced.map(t => ({
         ...t,
         teacherName: teachers.find(tc => tc.id === t.teacher_id)?.full_name || t.teacher_id,
@@ -235,7 +264,7 @@ export function useTimetable() {
     } finally {
       setGenerating(false);
     }
-  }, [service, assignments, timeSlots, availabilityRecords]);
+  }, [service, assignments, timeSlots, availabilityRecords, teachers]);
 
   const fillGaps = useCallback(async () => {
     if (!assignments.length || !timeSlots.length) return;

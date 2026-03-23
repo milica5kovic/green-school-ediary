@@ -41,6 +41,7 @@ export default function TimetableMakerPage() {
   const [clearConfirm, setClearConfirm] = useState(false);
   const [publishResult, setPublishResult] = useState(null);
   const [exportingDuties, setExportingDuties] = useState(false);
+  const [genSeed, setGenSeed] = useState(0);
 
   // PDF export state
   const [pdfFilter, setPdfFilter] = useState({ type: 'all', value: '' });
@@ -325,7 +326,7 @@ export default function TimetableMakerPage() {
 
               {/* Auto-generate */}
               <button
-                onClick={tt.autoGenerate}
+                onClick={() => { setGenSeed(0); tt.autoGenerate(0); }}
                 disabled={tt.generating || tt.assignments.length === 0}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl text-white transition-opacity disabled:opacity-50"
                 style={{ backgroundColor: primaryColor }}
@@ -333,6 +334,20 @@ export default function TimetableMakerPage() {
                 <Zap size={15} />
                 {tt.generating ? 'Generating…' : 'Auto-Generate'}
               </button>
+
+              {/* Regenerate — tries a different seed to explore alternative schedules */}
+              {hasDraft && (
+                <button
+                  onClick={() => { const s = genSeed + 3; setGenSeed(s); tt.autoGenerate(s); }}
+                  disabled={tt.generating || tt.assignments.length === 0}
+                  title={`Try a different schedule order (attempt ${Math.floor(genSeed / 3) + 2})`}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border-2 transition-opacity disabled:opacity-50"
+                  style={{ borderColor: primaryColor, color: primaryColor }}
+                >
+                  <RefreshCw size={15} />
+                  Regenerate
+                </button>
+              )}
 
               {/* Fill Gaps */}
               <button
