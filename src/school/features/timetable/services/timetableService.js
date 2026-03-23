@@ -307,27 +307,28 @@ export class TimetableService {
   }
 
   // Publish: draft → published + sync to teacher_schedule
+  //
+  // IMPORTANT ordering: teacher_schedule insert happens BEFORE promoting draft→published.
+  // If the insert fails (e.g. FK violation), entries remain as draft so the user can retry.
+  // Previously the promotion ran first, leaving entries stuck as published with no schedule.
   async publishTimetable(timeSlots) {
     this._require();
 
+    // Fetch draft entries WITH teacher join so we can guard deleted teachers
     const draftEntries = await this.getTimetableEntries('draft');
 
-    // Clear old published entries
-    await this.supabase
-      .from('timetable_entries')
-      .delete()
-      .eq('school_id', this.schoolId)
-      .eq('status', 'published');
-
-    if (draftEntries.length === 0) return { published: 0 };
-
-    // Promote draft → published
-    const { error: promoteErr } = await this.supabase
-      .from('timetable_entries')
-      .update({ status: 'published', updated_at: new Date().toISOString() })
-      .eq('school_id', this.schoolId)
-      .eq('status', 'draft');
-    if (promoteErr) throw promoteErr;
+    // If draft is empty, also check if entries are stuck in published state
+    // (this happens when a previous publish promoted draft→published but teacher_schedule insert failed)
+    let entriesToPublish = draftEntries;
+    if (draftEntries.length === 0) {
+      const published = await this.getTimetableEntries('published');
+      if (published.length > 0) {
+        // Re-sync teacher_schedule from the already-published entries
+        entriesToPublish = published;
+      } else {
+        return { published: 0 };
+      }
+    }
 
     // Build slot lookup: slot_number → slot data
     const slotMap = timeSlots.reduce((acc, s) => {
@@ -335,18 +336,11 @@ export class TimetableService {
       return acc;
     }, {});
 
-    // Sync to teacher_schedule (wipe + re-insert)
-    await this.supabase
-      .from('teacher_schedule')
-      .delete()
-      .eq('school_id', this.schoolId);
-
+    // Build teacher_schedule rows — skip entries whose teacher was deleted.
+    // Use e.teacher?.id (from the join) not just e.teacher_id (raw FK value):
+    // Supabase can return {} instead of null for a broken join, and !{} is false.
     const scheduleRows = [];
-    draftEntries.forEach(e => {
-      // Skip entries whose teacher no longer exists in the teachers table
-      // (teacher was deleted after the entry was created — would violate FK constraint).
-      // Check e.teacher?.id (not just e.teacher) because Supabase may return {} instead of null
-      // for a broken join — {} is truthy so !e.teacher alone won't catch it.
+    entriesToPublish.forEach(e => {
       if (!e.teacher_id || !e.teacher?.id) return;
       const slot = slotMap[e.slot_number];
       const timeLabel = slot
@@ -354,7 +348,7 @@ export class TimetableService {
         : `Period ${e.slot_number}`;
       scheduleRows.push({
         school_id: this.schoolId,
-        teacher_id: e.teacher_id,
+        teacher_id: e.teacher.id,
         day_of_week: DAY_NAMES[e.day_of_week],
         time_slot: timeLabel,
         class_name: e.class_name,
@@ -370,7 +364,7 @@ export class TimetableService {
           : `Period ${e.slot_number + 1}`;
         scheduleRows.push({
           school_id: this.schoolId,
-          teacher_id: e.teacher_id,
+          teacher_id: e.teacher.id,
           day_of_week: DAY_NAMES[e.day_of_week],
           time_slot: nextLabel,
           class_name: e.class_name,
@@ -381,11 +375,8 @@ export class TimetableService {
       }
     });
 
-    // Deduplicate by (teacher_id, day_of_week, time_slot) before inserting.
-    // Parallel group entries (same teacher teaching multiple combined classes at the same slot,
-    // e.g. Y1+Y2 C&G with Zoran) produce duplicate rows — the unique constraint on
-    // teacher_schedule (teacher_id, day_of_week, time_slot) rejects them.
-    // Also skip rows with null/missing teacher_id (FK constraint violation).
+    // Deduplicate by (teacher_id, day_of_week, time_slot).
+    // Parallel group entries (same teacher, multiple classes, same slot) produce duplicates.
     const seenScheduleKeys = new Set();
     const deduplicatedRows = scheduleRows.filter(row => {
       if (!row.teacher_id) return false;
@@ -395,11 +386,36 @@ export class TimetableService {
       return true;
     });
 
-    const { error: schedErr } = await this.supabase
+    // Step 1: wipe + re-insert teacher_schedule FIRST.
+    // If this fails the draft entries are still draft and the user can retry.
+    await this.supabase
       .from('teacher_schedule')
-      .insert(deduplicatedRows);
-    if (schedErr) throw schedErr;
+      .delete()
+      .eq('school_id', this.schoolId);
 
-    return { published: draftEntries.length };
+    if (deduplicatedRows.length > 0) {
+      const { error: schedErr } = await this.supabase
+        .from('teacher_schedule')
+        .insert(deduplicatedRows);
+      if (schedErr) throw schedErr;
+    }
+
+    // Step 2: only promote draft→published after teacher_schedule succeeded.
+    if (draftEntries.length > 0) {
+      await this.supabase
+        .from('timetable_entries')
+        .delete()
+        .eq('school_id', this.schoolId)
+        .eq('status', 'published');
+
+      const { error: promoteErr } = await this.supabase
+        .from('timetable_entries')
+        .update({ status: 'published', updated_at: new Date().toISOString() })
+        .eq('school_id', this.schoolId)
+        .eq('status', 'draft');
+      if (promoteErr) throw promoteErr;
+    }
+
+    return { published: entriesToPublish.length };
   }
 }
