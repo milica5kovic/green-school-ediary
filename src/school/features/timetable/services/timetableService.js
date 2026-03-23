@@ -344,8 +344,10 @@ export class TimetableService {
     const scheduleRows = [];
     draftEntries.forEach(e => {
       // Skip entries whose teacher no longer exists in the teachers table
-      // (teacher was deleted after the entry was created — would violate FK constraint)
-      if (!e.teacher_id || !e.teacher) return;
+      // (teacher was deleted after the entry was created — would violate FK constraint).
+      // Check e.teacher?.id (not just e.teacher) because Supabase may return {} instead of null
+      // for a broken join — {} is truthy so !e.teacher alone won't catch it.
+      if (!e.teacher_id || !e.teacher?.id) return;
       const slot = slotMap[e.slot_number];
       const timeLabel = slot
         ? `${slot.start_time.slice(0, 5)} - ${slot.end_time.slice(0, 5)}`

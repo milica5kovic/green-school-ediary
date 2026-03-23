@@ -44,27 +44,30 @@ function renderTimetablePage(doc, { entries, timeSlots, schoolName, logoData, pr
   const H = doc.internal.pageSize.getHeight();
   const headerRgb = hexToRgb(primaryColor);
 
-  // Header
-  const headerTopY = 10;
+  // Header bar
+  const headerTopY = 8;
+  doc.setFillColor(...headerRgb);
+  doc.rect(0, 0, W, 28, 'F');
+
   if (logoData) {
     const maxH = 18;
     const ratio = logoData.width / logoData.height;
     const logoW = Math.min(maxH * ratio, 40);
-    doc.addImage(logoData.data, 'PNG', 10, 8, logoW, maxH);
+    doc.addImage(logoData.data, 'PNG', 10, (28 - maxH) / 2, logoW, maxH);
   }
-  doc.setFontSize(15);
+  doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(20, 20, 20);
+  doc.setTextColor(255, 255, 255);
   doc.text(schoolName, W / 2, headerTopY + 6, { align: 'center' });
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(80, 80, 80);
-  doc.text(subtitle, W / 2, headerTopY + 13, { align: 'center' });
+  doc.setTextColor(220, 240, 228);
+  doc.text(subtitle, W / 2, headerTopY + 14, { align: 'center' });
 
-  const tableStartY = headerTopY + 20;
+  const tableStartY = 32;
   const sortedSlots = [...timeSlots].sort((a, b) => a.slot_number - b.slot_number);
 
-  // Build lookup
+  // Build lookup — double-period entries appear in both their slot and the next slot
   const lookup = {};
   DAYS.forEach(d => {
     lookup[d] = {};
@@ -73,6 +76,13 @@ function renderTimetablePage(doc, { entries, timeSlots, schoolName, logoData, pr
   entries.forEach(e => {
     if (lookup[e.day_of_week]?.[e.slot_number] !== undefined) {
       lookup[e.day_of_week][e.slot_number].push(e);
+    }
+    // For double periods, also populate the next slot so both rows show the class
+    if (e.is_double) {
+      const nextSlotNum = e.slot_number + 1;
+      if (lookup[e.day_of_week]?.[nextSlotNum] !== undefined) {
+        lookup[e.day_of_week][nextSlotNum].push(e);
+      }
     }
   });
 
@@ -83,16 +93,21 @@ function renderTimetablePage(doc, { entries, timeSlots, schoolName, logoData, pr
       `${slot.start_time.slice(0, 5)} – ${slot.end_time.slice(0, 5)}`;
     const row = [periodLabel];
     DAYS.forEach(day => {
-      const cellEntries = lookup[day][slot.slot_number] || [];
+      // Deduplicate by entry id so a double entry doesn't appear twice in the same slot
+      const seen = new Set();
+      const cellEntries = (lookup[day][slot.slot_number] || []).filter(e => {
+        if (seen.has(e.id)) return false;
+        seen.add(e.id);
+        return true;
+      });
       if (cellEntries.length === 0) {
         row.push('');
       } else {
         const lines = cellEntries.map(e => {
           const teacherName = e.teacher?.full_name || '';
-          const dbl = e.is_double ? ' ×2' : '';
-          if (filterType === 'class') return `${e.subject}${dbl}\n${teacherName}`;
-          if (filterType === 'teacher') return `${e.class_name} • ${e.subject}${dbl}`;
-          return `${e.class_name}: ${e.subject}${dbl}\n${teacherName}`;
+          if (filterType === 'class') return `${e.subject}\n${teacherName}`;
+          if (filterType === 'teacher') return `${e.class_name} • ${e.subject}`;
+          return `${e.class_name}: ${e.subject}\n${teacherName}`;
         });
         row.push(lines.join('\n'));
       }
@@ -109,30 +124,38 @@ function renderTimetablePage(doc, { entries, timeSlots, schoolName, logoData, pr
       fillColor: headerRgb,
       textColor: 255,
       fontStyle: 'bold',
-      fontSize: 8,
+      fontSize: 9,
       halign: 'center',
-      cellPadding: 3,
+      cellPadding: { top: 4, right: 4, bottom: 4, left: 4 },
     },
     bodyStyles: {
-      fontSize: 7,
-      cellPadding: { top: 3, right: 3, bottom: 3, left: 3 },
+      fontSize: 8,
+      cellPadding: { top: 5, right: 5, bottom: 5, left: 5 },
       valign: 'middle',
-      textColor: [30, 30, 30],
+      textColor: [25, 25, 25],
+      lineColor: [210, 220, 210],
+      lineWidth: 0.3,
     },
     columnStyles: {
-      0: { cellWidth: 32, fontStyle: 'bold', halign: 'center', fillColor: [245, 247, 245] },
-      1: { halign: 'center' },
-      2: { halign: 'center' },
-      3: { halign: 'center' },
-      4: { halign: 'center' },
-      5: { halign: 'center' },
+      0: { cellWidth: 34, fontStyle: 'bold', halign: 'center', fillColor: [230, 245, 235] },
+      1: { halign: 'center', cellWidth: 'auto' },
+      2: { halign: 'center', cellWidth: 'auto' },
+      3: { halign: 'center', cellWidth: 'auto' },
+      4: { halign: 'center', cellWidth: 'auto' },
+      5: { halign: 'center', cellWidth: 'auto' },
     },
-    alternateRowStyles: { fillColor: [250, 253, 250] },
+    alternateRowStyles: { fillColor: [248, 252, 249] },
     margin: { left: 12, right: 12, top: tableStartY },
     tableWidth: W - 24,
     didParseCell(data) {
+      // Period column — soft green tint
       if (data.column.index === 0 && data.section === 'body') {
-        data.cell.styles.fillColor = [238, 248, 242];
+        data.cell.styles.fillColor = [220, 242, 229];
+        data.cell.styles.textColor = [20, 90, 50];
+      }
+      // Empty cells — very light grey
+      if (data.section === 'body' && data.column.index > 0 && !data.cell.text?.join('').trim()) {
+        data.cell.styles.fillColor = [245, 245, 245];
       }
     },
   });
