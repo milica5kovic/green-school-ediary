@@ -467,7 +467,10 @@ export default function TimetableGrid({
     return isValidGroupDrop([entry], targetDay, targetSlot);
   };
 
-  // Check if two groups can swap positions
+  const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+
+  // Check if two groups can swap positions — returns { canSwap, reason }
+  // reason always describes exactly what prevents the swap in plain language.
   const checkCanSwapGroups = (group1, group2) => {
     const allIds = new Set([...group1.map(e => e.id), ...group2.map(e => e.id)]);
     const others = entries.filter(e => !allIds.has(e.id));
@@ -481,9 +484,9 @@ export default function TimetableGrid({
       const slots = moving.is_double ? [toSlot, toSlot + 1] : [toSlot];
       for (const s of slots) {
         if (others.some(o => o.teacher_id === moving.teacher_id && occupies(o, toDay, s)))
-          return `${moving.teacher?.full_name || 'Teacher'} is busy at that slot.`;
+          return `${moving.teacher?.full_name || 'Teacher'} is already teaching on ${DAY_SHORT[toDay]} P${s} — cannot move there.`;
         if (others.some(o => o.class_name === moving.class_name && occupies(o, toDay, s)))
-          return `${moving.class_name} already has a class at that slot.`;
+          return `${moving.class_name} already has another class on ${DAY_SHORT[toDay]} P${s} — cannot move there.`;
       }
       return null;
     };
@@ -496,6 +499,19 @@ export default function TimetableGrid({
       if (r) return { canSwap: false, reason: r };
     }
     return { canSwap: true, reason: null };
+  };
+
+  // Build a plain-language reason WHY a drop directly fails (teacher or class conflict)
+  const directBlockReason = (draggedGroup, targetEntries) => {
+    for (const d of draggedGroup) {
+      const teacherBlock = targetEntries.find(t => t.teacher_id === d.teacher_id);
+      if (teacherBlock)
+        return `${d.teacher?.full_name || 'Teacher'} is already teaching ${teacherBlock.subject} (${teacherBlock.class_name}) at this time.`;
+      const classBlock = targetEntries.find(t => t.class_name === d.class_name);
+      if (classBlock)
+        return `${d.class_name} already has ${classBlock.subject} (${classBlock.teacher?.full_name || ''}) at this time.`;
+    }
+    return null;
   };
 
   const handleDragStart = ({ active }) => {
@@ -523,14 +539,31 @@ export default function TimetableGrid({
     const isValid = isValidGroupDrop(draggedGroup, targetDay, targetSlot);
 
     if (targetCellEntries.length > 0 && !isValid) {
-      const { canSwap, reason } = checkCanSwapGroups(draggedGroup, targetCellEntries);
-      if (!canSwap) {
-        // Show error toast, do NOT open modal
-        setDragError(reason || 'Cannot move — conflict detected.');
-        setTimeout(() => setDragError(null), 3000);
+      // First: explain what DIRECTLY blocks the move (same teacher or same class at target)
+      const directMsg = directBlockReason(draggedGroup, targetCellEntries);
+      if (directMsg) {
+        // If it's a same-class conflict, a swap might still be possible (reorder within day)
+        const sameClass = draggedGroup.some(d => targetCellEntries.some(t => t.class_name === d.class_name));
+        if (sameClass) {
+          const { canSwap, reason } = checkCanSwapGroups(draggedGroup, targetCellEntries);
+          if (canSwap) {
+            setSwapModal({ draggedGroup, targetGroup: targetCellEntries });
+            return;
+          }
+          setDragError(`${directMsg} (Swap also blocked: ${reason})`);
+        } else {
+          setDragError(directMsg);
+        }
+        setTimeout(() => setDragError(null), 4000);
         return;
       }
-      // Valid swap — show confirmation modal
+      // No direct block found by name — try swap
+      const { canSwap, reason } = checkCanSwapGroups(draggedGroup, targetCellEntries);
+      if (!canSwap) {
+        setDragError(reason || 'Cannot move — conflict detected.');
+        setTimeout(() => setDragError(null), 4000);
+        return;
+      }
       setSwapModal({ draggedGroup, targetGroup: targetCellEntries });
       return;
     }

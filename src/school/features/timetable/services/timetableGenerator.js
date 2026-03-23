@@ -842,6 +842,78 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     if (!changed) break; // converged
   }
 
+  // ============================================================
+  // POST-PROCESS PHASE 2: intra-day slide compaction.
+  //
+  // After cross-day compaction, a class may still have gaps within
+  // a single day because teacher availability prevented filling them
+  // from other days.  Example: Y9 Mon has P1 and P5; nobody was free
+  // at P2-P4 on other days to move in.
+  //
+  // Strategy: slide each entry forward (toward smaller slot indices)
+  // to be directly adjacent to the entry before it, as long as the
+  // teacher is free at the new slot.  Parallel-group siblings are
+  // always moved together.
+  //
+  // Run multiple passes because one slide may open space for the next.
+  // ============================================================
+  for (let slidePass = 0; slidePass < 8; slidePass++) {
+    let slideChanged = false;
+
+    for (const class_name of new Set(placed.map(p => p.class_name))) {
+      for (const day of DAYS) {
+        const dayEntries = placed
+          .filter(p =>
+            p.class_name === class_name &&
+            p.day_of_week === day &&
+            !p.is_double &&
+            !AFTER_SCHOOL_SLOTS.has(p.slot_number)
+          )
+          .sort((a, b) => a.slot_number - b.slot_number);
+
+        if (dayEntries.length < 2) continue;
+
+        for (let i = 1; i < dayEntries.length; i++) {
+          const entry = dayEntries[i];
+          const prevSlotIdx = regularSlotNums.indexOf(dayEntries[i - 1].slot_number);
+          const curSlotIdx  = regularSlotNums.indexOf(entry.slot_number);
+          if (curSlotIdx === prevSlotIdx + 1) continue; // already adjacent
+
+          const targetSlot = regularSlotNums[prevSlotIdx + 1];
+          if (targetSlot === undefined) continue;
+          if (grid[day][targetSlot]?.[class_name]) continue; // occupied by this class already
+
+          // Collect siblings (parallel group entries at same slot/day)
+          const siblings = entry.parallel_group
+            ? placed.filter(p =>
+                p !== entry &&
+                p.parallel_group === entry.parallel_group &&
+                p.day_of_week === day &&
+                p.slot_number === entry.slot_number
+              )
+            : [];
+          const allToSlide = [entry, ...siblings];
+
+          if (!allToSlide.every(p => isAvailable(p.teacher_id, day, targetSlot))) continue;
+          if (allToSlide.some(p => teacherBusy[day][targetSlot].has(p.teacher_id))) continue;
+
+          // Slide
+          for (const p of allToSlide) {
+            delete grid[day][p.slot_number][p.class_name];
+            teacherBusy[day][p.slot_number].delete(p.teacher_id);
+            grid[day][targetSlot][p.class_name] = p;
+            teacherBusy[day][targetSlot].add(p.teacher_id);
+            p.slot_number = targetSlot;
+          }
+          slideChanged = true;
+          break; // restart this day
+        }
+      }
+    }
+
+    if (!slideChanged) break;
+  }
+
   // Doubles are now placed atomically with is_double: true — no merging needed.
   return { placed, unplaced };
 }
