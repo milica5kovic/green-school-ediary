@@ -29,10 +29,10 @@ const DEFAULT_BRANDING = {
   secondaryRgb: { r: 13, g: 148, b: 136 },
   accentRgb: { r: 245, g: 158, b: 11 },
   
-  email: 'hello@akio.rs',
+  email: '',
   phone: '',
-  website: 'https://akio.rs',
-  address: 'Belgrade, Serbia',
+  website: '',
+  address: '',
   
   gradingSystem: 'cambridge',
   academicYear: '2025-26',
@@ -40,7 +40,7 @@ const DEFAULT_BRANDING = {
   language: 'en',
   
   pdfHeaderText: 'SchoolHub',
-  pdfFooterText: 'Powered by Akio',
+  pdfFooterText: '',
   showLogoInPdf: true,
   
   features: {

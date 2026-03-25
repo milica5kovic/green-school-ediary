@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Plus, Trash2, Filter, AlertCircle } from 'lucide-react';
+import { BookOpen, Plus, Trash2, Filter, AlertCircle, X } from 'lucide-react';
+import ConfirmModal from '../../../../shared/components/ConfirmModal';
 import { useApp } from '../../../../core/context/AppContext';
 import { useAuth } from '../../../../core/context/AuthContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
@@ -46,6 +47,10 @@ const GradesPage = () => {
     date: new Date().toISOString().split('T')[0]
   });
   const [studentScores, setStudentScores] = useState({});
+  const [pageError, setPageError] = useState('');
+  const [confirmAction, setConfirmAction] = useState(null); // { message, onConfirm }
+
+  const showError = (msg) => { setPageError(msg); setTimeout(() => setPageError(''), 5000); };
 
   const mySubjects = teacher?.subjects || [];
 
@@ -126,16 +131,19 @@ const GradesPage = () => {
         return g.date >= currentTermData.start_date && g.date <= currentTermData.end_date;
       });
 
-      legacyForThisTerm.forEach(g => {
-        supabase.from('grades').update({ term_number: selectedTermNumber }).eq('id', g.id).then(() => {});
-      });
+      // Await legacy migration so state stays in sync
+      if (legacyForThisTerm.length > 0) {
+        await Promise.all(legacyForThisTerm.map(g =>
+          supabase.from('grades').update({ term_number: selectedTermNumber }).eq('id', g.id)
+        ));
+      }
 
       setGrades([...(termData || []), ...legacyForThisTerm]);
     } catch (err) { console.error('Error loading grades:', err); }
   };
 
   const handleAddGrades = async () => {
-    if (!activeTerm) { alert('No active term. Configure academic terms first.'); return; }
+    if (!activeTerm) { showError('No active term. Configure academic terms first.'); return; }
 
     try {
       const gradeRecords = [];
@@ -156,7 +164,7 @@ const GradesPage = () => {
         });
       }
 
-      if (gradeRecords.length === 0) { alert('Please enter at least one grade.'); return; }
+      if (gradeRecords.length === 0) { showError('Please enter at least one grade.'); return; }
 
       const { error } = await supabase.from('grades').insert(gradeRecords);
       if (error) throw error;
@@ -168,18 +176,21 @@ const GradesPage = () => {
       setSelectedSubject('all');
       await loadGrades();
     } catch (err) {
-      console.error('Error adding grades:', err);
-      alert('Failed to add grades: ' + err.message);
+      showError('Failed to add grades: ' + err.message);
     }
   };
 
-  const handleDeleteGrade = async (gradeId) => {
-    if (!window.confirm('Delete this grade?')) return;
-    try {
-      const { error } = await supabase.from('grades').delete().eq('id', gradeId);
-      if (error) throw error;
-      await loadGrades();
-    } catch (err) { alert('Failed to delete grade'); }
+  const handleDeleteGrade = (gradeId) => {
+    setConfirmAction({
+      message: 'Delete this grade? This cannot be undone.',
+      onConfirm: async () => {
+        try {
+          const { error } = await supabase.from('grades').delete().eq('id', gradeId);
+          if (error) throw error;
+          await loadGrades();
+        } catch (err) { showError('Failed to delete grade: ' + err.message); }
+      }
+    });
   };
 
   // ─── DERIVED DATA ──────────────────────────────────────
@@ -232,6 +243,14 @@ const GradesPage = () => {
 
   return (
     <div className="space-y-6">
+      {/* Inline error banner */}
+      {pageError && (
+        <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+          <AlertCircle size={15} className="flex-shrink-0" />
+          <span className="flex-1">{pageError}</span>
+          <button onClick={() => setPageError('')} className="text-red-400 hover:text-red-600"><X size={14} /></button>
+        </div>
+      )}
       {/* Header */}
       <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
         <div className="flex items-center justify-between mb-4">
@@ -584,6 +603,15 @@ const GradesPage = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Confirm delete modal */}
+      {confirmAction && (
+        <ConfirmModal
+          message={confirmAction.message}
+          onConfirm={() => { confirmAction.onConfirm(); setConfirmAction(null); }}
+          onCancel={() => setConfirmAction(null)}
+        />
       )}
     </div>
   );

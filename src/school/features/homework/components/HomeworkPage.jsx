@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ClipboardList, Plus, Trash2, Edit2, CheckCircle, Clock, XCircle, BookOpen, AlertCircle, Filter } from 'lucide-react';
+import { ClipboardList, Plus, Trash2, Edit2, CheckCircle, Clock, XCircle, BookOpen, AlertCircle, Filter, X } from 'lucide-react';
+import ConfirmModal from '../../../../shared/components/ConfirmModal';
 import { useApp } from '../../../../core/context/AppContext';
 import { useAuth } from '../../../../core/context/AuthContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
@@ -44,6 +45,10 @@ const HomeworkPage = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(null);
   const [editingHomework, setEditingHomework] = useState(null);
+  const [pageError, setPageError] = useState('');
+  const [confirmAction, setConfirmAction] = useState(null);
+
+  const showError = (msg) => { setPageError(msg); setTimeout(() => setPageError(''), 5000); };
 
   const mySubjects = teacher?.subjects || [];
 
@@ -113,9 +118,12 @@ const HomeworkPage = () => {
         return h.due_date >= currentTermData.start_date && h.due_date <= currentTermData.end_date;
       });
 
-      legacyForThisTerm.forEach(h => {
-        supabase.from('homework').update({ term_number: selectedTermNumber }).eq('id', h.id).then(() => {});
-      });
+      // Await legacy migration so state stays in sync
+      if (legacyForThisTerm.length > 0) {
+        await Promise.all(legacyForThisTerm.map(h =>
+          supabase.from('homework').update({ term_number: selectedTermNumber }).eq('id', h.id)
+        ));
+      }
 
       const hw = [...(termData || []), ...legacyForThisTerm];
       setHomework(hw);
@@ -141,7 +149,7 @@ const HomeworkPage = () => {
   };
 
   const handleAddHomework = async (formData) => {
-    if (!activeTerm) { alert('No active term set.'); return; }
+    if (!activeTerm) { showError('No active term set. Configure academic terms first.'); return; }
     try {
       const hwId = `HW-${selectedClass}-${Date.now()}`;
 
@@ -166,17 +174,21 @@ const HomeworkPage = () => {
       setEditingHomework(null);
       await loadHomework();
     } catch (err) {
-      alert('Failed to save: ' + err.message);
+      showError('Failed to save: ' + err.message);
     }
   };
 
-  const handleDeleteHomework = async (id) => {
-    if (!window.confirm('Delete this homework?')) return;
-    try {
-      await supabase.from('student_homework').delete().eq('homework_id', id);
-      await supabase.from('homework').delete().eq('id', id);
-      await loadHomework();
-    } catch (err) { alert('Failed to delete'); }
+  const handleDeleteHomework = (id) => {
+    setConfirmAction({
+      message: 'Delete this homework assignment? Student records will also be removed.',
+      onConfirm: async () => {
+        try {
+          await supabase.from('student_homework').delete().eq('homework_id', id);
+          await supabase.from('homework').delete().eq('id', id);
+          await loadHomework();
+        } catch (err) { showError('Failed to delete: ' + err.message); }
+      }
+    });
   };
 
   const handleUpdateStudentStatus = async (homeworkId, studentId, status) => {
@@ -191,7 +203,7 @@ const HomeworkPage = () => {
         }]);
       }
       await loadHomework();
-    } catch (err) { alert('Failed to update status'); }
+    } catch (err) { showError('Failed to update status: ' + err.message); }
   };
 
   const filteredHomework = selectedSubject === 'all' ? homework : homework.filter(h => h.subject === selectedSubject);
@@ -213,6 +225,14 @@ const HomeworkPage = () => {
 
   return (
     <div className="space-y-5">
+      {/* Inline error banner */}
+      {pageError && (
+        <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+          <AlertCircle size={15} className="flex-shrink-0" />
+          <span className="flex-1">{pageError}</span>
+          <button onClick={() => setPageError('')} className="text-red-400 hover:text-red-600"><X size={14} /></button>
+        </div>
+      )}
       {/* Header */}
       <div className="bg-white rounded-2xl shadow-lg p-5 border border-gray-100">
         <div className="flex items-center justify-between mb-4">
@@ -451,6 +471,15 @@ const HomeworkPage = () => {
           onUpdate={handleUpdateStudentStatus}
           onClose={() => setShowStatusModal(null)}
           isFinalized={isFinalized}
+        />
+      )}
+
+      {/* Confirm delete modal */}
+      {confirmAction && (
+        <ConfirmModal
+          message={confirmAction.message}
+          onConfirm={() => { confirmAction.onConfirm(); setConfirmAction(null); }}
+          onCancel={() => setConfirmAction(null)}
         />
       )}
     </div>

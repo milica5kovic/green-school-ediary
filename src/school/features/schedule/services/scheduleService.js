@@ -19,39 +19,16 @@ export class ScheduleService {
   }
 
   /**
-   * Resolve auth user_id → teachers.id (the PK used in teacher_schedule).
-   * teacher_schedule.teacher_id references teachers.id, so when a teacher
-   * queries their schedule we must translate their auth UID first.
-   */
-  async resolveTeacherRecordId(userId) {
-    if (!userId || !this.schoolId) return null;
-    const { data } = await this.supabase
-      .from('teachers')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('school_id', this.schoolId)
-      .maybeSingle();
-    return data?.id || null;
-  }
-
-  /**
    * Get schedule for a specific day
    * SECURITY: Filters by both teacher_id AND school_id
    */
   async getScheduleByDay(dayOfWeek, teacherId = null) {
     try {
       console.log('🔐 Fetching schedule for:', dayOfWeek, '| teacherId:', teacherId, '| schoolId:', this.schoolId);
-
+      
       // SECURITY: Must have both teacherId and schoolId
       if (!teacherId || !this.schoolId) {
         console.log('⚠️ Missing teacherId or schoolId, returning empty');
-        return [];
-      }
-
-      // teacher_schedule.teacher_id = teachers.id (PK), not auth user id
-      const teacherRecordId = await this.resolveTeacherRecordId(teacherId);
-      if (!teacherRecordId) {
-        console.log('⚠️ No teacher record found for user', teacherId);
         return [];
       }
 
@@ -66,7 +43,7 @@ export class ScheduleService {
           )
         `)
         .eq('day_of_week', dayOfWeek)
-        .eq('teacher_id', teacherRecordId)
+        .eq('teacher_id', teacherId)
         .eq('school_id', this.schoolId)  // TENANT FILTER
         .order('time_slot', { ascending: true });
 
@@ -115,13 +92,6 @@ export class ScheduleService {
         return emptySchedule;
       }
 
-      // teacher_schedule.teacher_id = teachers.id (PK), not auth user id
-      const teacherRecordId = await this.resolveTeacherRecordId(teacherId);
-      if (!teacherRecordId) {
-        console.log('⚠️ No teacher record found for user', teacherId);
-        return emptySchedule;
-      }
-
       const { data, error } = await this.supabase
         .from('teacher_schedule')
         .select(`
@@ -132,7 +102,7 @@ export class ScheduleService {
             user_id
           )
         `)
-        .eq('teacher_id', teacherRecordId)
+        .eq('teacher_id', teacherId)
         .eq('school_id', this.schoolId)  // TENANT FILTER
         .order('time_slot', { ascending: true });
 
@@ -172,20 +142,17 @@ export class ScheduleService {
       if (!teacherId) {
         throw new Error('🔒 SECURITY: teacher_id is required');
       }
+      
       if (!this.schoolId) {
         throw new Error('🔒 SECURITY: school_id is required');
       }
 
-      // Resolve auth user id → teachers.id (PK used in teacher_schedule)
-      const teacherRecordId = await this.resolveTeacherRecordId(teacherId);
-      if (!teacherRecordId) throw new Error('Teacher record not found for this user.');
-
-      console.log('🔐 Adding schedule entry | teacher:', teacherRecordId, '| school:', this.schoolId);
+      console.log('🔐 Adding schedule entry | teacher:', teacherId, '| school:', this.schoolId);
 
       const { data, error } = await this.supabase
         .from('teacher_schedule')
         .insert([{
-          teacher_id: teacherRecordId,
+          teacher_id: teacherId,
           school_id: this.schoolId,  // TENANT ASSIGNMENT
           day_of_week: dayOfWeek,
           time_slot: timeSlot,
@@ -280,17 +247,19 @@ export class ScheduleService {
       console.log('🔐 Getting schedule stats | teacherId:', teacherId, '| schoolId:', this.schoolId);
 
       if (!teacherId || !this.schoolId) {
-        return { total: 0, classes: 0, duties: 0, extracurriculars: 0 };
+        return {
+          total: 0,
+          classes: 0,
+          duties: 0,
+          extracurriculars: 0
+        };
       }
-
-      const teacherRecordId = await this.resolveTeacherRecordId(teacherId);
-      if (!teacherRecordId) return { total: 0, classes: 0, duties: 0, extracurriculars: 0 };
 
       const { data, error } = await this.supabase
         .from('teacher_schedule')
         .select('schedule_type')
-        .eq('teacher_id', teacherRecordId)
-        .eq('school_id', this.schoolId);
+        .eq('teacher_id', teacherId)
+        .eq('school_id', this.schoolId);  // TENANT FILTER
 
       if (error) throw error;
 

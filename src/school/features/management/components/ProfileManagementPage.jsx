@@ -15,8 +15,6 @@ import {
   UserPlus,
   GraduationCap,
   ChevronDown,
-  Calendar,
-  X,
 } from "lucide-react";
 import { useApp } from "../../../../core/context/AppContext";
 import { useBranding } from "../../../../core/context/BrandingContext";
@@ -221,6 +219,96 @@ const ProfileManagementPage = () => {
     }
   };
 
+  // ════════════════════════════════════════════════════════════
+  // CSV IMPORT HELPERS
+  // ════════════════════════════════════════════════════════════
+
+  const parseCsvRows = (text) => {
+    const lines = text.trim().split(/\r?\n/);
+    if (lines.length < 2) return { headers: [], rows: [] };
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+    const rows = lines.slice(1).map(line => {
+      // handle quoted fields containing commas
+      const cols = [];
+      let cur = '', inQuote = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') { inQuote = !inQuote; }
+        else if (ch === ',' && !inQuote) { cols.push(cur.trim()); cur = ''; }
+        else { cur += ch; }
+      }
+      cols.push(cur.trim());
+      return Object.fromEntries(headers.map((h, i) => [h, cols[i] ?? '']));
+    }).filter(r => Object.values(r).some(v => v));
+    return { headers, rows };
+  };
+
+  const handleTeacherCsvImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const text = await file.text();
+    const { rows } = parseCsvRows(text);
+    if (!rows.length) { alert('No data rows found in CSV.'); return; }
+
+    const schoolId = getCurrentSchoolId();
+    const inserts = rows
+      .filter(r => r.full_name && r.email)
+      .map(r => ({
+        school_id: schoolId,
+        full_name: r.full_name,
+        email: r.email,
+        subjects: r.subjects ? r.subjects.split(';').map(s => s.trim()).filter(Boolean) : [],
+        class_teacher_for: r.class_teacher_for || null,
+        is_active: true,
+      }));
+
+    if (!inserts.length) { alert('No valid rows (full_name + email required).'); return; }
+
+    const { error } = await supabase.from('teachers').insert(inserts);
+    if (error) { alert(`Import failed: ${error.message}`); return; }
+    alert(`✅ ${inserts.length} teacher${inserts.length !== 1 ? 's' : ''} imported successfully.`);
+    loadTeachers();
+  };
+
+  const handleParentCsvImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const text = await file.text();
+    const { rows } = parseCsvRows(text);
+    if (!rows.length) { alert('No data rows found in CSV.'); return; }
+
+    const schoolId = getCurrentSchoolId();
+    let imported = 0, failed = 0;
+
+    for (const r of rows) {
+      if (!r.full_name || !r.email) { failed++; continue; }
+      const { data: parent, error } = await supabase
+        .from('parents')
+        .insert([{ school_id: schoolId, full_name: r.full_name, email: r.email, phone: r.phone || null, status: 'active' }])
+        .select('id')
+        .single();
+      if (error) { failed++; continue; }
+
+      // Link students by name if provided
+      if (r.student_names && parent?.id) {
+        const names = r.student_names.split(';').map(n => n.trim()).filter(Boolean);
+        for (const name of names) {
+          const { data: student } = await supabase
+            .from('students').select('id').ilike('name', name).eq('school_id', schoolId).maybeSingle();
+          if (student?.id) {
+            await supabase.from('student_parents').insert([{ parent_id: parent.id, student_id: student.id }]);
+          }
+        }
+      }
+      imported++;
+    }
+
+    alert(`✅ ${imported} parent${imported !== 1 ? 's' : ''} imported.${failed ? ` ${failed} rows skipped (missing name/email).` : ''}`);
+    loadParents();
+  };
+
   const downloadTeacherTemplate = () => {
     const csv = `full_name,email,subjects,role,class_teacher_for\nJohn Doe,john@school.com,"Math;Physics",teacher,Y7`;
     const blob = new Blob([csv], { type: "text/csv" });
@@ -267,7 +355,7 @@ const ProfileManagementPage = () => {
               <label className="inline-flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg cursor-pointer transition-colors">
                 <Upload size={16} />
                 CSV
-                <input type="file" accept=".csv" className="hidden" />
+                <input type="file" accept=".csv" className="hidden" onChange={handleTeacherCsvImport} />
               </label>
               <button
                 onClick={downloadTeacherTemplate}
@@ -297,7 +385,7 @@ const ProfileManagementPage = () => {
               <label className="inline-flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg cursor-pointer transition-colors">
                 <Upload size={16} />
                 CSV
-                <input type="file" accept=".csv" className="hidden" />
+                <input type="file" accept=".csv" className="hidden" onChange={handleParentCsvImport} />
               </label>
               <button
                 onClick={downloadParentTemplate}
@@ -611,7 +699,6 @@ const ProfileManagementPage = () => {
           teacher={editingTeacher}
           primaryColor={primaryColor}
           supabase={supabase}
-          schoolId={getCurrentSchoolId()}
           onClose={() => { setShowAddModal(false); setEditingTeacher(null); }}
           onSave={async () => { await loadAllData(); setShowAddModal(false); setEditingTeacher(null); }}
         />
@@ -659,8 +746,7 @@ const ProfileManagementPage = () => {
 // ADD/EDIT TEACHER MODAL
 // ════════════════════════════════════════════════════════════
 
-const AddTeacherModal = ({ teacher, primaryColor, supabase, schoolId, onClose, onSave }) => {
-  const [modalTab, setModalTab] = useState('profile'); // 'profile' | 'assignments'
+const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     full_name: teacher?.full_name || "",
     email: teacher?.email || "",
@@ -670,13 +756,11 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, schoolId, onClose, o
   });
   const [availableSubjects, setAvailableSubjects] = useState([]);
   const [availableClasses, setAvailableClasses] = useState([]);
-  const [assignments, setAssignments] = useState([]);
-  const [newAssignment, setNewAssignment] = useState({ subject: '', class_name: '', periods_per_week: 1, parallel_group: '' });
   const [saving, setSaving] = useState(false);
-  const [assignSaving, setAssignSaving] = useState(false);
 
-  useEffect(() => { loadOptions(); }, []);
-  useEffect(() => { if (teacher?.teacher_id) loadAssignments(); }, [teacher?.teacher_id]);
+  useEffect(() => {
+    loadOptions();
+  }, []);
 
   const loadOptions = async () => {
     const { data: subjects } = await supabase.from("custom_subjects").select("subject_name").eq("is_active", true).order("subject_name");
@@ -685,18 +769,13 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, schoolId, onClose, o
     setAvailableClasses(classes?.map(c => c.class_name) || []);
   };
 
-  const loadAssignments = async () => {
-    const { data } = await supabase
-      .from('teacher_assignments')
-      .select('*')
-      .eq('teacher_id', teacher.teacher_id)
-      .order('class_name');
-    setAssignments(data || []);
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.full_name || !formData.email) { alert("Please fill in name and email"); return; }
+    if (!formData.full_name || !formData.email) {
+      alert("Please fill in name and email");
+      return;
+    }
+
     try {
       setSaving(true);
       const role = formData.user_type === 'super_admin' ? 'admin' : formData.user_type;
@@ -704,16 +783,26 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, schoolId, onClose, o
       const class_teacher_for = formData.user_type === 'admin' ? null : (formData.class_teacher_for || null);
 
       if (teacher) {
-        const { error } = await supabase.from('teachers')
+        // Update existing teacher record
+        const { error } = await supabase
+          .from('teachers')
           .update({ full_name: formData.full_name, role, subjects, class_teacher_for })
           .eq('id', teacher.teacher_id);
         if (error) throw error;
-        await supabase.from('profiles').update({ full_name: formData.full_name, role }).eq('id', teacher.id);
+
+        // Also update profile name if profile exists
+        await supabase
+          .from('profiles')
+          .update({ full_name: formData.full_name, role })
+          .eq('id', teacher.id);
       } else {
-        const { error } = await supabase.from('teachers')
+        // Create new teacher record
+        const { error } = await supabase
+          .from('teachers')
           .insert([{ full_name: formData.full_name, email: formData.email, role, subjects, class_teacher_for }]);
         if (error) throw error;
       }
+
       onSave();
     } catch (error) {
       alert("Failed: " + error.message);
@@ -722,229 +811,109 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, schoolId, onClose, o
     }
   };
 
-  const handleAddAssignment = async () => {
-    if (!newAssignment.subject || !newAssignment.class_name) { alert('Select a subject and class.'); return; }
-    try {
-      setAssignSaving(true);
-      const { error } = await supabase.from('teacher_assignments').insert([{
-        teacher_id: teacher.teacher_id,
-        subject: newAssignment.subject,
-        class_name: newAssignment.class_name,
-        periods_per_week: Number(newAssignment.periods_per_week) || 1,
-        parallel_group: newAssignment.parallel_group || null,
-        school_id: schoolId,
-      }]);
-      if (error) throw error;
-      setNewAssignment({ subject: '', class_name: '', periods_per_week: 1, parallel_group: '' });
-      await loadAssignments();
-    } catch (err) {
-      alert('Failed to add: ' + err.message);
-    } finally {
-      setAssignSaving(false);
-    }
-  };
-
-  const handleDeleteAssignment = async (id) => {
-    if (!window.confirm('Remove this assignment?')) return;
-    await supabase.from('teacher_assignments').delete().eq('id', id);
-    await loadAssignments();
-  };
-
-  const handleUpdatePeriods = async (id, periods) => {
-    await supabase.from('teacher_assignments').update({ periods_per_week: Number(periods) }).eq('id', id);
-    setAssignments(prev => prev.map(a => a.id === id ? { ...a, periods_per_week: Number(periods) } : a));
-  };
-
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-gray-800">{teacher ? "Edit Staff Member" : "Add Staff Member"}</h3>
-            <p className="text-gray-500 text-sm">{teacher?.full_name || "New teacher"}</p>
-          </div>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg"><X size={18} /></button>
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h3 className="text-lg font-bold text-gray-800">
+            {teacher ? "Edit Staff Member" : "Add Staff Member"}
+          </h3>
+          <p className="text-gray-500 text-sm">
+            {teacher ? "Update account details" : "Create a new account"}
+          </p>
         </div>
 
-        {/* Tabs — only show Assignments tab when editing */}
-        {teacher && (
-          <div className="flex border-b border-gray-100 bg-gray-50">
-            {[{ id: 'profile', label: 'Profile' }, { id: 'assignments', label: 'Timetable Assignments' }].map(t => (
-              <button
-                key={t.id}
-                onClick={() => setModalTab(t.id)}
-                className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                  modalTab === t.id ? 'border-current' : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-                style={modalTab === t.id ? { borderColor: primaryColor, color: primaryColor } : {}}
-              >
-                {t.id === 'assignments' && <Calendar size={13} className="inline mr-1.5 mb-0.5" />}
-                {t.label}
-                {t.id === 'assignments' && assignments.length > 0 && (
-                  <span className="ml-1.5 px-1.5 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700">{assignments.length}</span>
-                )}
-              </button>
-            ))}
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+            <input
+              type="text"
+              value={formData.full_name}
+              onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 transition-shadow"
+              style={{ '--tw-ring-color': `${primaryColor}40` }}
+              required
+              placeholder="John Doe"
+            />
           </div>
-        )}
 
-        <div className="overflow-y-auto flex-1">
-          {/* ── PROFILE TAB ── */}
-          {modalTab === 'profile' && (
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 transition-shadow"
+              required
+              disabled={!!teacher}
+              placeholder="john@school.com"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+            <select
+              value={formData.user_type}
+              onChange={(e) => setFormData({ ...formData, user_type: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2"
+            >
+              <option value="teacher">Teacher</option>
+              <option value="admin">Admin</option>
+              <option value="super_admin">Super Admin</option>
+            </select>
+          </div>
+
+          {formData.user_type !== "admin" && (
+            <>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                <input type="text" value={formData.full_name}
-                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                <label className="block text-sm font-medium text-gray-700 mb-1">Subjects</label>
+                <select
+                  multiple
+                  value={formData.subjects}
+                  onChange={(e) => setFormData({ ...formData, subjects: Array.from(e.target.selectedOptions, o => o.value) })}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2"
-                  required placeholder="John Doe" />
+                  size="4"
+                >
+                  {availableSubjects.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Ctrl/Cmd + click to select multiple</p>
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input type="email" value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                <label className="block text-sm font-medium text-gray-700 mb-1">Class Teacher For</label>
+                <select
+                  value={formData.class_teacher_for}
+                  onChange={(e) => setFormData({ ...formData, class_teacher_for: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2"
-                  required disabled={!!teacher} placeholder="john@school.com" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                <select value={formData.user_type}
-                  onChange={(e) => setFormData({ ...formData, user_type: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2">
-                  <option value="teacher">Teacher</option>
-                  <option value="admin">Admin</option>
-                  <option value="super_admin">Super Admin</option>
+                >
+                  <option value="">None</option>
+                  {availableClasses.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-              {formData.user_type !== "admin" && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Subjects (general tags)</label>
-                    <select multiple value={formData.subjects}
-                      onChange={(e) => setFormData({ ...formData, subjects: Array.from(e.target.selectedOptions, o => o.value) })}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2" size="4">
-                      {availableSubjects.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <p className="text-xs text-gray-400 mt-1">Ctrl/Cmd + click for multiple. For per-class assignments use the Timetable Assignments tab.</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Class Teacher For</label>
-                    <select value={formData.class_teacher_for}
-                      onChange={(e) => setFormData({ ...formData, class_teacher_for: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2">
-                      <option value="">None</option>
-                      {availableClasses.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                </>
-              )}
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={onClose}
-                  className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">
-                  Cancel
-                </button>
-                <button type="submit" disabled={saving}
-                  className="flex-1 px-4 py-2.5 text-sm font-medium text-white rounded-lg disabled:opacity-50"
-                  style={{ backgroundColor: primaryColor }}>
-                  {saving ? "Saving..." : teacher ? "Update" : "Create"}
-                </button>
-              </div>
-            </form>
+            </>
           )}
 
-          {/* ── ASSIGNMENTS TAB ── */}
-          {modalTab === 'assignments' && teacher && (
-            <div className="p-6 space-y-5">
-              <p className="text-xs text-gray-500">
-                Define exactly which subjects and classes this teacher is assigned to each week.
-                These drive the Timetable Generator in the Timetable Maker.
-              </p>
-
-              {/* Existing assignments */}
-              {assignments.length === 0 ? (
-                <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                  <Calendar size={28} className="mx-auto text-gray-300 mb-2" />
-                  <p className="text-sm text-gray-500">No timetable assignments yet</p>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <div className="grid grid-cols-[1fr_1fr_56px_32px] gap-2 px-2 pb-1">
-                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Subject</span>
-                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Class</span>
-                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">Periods/wk</span>
-                    <span />
-                  </div>
-                  {assignments.map(a => (
-                    <div key={a.id} className="grid grid-cols-[1fr_1fr_56px_32px] gap-2 items-center bg-gray-50 hover:bg-gray-100 px-2 py-2 rounded-lg">
-                      <span className="text-sm font-medium text-gray-800 truncate">{a.subject}</span>
-                      <span className="text-sm text-gray-600">{a.class_name}{a.parallel_group ? <span className="ml-1 text-xs text-purple-600">({a.parallel_group})</span> : ''}</span>
-                      <input
-                        type="number" min="1" max="10" value={a.periods_per_week}
-                        onChange={e => handleUpdatePeriods(a.id, e.target.value)}
-                        className="w-full text-center text-sm border border-gray-200 rounded-lg px-1 py-1 focus:outline-none focus:ring-1"
-                        style={{ '--tw-ring-color': `${primaryColor}60` }}
-                      />
-                      <button onClick={() => handleDeleteAssignment(a.id)}
-                        className="p-1 text-gray-300 hover:text-red-500 rounded transition-colors">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Add new assignment */}
-              <div className="border border-gray-200 rounded-xl p-4 space-y-3">
-                <p className="text-sm font-semibold text-gray-700">Add Assignment</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Subject</label>
-                    <select value={newAssignment.subject}
-                      onChange={e => setNewAssignment({ ...newAssignment, subject: e.target.value })}
-                      className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1">
-                      <option value="">Select subject…</option>
-                      {availableSubjects.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Class</label>
-                    <select value={newAssignment.class_name}
-                      onChange={e => setNewAssignment({ ...newAssignment, class_name: e.target.value })}
-                      className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1">
-                      <option value="">Select class…</option>
-                      {availableClasses.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Periods per week</label>
-                    <input type="number" min="1" max="10" value={newAssignment.periods_per_week}
-                      onChange={e => setNewAssignment({ ...newAssignment, periods_per_week: e.target.value })}
-                      className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Parallel group <span className="text-gray-400">(optional)</span></label>
-                    <input type="text" value={newAssignment.parallel_group}
-                      onChange={e => setNewAssignment({ ...newAssignment, parallel_group: e.target.value })}
-                      placeholder="e.g. lang-A"
-                      className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1" />
-                  </div>
-                </div>
-                <button onClick={handleAddAssignment} disabled={assignSaving}
-                  className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50 transition-colors"
-                  style={{ backgroundColor: primaryColor }}>
-                  <Plus size={15} />
-                  {assignSaving ? 'Adding…' : 'Add Assignment'}
-                </button>
-              </div>
-
-              <button onClick={onClose}
-                className="w-full px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">
-                Done
-              </button>
-            </div>
-          )}
-        </div>
+          {/* Actions */}
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 px-4 py-2.5 text-sm font-medium text-white rounded-lg disabled:opacity-50 transition-colors"
+              style={{ backgroundColor: primaryColor }}
+            >
+              {saving ? "Saving..." : teacher ? "Update" : "Create"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

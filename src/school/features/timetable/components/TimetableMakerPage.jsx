@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Calendar, Settings, Zap, CheckCircle, AlertTriangle,
-  Download, Send, Trash2, RefreshCw, UserX, ShieldCheck, Layers,
+  Download, Send, Trash2, RefreshCw, UserX, ShieldCheck, Layers, TrendingUp,
 } from 'lucide-react';
 import { useBranding } from '../../../../core/context/BrandingContext';
 import { useTenant } from '../../../../core/context/TenantContext';
@@ -16,12 +16,14 @@ import TeacherAvailabilitySetup from './TeacherAvailabilitySetup';
 import TimetableGrid from './TimetableGrid';
 import SubstitutionSchedule from './SubstitutionSchedule';
 import DutySetup from './DutySetup';
+import StaffProjectionTab from './StaffProjectionTab';
 
 const TABS = [
   { id: 'setup', label: 'Setup', icon: Settings },
   { id: 'timetable', label: 'Timetable', icon: Calendar },
   { id: 'duties', label: 'Duties', icon: ShieldCheck },
   { id: 'substitutions', label: 'Substitutions', icon: UserX },
+  { id: 'projection', label: 'Forecast', icon: TrendingUp },
 ];
 const SETUP_SECTIONS = [
   { id: 'slots', label: 'Time Slots' },
@@ -41,9 +43,9 @@ export default function TimetableMakerPage() {
   const [clearConfirm, setClearConfirm] = useState(false);
   const [publishResult, setPublishResult] = useState(null);
   const [exportingDuties, setExportingDuties] = useState(false);
-  const [genSeed, setGenSeed] = useState(0);
 
-  const [gridFilter, setGridFilter] = useState({ type: 'class', value: '' });
+  // PDF export state
+  const [pdfFilter, setPdfFilter] = useState({ type: 'all', value: '' });
 
   // ---- Derived ----
   const hasDraft = tt.draftEntries.length > 0;
@@ -69,16 +71,16 @@ export default function TimetableMakerPage() {
 
   const handleExportPDF = async () => {
     const exportEntries = viewMode === 'draft' ? tt.draftEntries : tt.publishedEntries;
+    const filterTeacher = tt.teachers.find(t => t.id === pdfFilter.value);
     await exportTimetablePDF({
       entries: exportEntries,
       timeSlots: tt.timeSlots,
       schoolName,
       logoUrl,
       primaryColor,
-      filterType: gridFilter.type,
-      filterValue: gridFilter.value,
+      filterType: pdfFilter.type,
+      filterValue: pdfFilter.type === 'teacher' ? filterTeacher?.full_name : pdfFilter.value,
       teachers: tt.teachers,
-      classes: tt.classes,
     });
   };
 
@@ -161,7 +163,7 @@ export default function TimetableMakerPage() {
       {/* ---- Publish success banner ---- */}
       {publishResult && (
         <div className="flex items-center justify-between bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-sm">
-          <span>✓ Timetable published — {publishResult.synced ?? publishResult.published} entries synced to teacher schedules.</span>
+          <span>✓ Timetable published — {publishResult.published} entries synced to teacher schedules.</span>
           <button onClick={() => setPublishResult(null)} className="text-green-500 hover:text-green-700">✕</button>
         </div>
       )}
@@ -298,6 +300,9 @@ export default function TimetableMakerPage() {
           </div>
         )}
 
+        {/* ========== PROJEKCIJA TAB ========== */}
+        {activeTab === 'projection' && <StaffProjectionTab />}
+
         {/* ========== TIMETABLE TAB ========== */}
         {activeTab === 'timetable' && (
           <div className="p-6 space-y-5">
@@ -325,7 +330,7 @@ export default function TimetableMakerPage() {
 
               {/* Auto-generate */}
               <button
-                onClick={() => { setGenSeed(0); tt.autoGenerate(0); }}
+                onClick={tt.autoGenerate}
                 disabled={tt.generating || tt.assignments.length === 0}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl text-white transition-opacity disabled:opacity-50"
                 style={{ backgroundColor: primaryColor }}
@@ -333,20 +338,6 @@ export default function TimetableMakerPage() {
                 <Zap size={15} />
                 {tt.generating ? 'Generating…' : 'Auto-Generate'}
               </button>
-
-              {/* Regenerate — tries a different seed to explore alternative schedules */}
-              {hasDraft && (
-                <button
-                  onClick={() => { const s = genSeed + 3; setGenSeed(s); tt.autoGenerate(s); }}
-                  disabled={tt.generating || tt.assignments.length === 0}
-                  title={`Try a different schedule order (attempt ${Math.floor(genSeed / 3) + 2})`}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border-2 transition-opacity disabled:opacity-50"
-                  style={{ borderColor: primaryColor, color: primaryColor }}
-                >
-                  <RefreshCw size={15} />
-                  Regenerate
-                </button>
-              )}
 
               {/* Fill Gaps */}
               <button
@@ -405,16 +396,29 @@ export default function TimetableMakerPage() {
                 </div>
               )}
 
-              {/* Export PDF — uses current grid filter */}
+              {/* Export PDF */}
               {(hasDraft || hasPublished) && (
                 <div className="flex items-center gap-2 ml-auto">
-                  <span className="text-xs text-gray-400">
-                    {gridFilter.type === 'all'
-                      ? 'Exporting: full timetable'
-                      : gridFilter.value
-                        ? `Exporting: ${gridFilter.type === 'teacher' ? tt.teachers.find(t => t.id === gridFilter.value)?.full_name : gridFilter.value}`
-                        : `Exporting: all ${gridFilter.type === 'teacher' ? 'teachers' : 'classes'}`}
-                  </span>
+                  <select
+                    value={`${pdfFilter.type}:${pdfFilter.value}`}
+                    onChange={e => {
+                      const [type, ...rest] = e.target.value.split(':');
+                      setPdfFilter({ type, value: rest.join(':') });
+                    }}
+                    className="text-xs px-2 py-1.5 border border-gray-300 rounded-lg"
+                  >
+                    <option value="all:">All classes</option>
+                    <optgroup label="By Class">
+                      {tt.classes.map(c => (
+                        <option key={c} value={`class:${c}`}>Class {c}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="By Teacher">
+                      {tt.teachers.map(t => (
+                        <option key={t.id} value={`teacher:${t.id}`}>{t.full_name}</option>
+                      ))}
+                    </optgroup>
+                  </select>
                   <button
                     onClick={handleExportPDF}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border-2 transition-colors"
@@ -438,9 +442,7 @@ export default function TimetableMakerPage() {
               onSetCell={tt.manualSetCell}
               onDeleteCell={tt.deleteDraftEntry}
               onMoveCell={tt.moveDraftEntry}
-              onMoveCells={tt.moveDraftGroup}
               onSwapCells={tt.swapDraftEntries}
-              onFilterChange={setGridFilter}
               saving={tt.saving}
               viewMode={viewMode}
             />

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Plus, Trash2, Clock, Download, Calendar, Award, 
-  Edit2, Loader2
+import {
+  Plus, Trash2, Clock, Download, Calendar, Award,
+  Edit2, Loader2, X
 } from 'lucide-react';
+import ConfirmModal from '../../../../shared/components/ConfirmModal';
 import { useApp } from '../../../../core/context/AppContext';
 import { useAuth } from '../../../../core/context/AuthContext';
 import { useBranding } from '../../../../core/context/BrandingContext';
@@ -98,17 +99,18 @@ const SchedulePage = () => {
   // Handlers
   const canEdit = () => !!teacher?.user_id;
 
+  const [pageError, setPageError] = useState('');
+  const [confirmAction, setConfirmAction] = useState(null);
+  const showError = (msg) => { setPageError(msg); setTimeout(() => setPageError(''), 5000); };
+
   const handleSave = async (entry) => {
     if (!scheduleService || !teacher?.user_id) {
-      alert('You need a teacher profile to add schedule entries');
+      showError('You need a teacher profile to add schedule entries.');
       return;
     }
-
     try {
       setLoading(true);
-      if (editingEntry?.id) {
-        await scheduleService.deleteScheduleClass(editingEntry.id);
-      }
+      if (editingEntry?.id) await scheduleService.deleteScheduleClass(editingEntry.id);
       await scheduleService.addScheduleClass(
         entry.day, entry.time, entry.class, entry.subject,
         entry.type || 'class', teacher.user_id
@@ -117,25 +119,28 @@ const SchedulePage = () => {
       setShowModal(false);
       setEditingEntry(null);
     } catch (error) {
-      console.error('Error saving:', error);
-      alert('Failed to save: ' + error.message);
+      showError('Failed to save: ' + error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDelete = async (entry) => {
-    if (!entry.id || !window.confirm('Delete this entry?')) return;
-    try {
-      setLoading(true);
-      await scheduleService.deleteScheduleClass(entry.id);
-      setRefreshTrigger(prev => prev + 1);
-    } catch (error) {
-      console.error('Error deleting:', error);
-      alert('Failed to delete: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
+  const handleDelete = (entry) => {
+    if (!entry.id) return;
+    setConfirmAction({
+      message: 'Delete this schedule entry?',
+      onConfirm: async () => {
+        try {
+          setLoading(true);
+          await scheduleService.deleteScheduleClass(entry.id);
+          setRefreshTrigger(prev => prev + 1);
+        } catch (error) {
+          showError('Failed to delete: ' + error.message);
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
   };
 
   const handleEdit = (day, entry, id) => {
@@ -222,7 +227,10 @@ const SchedulePage = () => {
         pdf.setFontSize(10);
         pdf.setTextColor(107, 114, 128);
         pdf.setFont('helvetica', 'normal');
-        pdf.text(`${schoolName} • Academic Year 2025-26`, startX, 23);
+        const now = new Date();
+        const yearStart = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+        const academicYear = `${yearStart}-${String(yearStart + 1).slice(-2)}`;
+        pdf.text(`${schoolName} • Academic Year ${academicYear}`, startX, 23);
 
         const actualTimeSlots = [];
         Object.values(schedule).forEach(day => {
@@ -314,7 +322,7 @@ const SchedulePage = () => {
       }
     } catch (error) {
       console.error('PDF error:', error);
-      alert('Failed to generate PDF');
+      showError('Failed to generate PDF: ' + error.message);
       setLoading(false);
     }
   };
@@ -323,6 +331,14 @@ const SchedulePage = () => {
 
   return (
     <div className="space-y-5">
+      {/* Inline error banner */}
+      {pageError && (
+        <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+          <Clock size={15} className="flex-shrink-0 text-red-500" />
+          <span className="flex-1">{pageError}</span>
+          <button onClick={() => setPageError('')} className="text-red-400 hover:text-red-600"><X size={14} /></button>
+        </div>
+      )}
       {/* ═══ TERM BANNER ═══ */}
       {theme.hasActiveTerm && (
         <div 
@@ -489,6 +505,15 @@ const SchedulePage = () => {
           existingSchedule={editingEntry}
           days={DAYS}
           modalType={modalType}
+        />
+      )}
+
+      {/* Confirm delete modal */}
+      {confirmAction && (
+        <ConfirmModal
+          message={confirmAction.message}
+          onConfirm={() => { confirmAction.onConfirm(); setConfirmAction(null); }}
+          onCancel={() => setConfirmAction(null)}
         />
       )}
     </div>

@@ -71,9 +71,13 @@ const DailyOverviewPage = () => {
     setSubjectFilter("all");
 
     try {
-      const { data: grades } = await supabase.from("grades").select("*").eq("student_id", student.id).order("date", { ascending: false });
-      const { data: attendance } = await supabase.from("attendance").select("*").eq("student_id", student.id).order("date_key", { ascending: false });
-      const { data: teacherComments } = await supabase.from("teacher_comments").select("*").eq("student_id", student.id).order("created_at", { ascending: false });
+      // Parallelise independent queries
+      const [{ data: grades }, { data: attendance }, { data: teacherComments }, { data: homeworkData }] = await Promise.all([
+        supabase.from("grades").select("*").eq("student_id", student.id).order("date", { ascending: false }),
+        supabase.from("attendance").select("*").eq("student_id", student.id).order("date_key", { ascending: false }),
+        supabase.from("teacher_comments").select("*").eq("student_id", student.id).order("created_at", { ascending: false }),
+        supabase.from("homework").select("*").eq("class_name", student.class_name).order("due_date", { ascending: false }),
+      ]);
 
       const attendanceComments = (attendance || []).filter(a => a.comment?.trim()).map(a => ({
         id: "att_" + a.id, student_id: a.student_id, comment: a.comment,
@@ -90,7 +94,7 @@ const DailyOverviewPage = () => {
       }
       const allComments = [...commentsWithTeachers, ...attendanceComments].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-      const { data: homeworkData } = await supabase.from("homework").select("*").eq("class_name", student.class_name).order("due_date", { ascending: false });
+      // homeworkData already loaded above via Promise.all
       const homeworkIds = homeworkData?.map(h => h.id) || [];
       let shMap = {};
       if (homeworkIds.length > 0) {
@@ -171,14 +175,14 @@ const DailyOverviewPage = () => {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { label: 'Classes', value: dailyClasses.length, color: 'purple' },
-          { label: 'Present', value: stats.present, color: 'emerald' },
-          { label: 'Late', value: stats.late, color: 'orange' },
-          { label: 'Absent', value: stats.absent, color: 'red' },
-          { label: 'Sent Out', value: stats.sentOut, color: 'purple' },
+          { label: 'Classes',  value: dailyClasses.length, border: '#e9d5ff', text: '#7c3aed' },
+          { label: 'Present',  value: stats.present,       border: '#a7f3d0', text: '#059669' },
+          { label: 'Late',     value: stats.late,           border: '#fed7aa', text: '#ea580c' },
+          { label: 'Absent',   value: stats.absent,         border: '#fecaca', text: '#dc2626' },
+          { label: 'Sent Out', value: stats.sentOut,        border: '#e9d5ff', text: '#7c3aed' },
         ].map((s, i) => (
-          <div key={i} className={`bg-white rounded-xl shadow-sm border border-${s.color}-200 p-3`}>
-            <p className={`text-xl font-bold text-${s.color}-600`}>{s.value}</p>
+          <div key={i} className="bg-white rounded-xl shadow-sm p-3" style={{ border: `1px solid ${s.border}` }}>
+            <p className="text-xl font-bold" style={{ color: s.text }}>{s.value}</p>
             <p className="text-xs text-gray-600">{s.label}</p>
           </div>
         ))}

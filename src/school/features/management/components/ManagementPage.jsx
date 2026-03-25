@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo } from "react";
-import { 
-  Settings, Users as UsersIcon, GraduationCap, 
+import {
+  Settings, Users as UsersIcon, GraduationCap,
   Archive as ArchiveIcon, BarChart3, Calendar, Palette, ChevronRight,
   BookOpen
 } from 'lucide-react';

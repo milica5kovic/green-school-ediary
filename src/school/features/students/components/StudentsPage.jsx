@@ -28,15 +28,19 @@ const StudentsPage = () => {
       setLoading(true);
       const allStudents = await studentsService.getAllStudents();
 
-      const studentsWithParents = await Promise.all(
-        allStudents.map(async (student) => {
-          const { data: parentLinks } = await supabase
-            .from('student_parents')
-            .select('parents(id, full_name, email, phone), relationship, is_primary')
-            .eq('student_id', student.id);
-          return { ...student, parents: parentLinks || [] };
-        })
-      );
+      // Batch-load all parent links in ONE query instead of N+1
+      const { data: allParentLinks } = await supabase
+        .from('student_parents')
+        .select('student_id, parents(id, full_name, email, phone), relationship, is_primary')
+        .in('student_id', allStudents.map(s => s.id));
+
+      const parentMap = {};
+      (allParentLinks || []).forEach(pl => {
+        if (!parentMap[pl.student_id]) parentMap[pl.student_id] = [];
+        parentMap[pl.student_id].push(pl);
+      });
+
+      const studentsWithParents = allStudents.map(s => ({ ...s, parents: parentMap[s.id] || [] }));
 
       setStudents(studentsWithParents);
     } catch (error) {

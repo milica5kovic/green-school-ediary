@@ -296,18 +296,12 @@ function DraggableChip({ entry, isConflict, filterType, isDraft }) {
 // ============================================================
 // DROPPABLE CELL
 // ============================================================
-function DroppableCell({ id, isEmpty, isConsumed, isDraft, isDoubleCell, activeId, dropState, children, onClick }) {
+function DroppableCell({ id, isEmpty, isConsumed, isDraft, isDoubleCell, activeId, isValidDrop, children, onClick }) {
   const { setNodeRef, isOver } = useDroppable({ id, disabled: !isDraft || isConsumed });
 
   const showHighlight = isOver && activeId;
-  const stateColors = {
-    valid:    { bg: '#10b98120', border: '#10b981' },
-    swap:     { bg: '#f59e0b20', border: '#f59e0b' },
-    conflict: { bg: '#ef444420', border: '#ef4444' },
-  };
-  const colors = showHighlight && dropState ? stateColors[dropState] : null;
-  const highlightColor = colors ? colors.bg : 'transparent';
-  const borderColor = colors ? colors.border : 'transparent';
+  const highlightColor = showHighlight ? (isValidDrop ? '#10b98120' : '#ef444420') : 'transparent';
+  const borderColor = showHighlight ? (isValidDrop ? '#10b981' : '#ef4444') : 'transparent';
 
   return (
     <td
@@ -366,25 +360,17 @@ export default function TimetableGrid({
   onSetCell,
   onDeleteCell,
   onMoveCell,
-  onMoveCells,
   onSwapCells,
   saving,
   viewMode,
-  onFilterChange,
 }) {
   const { primaryColor } = useBranding();
   const [filterType, setFilterType] = useState('class');
   const [filterValue, setFilterValue] = useState('');
-
-  const updateFilter = (type, value) => {
-    setFilterType(type);
-    setFilterValue(value);
-    onFilterChange?.({ type, value });
-  };
   const [modalState, setModalState] = useState(null);
-  const [swapModal, setSwapModal] = useState(null); // { draggedGroup, targetGroup }
+  const [swapModal, setSwapModal] = useState(null); // { dragged, target, canSwap, reason }
   const [activeEntry, setActiveEntry] = useState(null); // entry being dragged
-  const [dragError, setDragError] = useState(null); // brief error string, auto-clears
+  const [dragValidTarget, setDragValidTarget] = useState(null); // 'valid' | 'invalid' | null
 
   const sortedSlots = [...timeSlots].sort((a, b) => a.slot_number - b.slot_number);
   const isDraft = viewMode === 'draft';
@@ -444,81 +430,67 @@ export default function TimetableGrid({
     return idx >= 0 && idx < sortedSlots.length - 1 ? sortedSlots[idx + 1] : null;
   };
 
-  // Get all sibling entries sharing the same cell (class+day+slot) as the given entry
-  const getSiblings = (entry) =>
-    entries.filter(e =>
-      e.id !== entry.id &&
-      e.class_name === entry.class_name &&
-      e.day_of_week === entry.day_of_week &&
-      e.slot_number === entry.slot_number
-    );
-
-  // Check if a group of entries can all move to targetDay/targetSlot (no conflicts)
-  const isValidGroupDrop = (draggedGroup, targetDay, targetSlot) => {
-    if (!draggedGroup.length) return false;
-    const draggedIds = new Set(draggedGroup.map(e => e.id));
-    for (const entry of draggedGroup) {
-      const slotsToCheck = entry.is_double ? [targetSlot, targetSlot + 1] : [targetSlot];
-      for (const slot of slotsToCheck) {
-        const others = (allLookup[targetDay]?.[slot] || []).filter(e => !draggedIds.has(e.id));
-        if (others.some(e => e.teacher_id === entry.teacher_id)) return false;
-        if (others.some(e => e.class_name === entry.class_name)) return false;
-      }
+  // Check if dropping activeEntry at [targetDay, targetSlot] is valid
+  const isValidDropTarget = (entry, targetDay, targetSlot) => {
+    if (!entry) return false;
+    const slotsToCheck = entry.is_double ? [targetSlot, targetSlot + 1] : [targetSlot];
+    for (const slot of slotsToCheck) {
+      const cellEntries = allLookup[targetDay]?.[slot] || [];
+      const otherEntries = cellEntries.filter(e => e.id !== entry.id);
+      if (otherEntries.some(e => e.teacher_id === entry.teacher_id)) return false;
+      if (otherEntries.some(e => e.class_name === entry.class_name)) return false;
+      // Also check double-period entries from slot-1 that visually consume this slot
+      const prevDoubles = (allLookup[targetDay]?.[slot - 1] || []).filter(e => e.id !== entry.id && e.is_double);
+      if (prevDoubles.some(e => e.teacher_id === entry.teacher_id)) return false;
+      if (prevDoubles.some(e => e.class_name === entry.class_name)) return false;
     }
     return true;
   };
 
-  // For drag highlight: single-entry check (used in DroppableCell isValidDrop)
-  const isValidDropTarget = (entry, targetDay, targetSlot) => {
-    if (!entry) return false;
-    return isValidGroupDrop([entry], targetDay, targetSlot);
-  };
+  // Check if two entries can be swapped (each can go to the other's slot, excluding both from conflicts)
+  const checkCanSwap = (dragged, target) => {
+    // When swapping, exclude BOTH entries plus any parallel-group companions
+    // (same class at the same slot). This prevents false conflicts when a class
+    // has multiple parallel entries at a slot (e.g. Y9 Science + Y9 C&G running
+    // simultaneously) — the companion entries just stay put and are not blockers.
+    const sameClassAtTargetSlot = entries.filter(e =>
+      e.id !== dragged.id && e.id !== target.id &&
+      e.day_of_week === target.day_of_week &&
+      e.slot_number === target.slot_number &&
+      e.class_name === dragged.class_name
+    );
+    const sameClassAtDraggedSlot = entries.filter(e =>
+      e.id !== dragged.id && e.id !== target.id &&
+      e.day_of_week === dragged.day_of_week &&
+      e.slot_number === dragged.slot_number &&
+      e.class_name === target.class_name
+    );
+    const excludeIds = new Set([
+      dragged.id, target.id,
+      ...sameClassAtTargetSlot.map(e => e.id),
+      ...sameClassAtDraggedSlot.map(e => e.id),
+    ]);
+    const others = entries.filter(e => !excludeIds.has(e.id));
 
-  const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-
-  // Check if two groups can swap positions — returns { canSwap, reason }
-  // reason always describes exactly what prevents the swap in plain language.
-  const checkCanSwapGroups = (group1, group2) => {
-    const allIds = new Set([...group1.map(e => e.id), ...group2.map(e => e.id)]);
-    const others = entries.filter(e => !allIds.has(e.id));
-    const toDay1 = group2[0].day_of_week;
-    const toSlot1 = group2[0].slot_number;
-    const toDay2 = group1[0].day_of_week;
-    const toSlot2 = group1[0].slot_number;
     const occupies = (e, day, slot) =>
       e.day_of_week === day && (e.slot_number === slot || (e.is_double && e.slot_number === slot - 1));
+
     const conflictMsg = (moving, toDay, toSlot) => {
       const slots = moving.is_double ? [toSlot, toSlot + 1] : [toSlot];
       for (const s of slots) {
         if (others.some(o => o.teacher_id === moving.teacher_id && occupies(o, toDay, s)))
-          return `${moving.teacher?.full_name || 'Teacher'} is already teaching on ${DAY_SHORT[toDay]} P${s} — cannot move there.`;
+          return `${moving.teacher?.full_name || 'Teacher'} is busy at that slot.`;
         if (others.some(o => o.class_name === moving.class_name && occupies(o, toDay, s)))
-          return `${moving.class_name} already has another class on ${DAY_SHORT[toDay]} P${s} — cannot move there.`;
+          return `${moving.class_name} already has a class at that slot.`;
       }
       return null;
     };
-    for (const e of group1) {
-      const r = conflictMsg(e, toDay1, toSlot1);
-      if (r) return { canSwap: false, reason: r };
-    }
-    for (const e of group2) {
-      const r = conflictMsg(e, toDay2, toSlot2);
-      if (r) return { canSwap: false, reason: r };
-    }
-    return { canSwap: true, reason: null };
-  };
 
-  // Build a plain-language reason WHY a drop directly fails (teacher or class conflict)
-  const directBlockReason = (draggedGroup, targetEntries) => {
-    for (const d of draggedGroup) {
-      const teacherBlock = targetEntries.find(t => t.teacher_id === d.teacher_id);
-      if (teacherBlock)
-        return `${d.teacher?.full_name || 'Teacher'} is already teaching ${teacherBlock.subject} (${teacherBlock.class_name}) at this time.`;
-      const classBlock = targetEntries.find(t => t.class_name === d.class_name);
-      if (classBlock)
-        return `${d.class_name} already has ${classBlock.subject} (${classBlock.teacher?.full_name || ''}) at this time.`;
-    }
-    return null;
+    const r1 = conflictMsg(dragged, target.day_of_week, target.slot_number);
+    if (r1) return { canSwap: false, reason: r1 };
+    const r2 = conflictMsg(target, dragged.day_of_week, dragged.slot_number);
+    if (r2) return { canSwap: false, reason: r2 };
+    return { canSwap: true, reason: null };
   };
 
   const handleDragStart = ({ active }) => {
@@ -527,61 +499,41 @@ export default function TimetableGrid({
   };
 
   const handleDragOver = ({ active, over }) => {
-    if (!over || !activeEntry) return;
+    if (!over || !activeEntry) { setDragValidTarget(null); return; }
+    const [targetDay, targetSlot] = over.id.toString().split('|').map(Number);
+    setDragValidTarget(isValidDropTarget(activeEntry, targetDay, targetSlot) ? 'valid' : 'invalid');
   };
 
   const handleDragEnd = async ({ active, over }) => {
     setActiveEntry(null);
+    setDragValidTarget(null);
     if (!over || !isDraft) return;
 
     const [targetDay, targetSlot] = over.id.toString().split('|').map(Number);
     const dragged = entries.find(e => e.id === active.id);
-    if (!dragged) return;
 
-    const draggedGroup = [dragged, ...getSiblings(dragged)];
-    const draggedIds = new Set(draggedGroup.map(e => e.id));
-    const targetCellEntries = (allLookup[targetDay]?.[targetSlot] || [])
-      .filter(e => !draggedIds.has(e.id));
+    if (!isValidDropTarget(dragged, targetDay, targetSlot)) {
+      // Collect all entries occupying the target slot:
+      // direct entries at this slot + double-period entries from slot-1 that consume this slot
+      const directEntries = (allLookup[targetDay]?.[targetSlot] || []).filter(e => e.id !== active.id);
+      const doublesFromPrev = (allLookup[targetDay]?.[targetSlot - 1] || []).filter(
+        e => e.id !== active.id && e.is_double
+      );
+      const occupying = [...directEntries, ...doublesFromPrev];
 
-    const isValid = isValidGroupDrop(draggedGroup, targetDay, targetSlot);
-
-    if (targetCellEntries.length > 0 && !isValid) {
-      // First: explain what DIRECTLY blocks the move (same teacher or same class at target)
-      const directMsg = directBlockReason(draggedGroup, targetCellEntries);
-      if (directMsg) {
-        // If it's a same-class conflict, a swap might still be possible (reorder within day)
-        const sameClass = draggedGroup.some(d => targetCellEntries.some(t => t.class_name === d.class_name));
-        if (sameClass) {
-          const { canSwap, reason } = checkCanSwapGroups(draggedGroup, targetCellEntries);
-          if (canSwap) {
-            setSwapModal({ draggedGroup, targetGroup: targetCellEntries });
-            return;
-          }
-          setDragError(`${directMsg} (Swap also blocked: ${reason})`);
-        } else {
-          setDragError(directMsg);
-        }
-        setTimeout(() => setDragError(null), 4000);
+      if (occupying.length >= 1) {
+        // Prefer same class+subject first (most intuitive swap), then same class, then fallback
+        const target =
+          occupying.find(e => e.class_name === dragged.class_name && e.subject === dragged.subject) ||
+          occupying.find(e => e.class_name === dragged.class_name) ||
+          occupying[0];
+        const { canSwap, reason } = checkCanSwap(dragged, target);
+        setSwapModal({ dragged, target, canSwap, reason });
         return;
       }
-      // No direct block found by name — try swap
-      const { canSwap, reason } = checkCanSwapGroups(draggedGroup, targetCellEntries);
-      if (!canSwap) {
-        setDragError(reason || 'Cannot move — conflict detected.');
-        setTimeout(() => setDragError(null), 4000);
-        return;
-      }
-      setSwapModal({ draggedGroup, targetGroup: targetCellEntries });
-      return;
     }
 
-    if (draggedGroup.length === 1) {
-      await onMoveCell(active.id, targetDay, targetSlot);
-    } else if (onMoveCells) {
-      await onMoveCells(draggedGroup.map(e => e.id), targetDay, targetSlot);
-    } else {
-      await onMoveCell(active.id, targetDay, targetSlot);
-    }
+    await onMoveCell(active.id, targetDay, targetSlot);
   };
 
   const openCell = (day, slot) => {
@@ -610,7 +562,7 @@ export default function TimetableGrid({
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <div className="flex bg-gray-100 rounded-xl p-1">
             {['class', 'teacher', 'all'].map(type => (
-              <button key={type} onClick={() => updateFilter(type, '')}
+              <button key={type} onClick={() => { setFilterType(type); setFilterValue(''); }}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
                   filterType === type ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'
                 }`}>
@@ -620,7 +572,7 @@ export default function TimetableGrid({
           </div>
 
           {filterType !== 'all' && (
-            <select value={filterValue} onChange={e => updateFilter(filterType, e.target.value)}
+            <select value={filterValue} onChange={e => setFilterValue(e.target.value)}
               className="px-3 py-2 text-sm border border-gray-300 rounded-xl focus:outline-none">
               <option value="">— Show all —</option>
               {filterOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -676,27 +628,9 @@ export default function TimetableGrid({
                     const cellEntries = lookup[day.index]?.[slot.slot_number] || [];
                     const hasConflict = cellEntries.some(e => conflicts.has(e.id));
                     const isDoubleCell = cellEntries.some(e => e.is_double);
-                    let dropState = null;
-                    if (activeEntry) {
-                      const draggedGroup = entries.filter(e =>
-                        e.id === activeEntry.id ||
-                        (e.class_name === activeEntry.class_name &&
-                         e.day_of_week === activeEntry.day_of_week &&
-                         e.slot_number === activeEntry.slot_number)
-                      );
-                      const draggedIds = new Set(draggedGroup.map(e => e.id));
-                      const targetGroup = (allLookup[day.index]?.[slot.slot_number] || [])
-                        .filter(e => !draggedIds.has(e.id));
-                      const isValid = isValidGroupDrop(draggedGroup, day.index, slot.slot_number);
-                      if (isValid) {
-                        dropState = 'valid';
-                      } else if (targetGroup.length > 0) {
-                        const { canSwap } = checkCanSwapGroups(draggedGroup, targetGroup);
-                        dropState = canSwap ? 'swap' : 'conflict';
-                      } else {
-                        dropState = 'conflict';
-                      }
-                    }
+                    const isValid = activeEntry
+                      ? isValidDropTarget(activeEntry, day.index, slot.slot_number)
+                      : false;
 
                     return (
                       <DroppableCell
@@ -707,7 +641,7 @@ export default function TimetableGrid({
                         isDraft={isDraft}
                         isDoubleCell={isDoubleCell}
                         activeId={activeEntry?.id}
-                        dropState={dropState}
+                        isValidDrop={isValid}
                         onClick={() => !activeEntry && openCell(day, slot)}
                       >
                         {cellEntries.length === 0 ? (
@@ -742,7 +676,7 @@ export default function TimetableGrid({
 
         {/* Legend */}
         <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
-          {isDraft && <span>Click to add/edit · Drag to move · Drag to occupied slot to swap (shown in amber).</span>}
+          {isDraft && <span>Click any cell to add or edit · Drag chips to move.</span>}
           <span className="flex items-center gap-1 text-violet-500">
             <Layers size={12} /> Double class spans 2 periods
           </span>
@@ -764,22 +698,14 @@ export default function TimetableGrid({
         ) : null}
       </DragOverlay>
 
-      {/* Drag conflict error toast */}
-      {dragError && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-red-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg pointer-events-none">
-          <AlertTriangle size={15} />
-          {dragError}
-        </div>
-      )}
-
-      {/* Swap Modal — only shown when swap is valid */}
+      {/* Swap Modal */}
       {swapModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3 bg-violet-50 border-b border-violet-100">
               <h3 className="font-bold text-gray-800 flex items-center gap-2 text-sm">
                 <ArrowLeftRight size={15} className="text-violet-500" />
-                Swap time slots?
+                Swap entries?
               </h3>
               <button onClick={() => setSwapModal(null)} className="p-1.5 rounded-lg hover:bg-violet-100 text-gray-400 transition-colors">
                 <X size={16} />
@@ -787,47 +713,46 @@ export default function TimetableGrid({
             </div>
 
             <div className="p-4 space-y-3">
-              <div className="flex items-stretch gap-2">
-                {/* Left group */}
-                <div className="flex-1 rounded-xl bg-violet-50 border border-violet-200 p-2.5 text-xs space-y-1.5">
-                  <div className="text-[10px] font-semibold text-violet-400 uppercase tracking-wide mb-1">
-                    {['Mon','Tue','Wed','Thu','Fri'][swapModal.draggedGroup[0].day_of_week]} · P{swapModal.draggedGroup[0].slot_number}
+              {/* Visual swap: dragged ↔ target */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 p-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor(swapModal.dragged.subject) }} />
+                    <span className="font-semibold text-gray-800 truncate">{swapModal.dragged.subject}</span>
                   </div>
-                  {swapModal.draggedGroup.map(e => (
-                    <div key={e.id} className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor(e.subject) }} />
-                      <div>
-                        <div className="font-semibold text-gray-800">{e.subject}</div>
-                        <div className="text-gray-400">{e.class_name} · {e.teacher?.full_name?.split(' ').slice(-1)[0]}</div>
-                      </div>
-                    </div>
-                  ))}
+                  <div className="text-gray-500 truncate">{swapModal.dragged.class_name}</div>
+                  <div className="text-gray-400 truncate">{swapModal.dragged.teacher?.full_name}</div>
+                  <div className="text-gray-300 mt-0.5 text-[10px]">
+                    {['Mon','Tue','Wed','Thu','Fri'][swapModal.dragged.day_of_week]} · P{swapModal.dragged.slot_number}
+                  </div>
                 </div>
 
-                <div className="flex items-center">
-                  <ArrowLeftRight size={18} className="text-violet-400" />
-                </div>
+                <ArrowLeftRight size={18} className="text-violet-400 flex-shrink-0" />
 
-                {/* Right group */}
-                <div className="flex-1 rounded-xl bg-violet-50 border border-violet-200 p-2.5 text-xs space-y-1.5">
-                  <div className="text-[10px] font-semibold text-violet-400 uppercase tracking-wide mb-1">
-                    {['Mon','Tue','Wed','Thu','Fri'][swapModal.targetGroup[0].day_of_week]} · P{swapModal.targetGroup[0].slot_number}
+                <div className="flex-1 p-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor(swapModal.target.subject) }} />
+                    <span className="font-semibold text-gray-800 truncate">{swapModal.target.subject}</span>
                   </div>
-                  {swapModal.targetGroup.map(e => (
-                    <div key={e.id} className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor(e.subject) }} />
-                      <div>
-                        <div className="font-semibold text-gray-800">{e.subject}</div>
-                        <div className="text-gray-400">{e.class_name} · {e.teacher?.full_name?.split(' ').slice(-1)[0]}</div>
-                      </div>
-                    </div>
-                  ))}
+                  <div className="text-gray-500 truncate">{swapModal.target.class_name}</div>
+                  <div className="text-gray-400 truncate">{swapModal.target.teacher?.full_name}</div>
+                  <div className="text-gray-300 mt-0.5 text-[10px]">
+                    {['Mon','Tue','Wed','Thu','Fri'][swapModal.target.day_of_week]} · P{swapModal.target.slot_number}
+                  </div>
                 </div>
               </div>
 
-              <p className="text-xs text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded-lg">
-                ✓ All teachers are free at their new slots — swap is valid.
-              </p>
+              {!swapModal.canSwap && (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
+                  <AlertTriangle size={13} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-700">{swapModal.reason || 'Swap not possible — conflict exists.'}</p>
+                </div>
+              )}
+              {swapModal.canSwap && (
+                <p className="text-xs text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded-lg">
+                  ✓ Both teachers are free at their new slots — swap is valid.
+                </p>
+              )}
             </div>
 
             <div className="flex gap-2 px-4 pb-4">
@@ -835,17 +760,19 @@ export default function TimetableGrid({
                 className="flex-1 px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">
                 Cancel
               </button>
-              <button
-                onClick={async () => {
-                  const { draggedGroup, targetGroup } = swapModal;
-                  setSwapModal(null);
-                  await onSwapCells(draggedGroup.map(e => e.id), targetGroup.map(e => e.id));
-                }}
-                disabled={saving}
-                className="flex-1 px-4 py-2 text-sm font-medium rounded-xl bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 transition-colors"
-              >
-                {saving ? 'Swapping…' : 'Swap'}
-              </button>
+              {swapModal.canSwap && (
+                <button
+                  onClick={async () => {
+                    const { dragged, target } = swapModal;
+                    setSwapModal(null);
+                    await onSwapCells(dragged.id, target.id);
+                  }}
+                  disabled={saving}
+                  className="flex-1 px-4 py-2 text-sm font-medium rounded-xl bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 transition-colors"
+                >
+                  {saving ? 'Swapping…' : 'Swap'}
+                </button>
+              )}
             </div>
           </div>
         </div>

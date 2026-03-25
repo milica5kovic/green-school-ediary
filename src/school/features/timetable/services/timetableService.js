@@ -159,7 +159,7 @@ export class TimetableService {
       .from('timetable_entries')
       .select(`
         *,
-        teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email, user_id)
+        teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email)
       `)
       .eq('school_id', this.schoolId)
       .eq('status', status)
@@ -197,7 +197,7 @@ export class TimetableService {
       .insert(toInsert)
       .select(`
         *,
-        teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email, user_id)
+        teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email)
       `);
     if (error) throw error;
     return data;
@@ -220,7 +220,7 @@ export class TimetableService {
     const { data, error } = await this.supabase
       .from('timetable_entries')
       .insert(toInsert)
-      .select(`*, teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email, user_id)`);
+      .select(`*, teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email)`);
     if (error) throw error;
     return data ?? [];
   }
@@ -258,7 +258,7 @@ export class TimetableService {
       }])
       .select(`
         *,
-        teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email, user_id)
+        teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email)
       `)
       .single();
     if (error) throw error;
@@ -276,7 +276,7 @@ export class TimetableService {
       .eq('status', 'draft')
       .select(`
         *,
-        teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email, user_id)
+        teacher:teachers!timetable_entries_teacher_id_fkey(id, full_name, email)
       `)
       .single();
     if (error) throw error;
@@ -307,28 +307,27 @@ export class TimetableService {
   }
 
   // Publish: draft → published + sync to teacher_schedule
-  //
-  // IMPORTANT ordering: teacher_schedule insert happens BEFORE promoting draft→published.
-  // If the insert fails (e.g. FK violation), entries remain as draft so the user can retry.
-  // Previously the promotion ran first, leaving entries stuck as published with no schedule.
   async publishTimetable(timeSlots) {
     this._require();
 
-    // Fetch draft entries WITH teacher join so we can guard deleted teachers
     const draftEntries = await this.getTimetableEntries('draft');
 
-    // If draft is empty, also check if entries are stuck in published state
-    // (this happens when a previous publish promoted draft→published but teacher_schedule insert failed)
-    let entriesToPublish = draftEntries;
-    if (draftEntries.length === 0) {
-      const published = await this.getTimetableEntries('published');
-      if (published.length > 0) {
-        // Re-sync teacher_schedule from the already-published entries
-        entriesToPublish = published;
-      } else {
-        return { published: 0 };
-      }
-    }
+    // Clear old published entries
+    await this.supabase
+      .from('timetable_entries')
+      .delete()
+      .eq('school_id', this.schoolId)
+      .eq('status', 'published');
+
+    if (draftEntries.length === 0) return { published: 0 };
+
+    // Promote draft → published
+    const { error: promoteErr } = await this.supabase
+      .from('timetable_entries')
+      .update({ status: 'published', updated_at: new Date().toISOString() })
+      .eq('school_id', this.schoolId)
+      .eq('status', 'draft');
+    if (promoteErr) throw promoteErr;
 
     // Build slot lookup: slot_number → slot data
     const slotMap = timeSlots.reduce((acc, s) => {
@@ -336,19 +335,21 @@ export class TimetableService {
       return acc;
     }, {});
 
-    // Build teacher_schedule rows.
-    // teacher_schedule.teacher_id references teachers.id (the PK) — not user_id.
-    // This way all teachers are synced regardless of whether they have an auth account.
+    // Sync to teacher_schedule (wipe + re-insert)
+    await this.supabase
+      .from('teacher_schedule')
+      .delete()
+      .eq('school_id', this.schoolId);
+
     const scheduleRows = [];
-    entriesToPublish.forEach(e => {
-      if (!e.teacher?.id) return; // teacher record was deleted
+    draftEntries.forEach(e => {
       const slot = slotMap[e.slot_number];
       const timeLabel = slot
         ? `${slot.start_time.slice(0, 5)} - ${slot.end_time.slice(0, 5)}`
         : `Period ${e.slot_number}`;
       scheduleRows.push({
         school_id: this.schoolId,
-        teacher_id: e.teacher.id,
+        teacher_id: e.teacher_id,
         day_of_week: DAY_NAMES[e.day_of_week],
         time_slot: timeLabel,
         class_name: e.class_name,
@@ -364,7 +365,7 @@ export class TimetableService {
           : `Period ${e.slot_number + 1}`;
         scheduleRows.push({
           school_id: this.schoolId,
-          teacher_id: e.teacher.id,
+          teacher_id: e.teacher_id,
           day_of_week: DAY_NAMES[e.day_of_week],
           time_slot: nextLabel,
           class_name: e.class_name,
@@ -375,51 +376,23 @@ export class TimetableService {
       }
     });
 
-    // Deduplicate by (teacher_id, day_of_week, time_slot).
-    // Parallel group entries (same teacher, multiple classes, same slot) produce duplicates.
+    // Deduplicate by (teacher_id, day_of_week, time_slot) before inserting.
+    // Parallel group entries (same teacher teaching multiple combined classes at the same slot,
+    // e.g. Y1+Y2 C&G with Zoran) produce duplicate rows — the unique constraint on
+    // teacher_schedule (teacher_id, day_of_week, time_slot) rejects them.
     const seenScheduleKeys = new Set();
     const deduplicatedRows = scheduleRows.filter(row => {
-      if (!row.teacher_id) return false;
-
       const key = `${row.teacher_id}|${row.day_of_week}|${row.time_slot}`;
       if (seenScheduleKeys.has(key)) return false;
       seenScheduleKeys.add(key);
       return true;
     });
 
-    // Step 1: wipe + re-insert teacher_schedule FIRST.
-    // If this fails the draft entries are still draft and the user can retry.
-    await this.supabase
+    const { error: schedErr } = await this.supabase
       .from('teacher_schedule')
-      .delete()
-      .eq('school_id', this.schoolId);
+      .insert(deduplicatedRows);
+    if (schedErr) throw schedErr;
 
-    if (deduplicatedRows.length > 0) {
-      const { error: schedErr } = await this.supabase
-        .from('teacher_schedule')
-        .insert(deduplicatedRows);
-      if (schedErr) throw schedErr;
-    }
-
-    // Step 2: only promote draft→published after teacher_schedule succeeded.
-    if (draftEntries.length > 0) {
-      await this.supabase
-        .from('timetable_entries')
-        .delete()
-        .eq('school_id', this.schoolId)
-        .eq('status', 'published');
-
-      const { error: promoteErr } = await this.supabase
-        .from('timetable_entries')
-        .update({ status: 'published', updated_at: new Date().toISOString() })
-        .eq('school_id', this.schoolId)
-        .eq('status', 'draft');
-      if (promoteErr) throw promoteErr;
-    }
-
-    return {
-      published: entriesToPublish.length,
-      synced: deduplicatedRows.length,
-    };
+    return { published: draftEntries.length };
   }
 }
