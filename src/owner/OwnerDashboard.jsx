@@ -7,125 +7,197 @@ import {
   Building2, Users, GraduationCap, Plus, Search, Trash2,
   ExternalLink, CheckCircle, Clock, AlertCircle, DollarSign,
   ChevronRight, X, Sparkles, Settings, LogOut, RefreshCw,
-  AlertTriangle, Shield, ToggleLeft, ToggleRight,
-  Calendar, ClipboardList, UserCheck, BookOpen, MessageSquare,
-  FileText, Palette, Zap
+  Shield, ToggleLeft, ToggleRight,
+  Calendar, CalendarDays, CalendarRange, ClipboardList, ClipboardCheck,
+  UserCheck, UserPlus, BookMarked, MessageSquare, FileText, Palette,
+  Zap, BarChart3, Activity, CheckSquare, Award, Home, LayoutDashboard,
 } from 'lucide-react';
 
 // ============================================================================
-// CONSTANTS & CONFIGURATION
+// CONSTANTS
 // ============================================================================
 
 const PLAN_CONFIG = {
-  basic: { 
-    name: 'Basic', 
-    price: 300, 
+  basic: {
+    name: 'Basic',
+    price: 300,
     color: 'bg-slate-100 text-slate-700 border-slate-200',
-    gradient: 'from-slate-400 to-slate-500',
     students: '50 students',
   },
-  pro: { 
-    name: 'Pro', 
-    price: 500, 
+  pro: {
+    name: 'Pro',
+    price: 500,
     color: 'bg-violet-100 text-violet-700 border-violet-200',
-    gradient: 'from-violet-400 to-purple-500',
     students: '200 students',
   },
-  enterprise: { 
-    name: 'Enterprise', 
-    price: 800, 
+  enterprise: {
+    name: 'Enterprise',
+    price: 800,
     color: 'bg-amber-100 text-amber-700 border-amber-200',
-    gradient: 'from-amber-400 to-orange-500',
     students: 'Unlimited',
   },
 };
 
 const STATUS_CONFIG = {
-  active: { 
-    label: 'Active', 
+  active: {
+    label: 'Active',
     color: 'bg-emerald-50 text-emerald-600 border-emerald-200',
     dot: 'bg-emerald-500',
-    icon: CheckCircle,
   },
-  trial: { 
-    label: 'Trial', 
+  trial: {
+    label: 'Trial',
     color: 'bg-amber-50 text-amber-600 border-amber-200',
     dot: 'bg-amber-500',
-    icon: Clock,
   },
-  suspended: { 
-    label: 'Suspended', 
+  suspended: {
+    label: 'Suspended',
     color: 'bg-red-50 text-red-600 border-red-200',
     dot: 'bg-red-500',
-    icon: AlertTriangle,
   },
-  cancelled: { 
-    label: 'Cancelled', 
+  cancelled: {
+    label: 'Cancelled',
     color: 'bg-slate-50 text-slate-500 border-slate-200',
     dot: 'bg-slate-400',
-    icon: X,
   },
 };
 
-const FEATURES_CONFIG = [
-  { key: 'attendance', label: 'Attendance', icon: UserCheck, description: 'Daily attendance tracking' },
-  { key: 'homework', label: 'Homework', icon: ClipboardList, description: 'Assignment management' },
-  { key: 'calendar', label: 'Calendar', icon: Calendar, description: 'School events & schedule' },
-  { key: 'parent_portal', label: 'Parent Portal', icon: Users, description: 'Parent access & communication' },
-  { key: 'report_cards', label: 'Report Cards', icon: FileText, description: 'Term reports & PDF export' },
-  { key: 'messaging', label: 'Messaging', icon: MessageSquare, description: 'In-app notifications' },
-  { key: 'admissions', label: 'Admissions', icon: GraduationCap, description: 'Enrollment management' },
-  { key: 'custom_branding', label: 'Custom Branding', icon: Palette, description: 'School colors & logo' },
+/**
+ * FEATURE_GROUPS — single source of truth for all toggleable features.
+ * Every key here must match a key used in hasFeature() in SchoolApp.jsx.
+ * Groups mirror the sidebar sections so the owner can reason about them easily.
+ */
+const FEATURE_GROUPS = [
+  {
+    label: 'General',
+    description: 'Core pages visible to all authenticated users',
+    features: [
+      { key: 'home',            label: 'Teacher Home',    icon: Home,            description: 'Teacher homepage & class overview' },
+      { key: 'admin_dashboard', label: 'Admin Dashboard', icon: LayoutDashboard, description: 'Admin analytics & statistics' },
+    ],
+  },
+  {
+    label: 'Teacher Features',
+    description: 'Visible to teachers in their sidebar',
+    features: [
+      { key: 'schedule',       label: 'My Schedule',      icon: Clock,           description: 'Personal timetable view' },
+      { key: 'calendar',       label: 'Calendar',         icon: Calendar,        description: 'Teacher calendar & events' },
+      { key: 'tasks',          label: 'My Tasks',         icon: CheckSquare,     description: 'Personal to-do list' },
+      { key: 'homework',       label: 'Homework',         icon: BookMarked,      description: 'Homework assignment management' },
+      { key: 'grading',        label: 'Grading',          icon: GraduationCap,   description: 'Mark entry & grade reports' },
+      { key: 'daily_overview', label: 'Daily Overview',   icon: ClipboardCheck,  description: 'Class teacher daily attendance view' },
+      { key: 'test_maker',     label: 'Test Maker',       icon: FileText,        description: 'Create & print tests' },
+      { key: 'activity',       label: 'Activity Tracker', icon: Activity,        description: 'Behaviour tracking & points log' },
+    ],
+  },
+  {
+    label: 'Admin Features',
+    description: 'Visible to admins and super-admins only',
+    features: [
+      { key: 'admin_calendar', label: 'School Calendar',  icon: CalendarDays,    description: 'Admin-level school events' },
+      { key: 'management',     label: 'Management',       icon: Users,           description: 'Teachers, students & terms' },
+      { key: 'admissions',     label: 'Admissions',       icon: UserPlus,        description: 'Enrollment pipeline & applications' },
+      { key: 'timetable',      label: 'Timetable Maker',  icon: CalendarRange,   description: 'Auto-generate class timetables' },
+      { key: 'reports',        label: 'Reports',          icon: BarChart3,       description: 'Analytics & data exports' },
+      { key: 'report_cards',   label: 'Report Cards',     icon: FileText,        description: 'Term PDF report generation' },
+    ],
+  },
+  {
+    label: 'Parent Portal',
+    description: 'Visible to parents — disabling parent_portal hides all sub-features',
+    features: [
+      { key: 'parent_portal',     label: 'Parent Portal',    icon: Users,          description: 'Master toggle — enables parent access' },
+      { key: 'parent_grades',     label: 'Grades',           icon: Award,          description: 'Parents can view grades' },
+      { key: 'parent_attendance', label: 'Attendance',       icon: UserCheck,      description: 'Parents can view attendance' },
+      { key: 'parent_calendar',   label: 'Calendar',         icon: Calendar,       description: 'Parents can view school events' },
+      { key: 'parent_homework',   label: 'Homework',         icon: ClipboardList,  description: 'Parents can view homework' },
+    ],
+  },
+  {
+    label: 'Platform',
+    description: 'Branding & communication settings',
+    features: [
+      { key: 'messaging',       label: 'Messaging',       icon: MessageSquare, description: 'In-app notifications & messages' },
+      { key: 'custom_branding', label: 'Custom Branding', icon: Palette,       description: 'School colors & logo customization' },
+      { key: 'pdf_branding',    label: 'PDF Branding',    icon: FileText,      description: 'School logo on exported PDFs' },
+    ],
+  },
 ];
 
-const DEFAULT_SCHOOL_DATA = {
-  name: '',
-  slug: '',
-  email: '',
-  phone: '',
-  city: '',
-  address: '',
-  plan: 'pro',
-  status: 'trial',
-  primary_color: '#10b981',
-  secondary_color: '#0d9488',
-  grading_system: 'cambridge',
-  academic_year: '2025-26',
-  features: {
-    homework: true,
-    attendance: true,
-    parent_portal: true,
-    calendar: true,
-    report_cards: true,
-    messaging: false,
-    admissions: true,
-    custom_branding: true,
-  }
+/**
+ * DEFAULT_FEATURES — used both for new schools and as a merge fallback
+ * for existing schools that may be missing newer keys in their DB JSONB.
+ */
+const DEFAULT_FEATURES = {
+  // General
+  home:               true,
+  admin_dashboard:    true,
+  // Teacher
+  schedule:           true,
+  calendar:           true,
+  tasks:              true,
+  homework:           true,
+  grading:            true,
+  daily_overview:     true,
+  test_maker:         true,
+  activity:           true,
+  // Admin
+  admin_calendar:     true,
+  management:         true,
+  admissions:         true,
+  timetable:          true,
+  reports:            true,
+  report_cards:       true,
+  // Parent portal
+  parent_portal:      true,
+  parent_grades:      true,
+  parent_attendance:  true,
+  parent_calendar:    true,
+  parent_homework:    true,
+  // Platform
+  messaging:          false,
+  custom_branding:    true,
+  pdf_branding:       true,
 };
 
+const DEFAULT_SCHOOL_DATA = {
+  name:            '',
+  slug:            '',
+  email:           '',
+  phone:           '',
+  city:            '',
+  address:         '',
+  plan:            'pro',
+  status:          'trial',
+  primary_color:   '#10b981',
+  secondary_color: '#0d9488',
+  grading_system:  'cambridge',
+  academic_year:   '2025-26',
+  features:        DEFAULT_FEATURES,
+};
+
+// Flat list used for counts
+const ALL_FEATURE_KEYS = FEATURE_GROUPS.flatMap(g => g.features);
+
 // ============================================================================
-// MAIN COMPONENT
+// OWNER DASHBOARD
 // ============================================================================
 
 const OwnerDashboard = () => {
   const { user, signOut } = useAuth();
-  
-  const [schools, setSchools] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filters, setFilters] = useState({ status: 'all', plan: 'all' });
-  const [modal, setModal] = useState({ type: null, data: null });
+
+  const [schools,        setSchools]        = useState([]);
+  const [loading,        setLoading]        = useState(true);
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [searchTerm,     setSearchTerm]     = useState('');
+  const [filters,        setFilters]        = useState({ status: 'all', plan: 'all' });
+  const [modal,          setModal]          = useState({ type: null, data: null });
   const [expandedSchool, setExpandedSchool] = useState(null);
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // DATA LOADING
-  // ══════════════════════════════════════════════════════════════════════════
+  // ── Data loading ──────────────────────────────────────────────────────────
 
   const loadSchools = useCallback(async (isRefresh = false) => {
     try {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
+      isRefresh ? setRefreshing(true) : setLoading(true);
 
       const { data: schoolsData, error } = await supabase
         .from('schools')
@@ -140,61 +212,52 @@ const OwnerDashboard = () => {
             supabase.from('students').select('*', { count: 'exact', head: true }).eq('school_id', school.id),
             supabase.from('teachers').select('*', { count: 'exact', head: true }).eq('school_id', school.id),
           ]);
-
           return {
             ...school,
             student_count: studentsRes.count || 0,
             teacher_count: teachersRes.count || 0,
-            features: school.features || DEFAULT_SCHOOL_DATA.features,
+            // Merge DEFAULT_FEATURES so missing keys always have a defined value
+            features: { ...DEFAULT_FEATURES, ...(school.features || {}) },
           };
         })
       );
 
       setSchools(schoolsWithStats);
     } catch (err) {
-      console.error('Error loading schools:', err);
+      console.error('[OwnerDashboard] loadSchools:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadSchools();
-  }, [loadSchools]);
+  useEffect(() => { loadSchools(); }, [loadSchools]);
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // COMPUTED VALUES
-  // ══════════════════════════════════════════════════════════════════════════
+  // ── Derived state ─────────────────────────────────────────────────────────
 
-  const filteredSchools = useMemo(() => {
-    return schools.filter(school => {
-      const matchesSearch = 
-        school.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        school.slug.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = filters.status === 'all' || school.status === filters.status;
-      const matchesPlan = filters.plan === 'all' || school.plan === filters.plan;
-      return matchesSearch && matchesStatus && matchesPlan;
-    });
-  }, [schools, searchTerm, filters]);
+  const filteredSchools = useMemo(() => schools.filter(school => {
+    const q = searchTerm.toLowerCase();
+    const matchesSearch  = school.name.toLowerCase().includes(q) || school.slug.toLowerCase().includes(q);
+    const matchesStatus  = filters.status === 'all' || school.status === filters.status;
+    const matchesPlan    = filters.plan   === 'all' || school.plan   === filters.plan;
+    return matchesSearch && matchesStatus && matchesPlan;
+  }), [schools, searchTerm, filters]);
 
   const stats = useMemo(() => ({
-    total: schools.length,
-    active: schools.filter(s => s.status === 'active').length,
-    trial: schools.filter(s => s.status === 'trial').length,
+    total:    schools.length,
+    active:   schools.filter(s => s.status === 'active').length,
+    trial:    schools.filter(s => s.status === 'trial').length,
     students: schools.reduce((sum, s) => sum + (s.student_count || 0), 0),
     teachers: schools.reduce((sum, s) => sum + (s.teacher_count || 0), 0),
-    mrr: schools.reduce((sum, s) => {
+    mrr:      schools.reduce((sum, s) => {
       if (s.status !== 'active') return sum;
       return sum + (PLAN_CONFIG[s.plan]?.price || 0);
     }, 0),
   }), [schools]);
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // HANDLERS
-  // ══════════════════════════════════════════════════════════════════════════
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
-  const openModal = (type, data = null) => setModal({ type, data });
+  const openModal  = (type, data = null) => setModal({ type, data });
   const closeModal = () => setModal({ type: null, data: null });
 
   const handleDelete = async (school) => {
@@ -204,31 +267,35 @@ const OwnerDashboard = () => {
       closeModal();
       loadSchools(true);
     } catch (err) {
-      console.error('Error deleting school:', err);
+      console.error('[OwnerDashboard] handleDelete:', err);
       alert('Failed to delete school: ' + err.message);
     }
   };
 
   const handleToggleFeature = async (school, featureKey) => {
-    try {
-      const currentFeatures = school.features || {};
-      const updatedFeatures = {
-        ...currentFeatures,
-        [featureKey]: !currentFeatures[featureKey]
-      };
+    const optimisticFeatures = {
+      ...school.features,
+      [featureKey]: !school.features[featureKey],
+    };
 
+    // Optimistic UI update
+    setSchools(prev => prev.map(s =>
+      s.id === school.id ? { ...s, features: optimisticFeatures } : s
+    ));
+
+    try {
       const { error } = await supabase
         .from('schools')
-        .update({ features: updatedFeatures })
+        .update({ features: optimisticFeatures })
         .eq('id', school.id);
 
       if (error) throw error;
-
-      setSchools(prev => prev.map(s => 
-        s.id === school.id ? { ...s, features: updatedFeatures } : s
-      ));
     } catch (err) {
-      console.error('Error toggling feature:', err);
+      console.error('[OwnerDashboard] handleToggleFeature:', err);
+      // Roll back on failure
+      setSchools(prev => prev.map(s =>
+        s.id === school.id ? { ...s, features: school.features } : s
+      ));
     }
   };
 
@@ -238,21 +305,18 @@ const OwnerDashboard = () => {
         .from('schools')
         .update({ status: newStatus })
         .eq('id', school.id);
-
       if (error) throw error;
       loadSchools(true);
     } catch (err) {
-      console.error('Error updating status:', err);
+      console.error('[OwnerDashboard] handleStatusChange:', err);
     }
   };
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // RENDER
-  // ══════════════════════════════════════════════════════════════════════════
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-rose-50">
-      <Header user={user} onSignOut={signOut} />
+      <DashboardHeader user={user} onSignOut={signOut} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <StatsGrid stats={stats} />
@@ -273,16 +337,13 @@ const OwnerDashboard = () => {
           <EmptyState
             hasSearch={!!searchTerm || filters.status !== 'all' || filters.plan !== 'all'}
             onAdd={() => openModal('add')}
-            onClearFilters={() => {
-              setSearchTerm('');
-              setFilters({ status: 'all', plan: 'all' });
-            }}
+            onClearFilters={() => { setSearchTerm(''); setFilters({ status: 'all', plan: 'all' }); }}
           />
         ) : (
           <SchoolsList
             schools={filteredSchools}
             expandedSchool={expandedSchool}
-            onToggleExpand={(id) => setExpandedSchool(expandedSchool === id ? null : id)}
+            onToggleExpand={(id) => setExpandedSchool(prev => prev === id ? null : id)}
             onSettings={(school) => openModal('branding', school)}
             onDelete={(school) => openModal('delete', school)}
             onToggleFeature={handleToggleFeature}
@@ -291,14 +352,12 @@ const OwnerDashboard = () => {
         )}
       </main>
 
-      {/* Modals */}
       {modal.type === 'add' && (
         <AddSchoolModal
           onClose={closeModal}
           onSuccess={() => { closeModal(); loadSchools(true); }}
         />
       )}
-
       {modal.type === 'branding' && modal.data && (
         <BrandingSettings
           school={modal.data}
@@ -306,7 +365,6 @@ const OwnerDashboard = () => {
           onSave={() => { closeModal(); loadSchools(true); }}
         />
       )}
-
       {modal.type === 'delete' && modal.data && (
         <DeleteModal
           school={modal.data}
@@ -319,46 +377,43 @@ const OwnerDashboard = () => {
 };
 
 // ============================================================================
-// HEADER - Pastel Modern
+// HEADER
 // ============================================================================
 
-const Header = ({ user, onSignOut }) => (
+const DashboardHeader = ({ user, onSignOut }) => (
   <header className="bg-white/80 backdrop-blur-xl border-b border-violet-100 sticky top-0 z-40">
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-violet-200">
-            <Sparkles className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
-              Akio
-            </h1>
-            <p className="text-xs text-slate-400">Platform Control</p>
-          </div>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-violet-200">
+          <Sparkles className="w-5 h-5 text-white" />
         </div>
+        <div>
+          <h1 className="text-xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
+            Akio
+          </h1>
+          <p className="text-xs text-slate-400">Platform Control</p>
+        </div>
+      </div>
 
-        <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-violet-50 rounded-full">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-            <span className="text-xs font-medium text-violet-700">All systems operational</span>
+      <div className="flex items-center gap-4">
+        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-violet-50 rounded-full">
+          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+          <span className="text-xs font-medium text-violet-700">All systems operational</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="text-right hidden sm:block">
+            <p className="text-sm font-medium text-slate-700">{user?.email?.split('@')[0]}</p>
+            <p className="text-xs text-violet-500 flex items-center gap-1 justify-end">
+              <Shield size={10} /> Owner
+            </p>
           </div>
-          
-          <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block">
-              <p className="text-sm font-medium text-slate-700">{user?.email?.split('@')[0]}</p>
-              <p className="text-xs text-violet-500 flex items-center gap-1 justify-end">
-                <Shield size={10} /> Owner
-              </p>
-            </div>
-            <button
-              onClick={onSignOut}
-              className="p-2.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-xl transition-all"
-              title="Sign Out"
-            >
-              <LogOut size={18} />
-            </button>
-          </div>
+          <button
+            onClick={onSignOut}
+            className="p-2.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-xl transition-all"
+            title="Sign Out"
+          >
+            <LogOut size={18} />
+          </button>
         </div>
       </div>
     </div>
@@ -366,48 +421,45 @@ const Header = ({ user, onSignOut }) => (
 );
 
 // ============================================================================
-// STATS GRID - Pastel Cards
+// STATS GRID
 // ============================================================================
+
+const STAT_COLOR_MAP = {
+  violet:  'text-violet-500',
+  emerald: 'text-emerald-500',
+  amber:   'text-amber-500',
+  blue:    'text-blue-500',
+  rose:    'text-rose-500',
+  green:   'text-green-500',
+};
 
 const StatsGrid = ({ stats }) => {
   const items = [
-    { icon: Building2, label: 'Schools', value: stats.total, color: 'violet', bg: 'from-violet-100 to-purple-50' },
-    { icon: CheckCircle, label: 'Active', value: stats.active, color: 'emerald', bg: 'from-emerald-100 to-teal-50' },
-    { icon: Clock, label: 'Trial', value: stats.trial, color: 'amber', bg: 'from-amber-100 to-orange-50' },
-    { icon: GraduationCap, label: 'Students', value: stats.students.toLocaleString(), color: 'blue', bg: 'from-blue-100 to-cyan-50' },
-    { icon: Users, label: 'Teachers', value: stats.teachers.toLocaleString(), color: 'rose', bg: 'from-rose-100 to-pink-50' },
-    { icon: DollarSign, label: 'MRR', value: `€${stats.mrr}`, color: 'green', bg: 'from-green-100 to-emerald-50', highlight: true },
+    { icon: Building2,     label: 'Schools',  value: stats.total,                    color: 'violet',  bg: 'from-violet-100 to-purple-50' },
+    { icon: CheckCircle,   label: 'Active',   value: stats.active,                   color: 'emerald', bg: 'from-emerald-100 to-teal-50' },
+    { icon: Clock,         label: 'Trial',    value: stats.trial,                    color: 'amber',   bg: 'from-amber-100 to-orange-50' },
+    { icon: GraduationCap, label: 'Students', value: stats.students.toLocaleString(), color: 'blue',   bg: 'from-blue-100 to-cyan-50' },
+    { icon: Users,         label: 'Teachers', value: stats.teachers.toLocaleString(), color: 'rose',   bg: 'from-rose-100 to-pink-50' },
+    { icon: DollarSign,    label: 'MRR',      value: `€${stats.mrr}`,               color: 'green',   bg: 'from-green-100 to-emerald-50', highlight: true },
   ];
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
       {items.map((item, idx) => (
-        <StatCard key={idx} {...item} />
-      ))}
-    </div>
-  );
-};
-
-const StatCard = ({ icon: Icon, label, value, color, bg, highlight }) => {
-  const iconColors = {
-    violet: 'text-violet-500',
-    emerald: 'text-emerald-500',
-    amber: 'text-amber-500',
-    blue: 'text-blue-500',
-    rose: 'text-rose-500',
-    green: 'text-green-500',
-  };
-
-  return (
-    <div className={`relative p-4 rounded-2xl bg-gradient-to-br ${bg} border border-white/50 shadow-sm hover:shadow-md transition-all ${highlight ? 'ring-2 ring-green-200' : ''}`}>
-      <Icon className={`w-5 h-5 mb-2 ${iconColors[color]}`} />
-      <p className="text-2xl font-bold text-slate-800">{value}</p>
-      <p className="text-xs text-slate-500">{label}</p>
-      {highlight && (
-        <div className="absolute top-2 right-2">
-          <Zap size={14} className="text-green-500" />
+        <div
+          key={idx}
+          className={`relative p-4 rounded-2xl bg-gradient-to-br ${item.bg} border border-white/50 shadow-sm hover:shadow-md transition-all ${item.highlight ? 'ring-2 ring-green-200' : ''}`}
+        >
+          <item.icon className={`w-5 h-5 mb-2 ${STAT_COLOR_MAP[item.color]}`} />
+          <p className="text-2xl font-bold text-slate-800">{item.value}</p>
+          <p className="text-xs text-slate-500">{item.label}</p>
+          {item.highlight && (
+            <div className="absolute top-2 right-2">
+              <Zap size={14} className="text-green-500" />
+            </div>
+          )}
         </div>
-      )}
+      ))}
     </div>
   );
 };
@@ -456,6 +508,7 @@ const Toolbar = ({ searchTerm, onSearchChange, filters, onFiltersChange, onAdd, 
         onClick={onRefresh}
         disabled={refreshing}
         className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-500 hover:text-violet-600 hover:border-violet-200 transition-all disabled:opacity-50 shadow-sm"
+        title="Refresh"
       >
         <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
       </button>
@@ -492,95 +545,101 @@ const SchoolsList = ({ schools, expandedSchool, onToggleExpand, onSettings, onDe
   </div>
 );
 
+// ── School Card ───────────────────────────────────────────────────────────────
+
 const SchoolCard = ({ school, isExpanded, onToggleExpand, onSettings, onDelete, onToggleFeature, onStatusChange }) => {
   const status = STATUS_CONFIG[school.status] || STATUS_CONFIG.active;
-  const plan = PLAN_CONFIG[school.plan] || PLAN_CONFIG.pro;
+  const plan   = PLAN_CONFIG[school.plan]     || PLAN_CONFIG.pro;
+
+  const enabledCount = ALL_FEATURE_KEYS.filter(f => school.features?.[f.key]).length;
+  const totalCount   = ALL_FEATURE_KEYS.length;
 
   return (
     <div className="bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all overflow-hidden">
-      {/* Main Row */}
+
+      {/* ── Main row ─────────────────────────────────────────────────────── */}
       <div className="p-5 sm:p-6">
         <div className="flex items-start gap-4">
+
           {/* Logo */}
           <div
             className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-bold text-xl flex-shrink-0 shadow-lg overflow-hidden"
-            style={{ 
-              background: `linear-gradient(135deg, ${school.primary_color || '#6366f1'}, ${school.secondary_color || '#8b5cf6'})` 
-            }}
+            style={{ background: `linear-gradient(135deg, ${school.primary_color || '#6366f1'}, ${school.secondary_color || '#8b5cf6'})` }}
           >
-            {school.logo_url ? (
-              <img src={school.logo_url} alt={school.name} className="w-full h-full object-cover" />
-            ) : (
-              school.name.charAt(0).toUpperCase()
-            )}
+            {school.logo_url
+              ? <img src={school.logo_url} alt={school.name} className="w-full h-full object-cover" />
+              : school.name.charAt(0).toUpperCase()
+            }
           </div>
 
           {/* Info */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
               <div>
                 <h3 className="text-lg font-semibold text-slate-800">{school.name}</h3>
                 <p className="text-sm text-slate-400">{school.slug}.schoolhub.app</p>
               </div>
-
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border ${status.color}`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
                   {status.label}
                 </span>
-                <span className={`px-3 py-1 text-xs font-semibold rounded-full ${plan.color} border`}>
+                <span className={`px-3 py-1 text-xs font-semibold rounded-full border ${plan.color}`}>
                   {plan.name}
                 </span>
               </div>
             </div>
 
-            {/* Stats Row */}
-            <div className="flex flex-wrap items-center gap-6 mt-4">
-              <div className="flex items-center gap-2">
-                <GraduationCap size={16} className="text-slate-400" />
-                <span className="text-sm font-medium text-slate-700">{school.student_count}</span>
-                <span className="text-sm text-slate-400">students</span>
+            {/* Meta row */}
+            <div className="flex flex-wrap items-center gap-5 mt-4">
+              <div className="flex items-center gap-1.5 text-sm text-slate-500">
+                <GraduationCap size={15} className="text-slate-400" />
+                <span className="font-medium text-slate-700">{school.student_count}</span> students
               </div>
-              <div className="flex items-center gap-2">
-                <Users size={16} className="text-slate-400" />
-                <span className="text-sm font-medium text-slate-700">{school.teacher_count}</span>
-                <span className="text-sm text-slate-400">teachers</span>
+              <div className="flex items-center gap-1.5 text-sm text-slate-500">
+                <Users size={15} className="text-slate-400" />
+                <span className="font-medium text-slate-700">{school.teacher_count}</span> teachers
               </div>
-              <div className="flex items-center gap-2">
-                <DollarSign size={16} className="text-slate-400" />
-                <span className="text-sm font-medium text-slate-700">€{plan.price}</span>
-                <span className="text-sm text-slate-400">/month</span>
+              <div className="flex items-center gap-1.5 text-sm text-slate-500">
+                <DollarSign size={15} className="text-slate-400" />
+                <span className="font-medium text-slate-700">€{plan.price}</span>/month
               </div>
+
+              {/* Feature count — doubles as expand toggle */}
+              <button
+                onClick={onToggleExpand}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                  isExpanded
+                    ? 'bg-violet-100 text-violet-700'
+                    : 'bg-slate-100 text-slate-500 hover:bg-violet-50 hover:text-violet-600'
+                }`}
+              >
+                <Settings size={12} />
+                {enabledCount}/{totalCount} features
+              </button>
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-1">
-            <button 
+          {/* Action buttons */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
               onClick={() => window.open(`/?school=${school.slug}`, '_blank')}
               className="p-2.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-xl transition-all"
-              title="Visit"
+              title="Open school app"
             >
               <ExternalLink size={18} />
             </button>
-            <button 
+            <button
               onClick={onSettings}
               className="p-2.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-xl transition-all"
-              title="Branding"
+              title="Branding settings"
             >
               <Palette size={18} />
             </button>
-            <button 
-              onClick={onToggleExpand}
-              className={`p-2.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-xl transition-all ${isExpanded ? 'bg-violet-50 text-violet-600' : ''}`}
-              title="Features"
-            >
-              <Settings size={18} />
-            </button>
-            <button 
+            <button
               onClick={onDelete}
               className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-              title="Delete"
+              title="Delete school"
             >
               <Trash2 size={18} />
             </button>
@@ -588,62 +647,46 @@ const SchoolCard = ({ school, isExpanded, onToggleExpand, onSettings, onDelete, 
         </div>
       </div>
 
-      {/* Expanded Features Panel */}
+      {/* ── Expanded panel ────────────────────────────────────────────────── */}
       {isExpanded && (
-        <div className="px-5 sm:px-6 pb-5 sm:pb-6 pt-0 border-t border-slate-100">
-          <div className="pt-5">
-            {/* Status Changer */}
-            <div className="mb-6">
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-3">Status</p>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(STATUS_CONFIG).map(([key, config]) => (
-                  <button
-                    key={key}
-                    onClick={() => onStatusChange(key)}
-                    className={`px-4 py-2 text-sm font-medium rounded-xl border transition-all ${
-                      school.status === key 
-                        ? `${config.color} ring-2 ring-offset-1 ring-current` 
-                        : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    {config.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+        <div className="border-t border-slate-100 px-5 sm:px-6 pb-6 pt-5 space-y-6">
 
-            {/* Features Grid */}
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-3">Features</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {FEATURES_CONFIG.map(feature => {
-                const Icon = feature.icon;
-                const isEnabled = school.features?.[feature.key] ?? false;
-                
-                return (
-                  <button
-                    key={feature.key}
-                    onClick={() => onToggleFeature(feature.key)}
-                    className={`p-4 rounded-2xl border-2 text-left transition-all ${
-                      isEnabled 
-                        ? 'bg-violet-50 border-violet-200 hover:border-violet-300' 
-                        : 'bg-slate-50 border-slate-100 hover:border-slate-200 opacity-60'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <Icon size={20} className={isEnabled ? 'text-violet-500' : 'text-slate-400'} />
-                      {isEnabled ? (
-                        <ToggleRight size={20} className="text-violet-500" />
-                      ) : (
-                        <ToggleLeft size={20} className="text-slate-300" />
-                      )}
-                    </div>
-                    <p className={`text-sm font-medium ${isEnabled ? 'text-slate-700' : 'text-slate-500'}`}>
-                      {feature.label}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-0.5">{feature.description}</p>
-                  </button>
-                );
-              })}
+          {/* Status changer */}
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">
+              Status
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(STATUS_CONFIG).map(([key, config]) => (
+                <button
+                  key={key}
+                  onClick={() => onStatusChange(key)}
+                  className={`px-4 py-2 text-sm font-medium rounded-xl border transition-all ${
+                    school.status === key
+                      ? `${config.color} ring-2 ring-offset-1 ring-current`
+                      : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {config.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Feature groups */}
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-4">
+              Features
+            </p>
+            <div className="space-y-5">
+              {FEATURE_GROUPS.map(group => (
+                <FeatureGroup
+                  key={group.label}
+                  group={group}
+                  features={school.features}
+                  onToggle={onToggleFeature}
+                />
+              ))}
             </div>
           </div>
         </div>
@@ -652,8 +695,59 @@ const SchoolCard = ({ school, isExpanded, onToggleExpand, onSettings, onDelete, 
   );
 };
 
+// ── Feature Group ─────────────────────────────────────────────────────────────
+
+const FeatureGroup = ({ group, features, onToggle }) => {
+  const enabledInGroup = group.features.filter(f => features?.[f.key]).length;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2.5">
+        <p className="text-sm font-semibold text-slate-700">{group.label}</p>
+        <span className="text-xs text-slate-400">
+          ({enabledInGroup}/{group.features.length}) — {group.description}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+        {group.features.map(feature => {
+          const isEnabled = features?.[feature.key] ?? false;
+          return (
+            <button
+              key={feature.key}
+              onClick={() => onToggle(feature.key)}
+              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border-2 text-left transition-all ${
+                isEnabled
+                  ? 'bg-violet-50 border-violet-200 hover:border-violet-300'
+                  : 'bg-slate-50 border-slate-100 hover:border-slate-200 opacity-55'
+              }`}
+            >
+              <feature.icon
+                size={15}
+                className={`flex-shrink-0 ${isEnabled ? 'text-violet-500' : 'text-slate-400'}`}
+              />
+              <div className="flex-1 min-w-0">
+                <p className={`text-xs font-semibold truncate leading-tight ${isEnabled ? 'text-slate-700' : 'text-slate-400'}`}>
+                  {feature.label}
+                </p>
+                <p className="text-xs text-slate-400 truncate leading-tight mt-0.5">
+                  {feature.description}
+                </p>
+              </div>
+              {isEnabled
+                ? <ToggleRight size={15} className="text-violet-500 flex-shrink-0" />
+                : <ToggleLeft  size={15} className="text-slate-300 flex-shrink-0" />
+              }
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 // ============================================================================
-// STATE COMPONENTS
+// LOADING / EMPTY STATES
 // ============================================================================
 
 const LoadingState = () => (
@@ -672,15 +766,23 @@ const EmptyState = ({ hasSearch, onAdd, onClearFilters }) => (
       {hasSearch ? 'No schools match your filters' : 'No schools yet'}
     </h3>
     <p className="text-sm text-slate-500 mb-8 max-w-md mx-auto">
-      {hasSearch ? 'Try adjusting your search or filters' : 'Add your first school to start managing it with Akio'}
+      {hasSearch
+        ? 'Try adjusting your search or filters'
+        : 'Add your first school to start managing it with Akio'}
     </p>
     <div className="flex items-center justify-center gap-3">
       {hasSearch && (
-        <button onClick={onClearFilters} className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-2xl transition-all">
+        <button
+          onClick={onClearFilters}
+          className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-2xl transition-all"
+        >
           Clear Filters
         </button>
       )}
-      <button onClick={onAdd} className="px-6 py-3 bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-semibold rounded-2xl shadow-lg shadow-violet-200 transition-all">
+      <button
+        onClick={onAdd}
+        className="px-6 py-3 bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-semibold rounded-2xl shadow-lg shadow-violet-200 transition-all"
+      >
         Add School
       </button>
     </div>
@@ -692,9 +794,9 @@ const EmptyState = ({ hasSearch, onAdd, onClearFilters }) => (
 // ============================================================================
 
 const AddSchoolModal = ({ onClose, onSuccess }) => {
-  const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [step,     setStep]     = useState(1);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState(null);
   const [formData, setFormData] = useState(DEFAULT_SCHOOL_DATA);
 
   const updateField = (field, value) => {
@@ -708,8 +810,8 @@ const AddSchoolModal = ({ onClose, onSuccess }) => {
 
   const handleNext = () => {
     if (step === 1) {
-      if (!formData.name.trim()) return setError('School name is required');
-      if (!formData.slug.trim()) return setError('Subdomain is required');
+      if (!formData.name.trim())  return setError('School name is required');
+      if (!formData.slug.trim())  return setError('Subdomain is required');
       if (!formData.email.trim()) return setError('Email is required');
     }
     setStep(prev => prev + 1);
@@ -720,14 +822,19 @@ const AddSchoolModal = ({ onClose, onSuccess }) => {
       setLoading(true);
       setError(null);
 
-      const { data: existing } = await supabase.from('schools').select('id').eq('slug', formData.slug).single();
+      const { data: existing } = await supabase
+        .from('schools')
+        .select('id')
+        .eq('slug', formData.slug)
+        .single();
+
       if (existing) return setError('This subdomain is already taken');
 
       const { error: insertError } = await supabase.from('schools').insert([{
         ...formData,
-        pdf_header_text: formData.name,
+        pdf_header_text:  formData.name,
         show_logo_in_pdf: true,
-        created_at: new Date().toISOString(),
+        created_at:       new Date().toISOString(),
       }]);
 
       if (insertError) throw insertError;
@@ -741,48 +848,62 @@ const AddSchoolModal = ({ onClose, onSuccess }) => {
 
   return (
     <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-3xl w-full max-w-lg max-h-[90vh] overflow-hidden shadow-2xl">
-        <div className="flex items-center justify-between p-6 border-b border-slate-100">
+      <div className="bg-white rounded-3xl w-full max-w-lg max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-slate-100 flex-shrink-0">
           <div>
             <h2 className="text-xl font-bold text-slate-800">Add New School</h2>
             <p className="text-sm text-slate-400">Step {step} of 3</p>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl">
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
             <X size={20} />
           </button>
         </div>
 
-        <div className="flex gap-2 px-6 pt-4">
+        {/* Progress bar */}
+        <div className="flex gap-2 px-6 pt-4 flex-shrink-0">
           {[1, 2, 3].map(s => (
-            <div key={s} className={`h-1.5 flex-1 rounded-full transition-all ${s <= step ? 'bg-gradient-to-r from-violet-500 to-purple-500' : 'bg-slate-100'}`} />
+            <div
+              key={s}
+              className={`h-1.5 flex-1 rounded-full transition-all ${
+                s <= step ? 'bg-gradient-to-r from-violet-500 to-purple-500' : 'bg-slate-100'
+              }`}
+            />
           ))}
         </div>
 
-        <div className="p-6 overflow-y-auto max-h-[55vh]">
+        {/* Body */}
+        <div className="p-6 overflow-y-auto flex-1">
           {error && (
             <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm flex items-start gap-2">
               <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
-
-          {step === 1 && <StepBasicInfo formData={formData} onChange={updateField} />}
+          {step === 1 && <StepBasicInfo  formData={formData} onChange={updateField} />}
           {step === 2 && <StepPlanStatus formData={formData} onChange={updateField} />}
-          {step === 3 && <StepBranding formData={formData} onChange={updateField} />}
+          {step === 3 && <StepBranding   formData={formData} onChange={updateField} />}
         </div>
 
-        <div className="flex items-center justify-between p-6 border-t border-slate-100 bg-slate-50/50">
-          <button onClick={() => step > 1 ? setStep(step - 1) : onClose()} className="px-6 py-2.5 text-slate-500 hover:text-slate-700 text-sm font-medium">
+        {/* Footer */}
+        <div className="flex items-center justify-between p-6 border-t border-slate-100 bg-slate-50/50 flex-shrink-0">
+          <button
+            onClick={() => step > 1 ? setStep(step - 1) : onClose()}
+            className="px-6 py-2.5 text-slate-500 hover:text-slate-700 text-sm font-medium transition-colors"
+          >
             {step > 1 ? 'Back' : 'Cancel'}
           </button>
-
           <button
             onClick={() => step < 3 ? handleNext() : handleSubmit()}
             disabled={loading}
-            className="px-6 py-2.5 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white text-sm font-semibold rounded-xl shadow-lg shadow-violet-200 disabled:opacity-50 flex items-center gap-2"
+            className="px-6 py-2.5 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white text-sm font-semibold rounded-xl shadow-lg shadow-violet-200 disabled:opacity-50 flex items-center gap-2 transition-all"
           >
             {loading ? (
-              <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Creating...</>
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Creating...
+              </>
             ) : step < 3 ? (
               <>Next <ChevronRight size={16} /></>
             ) : (
@@ -806,15 +927,17 @@ const StepBasicInfo = ({ formData, onChange }) => (
           value={formData.slug}
           onChange={(e) => onChange('slug', e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))}
           placeholder="greenschool"
-          className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-l-xl text-slate-800 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:bg-white"
+          className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-l-xl text-slate-800 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:bg-white transition-all"
         />
-        <span className="px-4 py-3 bg-slate-100 border border-l-0 border-slate-200 rounded-r-xl text-slate-500 text-sm">.schoolhub.app</span>
+        <span className="px-4 py-3 bg-slate-100 border border-l-0 border-slate-200 rounded-r-xl text-slate-500 text-sm select-none">
+          .schoolhub.app
+        </span>
       </div>
     </div>
     <FormInput label="Email" type="email" value={formData.email} onChange={(v) => onChange('email', v)} placeholder="admin@school.com" required />
     <div className="grid grid-cols-2 gap-3">
       <FormInput label="Phone" value={formData.phone} onChange={(v) => onChange('phone', v)} placeholder="+381..." />
-      <FormInput label="City" value={formData.city} onChange={(v) => onChange('city', v)} placeholder="Belgrade" />
+      <FormInput label="City"  value={formData.city}  onChange={(v) => onChange('city', v)}  placeholder="Belgrade" />
     </div>
   </div>
 );
@@ -830,8 +953,8 @@ const StepPlanStatus = ({ formData, onChange }) => (
             type="button"
             onClick={() => onChange('plan', id)}
             className={`p-4 rounded-2xl border-2 text-left transition-all ${
-              formData.plan === id 
-                ? 'border-violet-400 bg-violet-50' 
+              formData.plan === id
+                ? 'border-violet-400 bg-violet-50'
                 : 'border-slate-100 hover:border-slate-200 bg-slate-50'
             }`}
           >
@@ -846,16 +969,16 @@ const StepPlanStatus = ({ formData, onChange }) => (
       <label className="block text-sm font-medium text-slate-600 mb-3">Initial Status</label>
       <div className="grid grid-cols-2 gap-3">
         {[
-          { id: 'trial', name: 'Trial', desc: '14-day free trial' }, 
-          { id: 'active', name: 'Active', desc: 'Start billing now' }
+          { id: 'trial',  name: 'Trial',  desc: '14-day free trial' },
+          { id: 'active', name: 'Active', desc: 'Start billing now' },
         ].map(s => (
           <button
             key={s.id}
             type="button"
             onClick={() => onChange('status', s.id)}
             className={`p-4 rounded-2xl border-2 text-left transition-all ${
-              formData.status === s.id 
-                ? 'border-violet-400 bg-violet-50' 
+              formData.status === s.id
+                ? 'border-violet-400 bg-violet-50'
                 : 'border-slate-100 hover:border-slate-200 bg-slate-50'
             }`}
           >
@@ -870,14 +993,13 @@ const StepPlanStatus = ({ formData, onChange }) => (
 
 const StepBranding = ({ formData, onChange }) => (
   <div className="space-y-4">
-    <ColorInput label="Primary Color" value={formData.primary_color} onChange={(v) => onChange('primary_color', v)} />
+    <ColorInput label="Primary Color"   value={formData.primary_color}   onChange={(v) => onChange('primary_color', v)} />
     <ColorInput label="Secondary Color" value={formData.secondary_color} onChange={(v) => onChange('secondary_color', v)} />
-    
-    <div className="mt-6 p-5 bg-gradient-to-br from-slate-50 to-slate-100 rounded-2xl">
+    <div className="p-5 bg-gradient-to-br from-slate-50 to-slate-100 rounded-2xl">
       <p className="text-xs text-slate-400 mb-3">Preview</p>
       <div className="flex items-center gap-4">
-        <div 
-          className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold shadow-lg" 
+        <div
+          className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold shadow-lg"
           style={{ background: `linear-gradient(135deg, ${formData.primary_color}, ${formData.secondary_color})` }}
         >
           {formData.name.charAt(0) || 'S'}
@@ -887,9 +1009,9 @@ const StepBranding = ({ formData, onChange }) => (
           <p className="text-sm text-slate-400">{formData.slug || 'subdomain'}.schoolhub.app</p>
         </div>
       </div>
-      <div 
-        className="mt-4 h-2 rounded-full" 
-        style={{ background: `linear-gradient(to right, ${formData.primary_color}, ${formData.secondary_color})` }} 
+      <div
+        className="mt-4 h-2 rounded-full"
+        style={{ background: `linear-gradient(to right, ${formData.primary_color}, ${formData.secondary_color})` }}
       />
     </div>
   </div>
@@ -897,7 +1019,9 @@ const StepBranding = ({ formData, onChange }) => (
 
 const FormInput = ({ label, type = 'text', value, onChange, placeholder, required }) => (
   <div>
-    <label className="block text-sm font-medium text-slate-600 mb-2">{label} {required && '*'}</label>
+    <label className="block text-sm font-medium text-slate-600 mb-2">
+      {label}{required && ' *'}
+    </label>
     <input
       type={type}
       value={value}
@@ -912,17 +1036,17 @@ const ColorInput = ({ label, value, onChange }) => (
   <div>
     <label className="block text-sm font-medium text-slate-600 mb-2">{label}</label>
     <div className="flex items-center gap-3">
-      <input 
-        type="color" 
-        value={value} 
-        onChange={(e) => onChange(e.target.value)} 
-        className="w-12 h-12 rounded-xl border-2 border-slate-200 cursor-pointer" 
+      <input
+        type="color"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-12 h-12 rounded-xl border-2 border-slate-200 cursor-pointer"
       />
-      <input 
-        type="text" 
-        value={value} 
-        onChange={(e) => onChange(e.target.value)} 
-        className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200 font-mono" 
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200 font-mono transition-all"
       />
     </div>
   </div>
@@ -934,7 +1058,7 @@ const ColorInput = ({ label, value, onChange }) => (
 
 const DeleteModal = ({ school, onClose, onConfirm }) => {
   const [confirmText, setConfirmText] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading,     setLoading]     = useState(false);
 
   const handleConfirm = async () => {
     setLoading(true);
@@ -951,7 +1075,7 @@ const DeleteModal = ({ school, onClose, onConfirm }) => {
           </div>
           <h3 className="text-xl font-bold text-slate-800 mb-2">Delete School</h3>
           <p className="text-sm text-slate-500">
-            Delete <strong className="text-slate-700">{school.name}</strong>? This cannot be undone.
+            Delete <strong className="text-slate-700">{school.name}</strong>? This action cannot be undone.
           </p>
         </div>
 
@@ -963,14 +1087,14 @@ const DeleteModal = ({ school, onClose, onConfirm }) => {
             type="text"
             value={confirmText}
             onChange={(e) => setConfirmText(e.target.value)}
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-red-200 font-mono"
             placeholder={school.slug}
+            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-red-200 font-mono transition-all"
           />
         </div>
 
         <div className="flex gap-3">
-          <button 
-            onClick={onClose} 
+          <button
+            onClick={onClose}
             className="flex-1 px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition-all"
           >
             Cancel
