@@ -420,18 +420,23 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
   // ============================================================================
   // SIGN OUT
   // ============================================================================
-  const signOut = async () => {
+  const signOut = () => {
+    isSigningOut.current = true;
+    hasLoadedInitialUser.current = false;
+    clearAuthState();
+
+    // Tell Supabase to invalidate the server session (fire & forget — don't await)
+    supabase.auth.signOut().catch(() => {});
+
+    // Clear session from localStorage immediately so the next page load sees no session
     try {
-      isSigningOut.current = true;
-      hasLoadedInitialUser.current = false;
-      clearAuthState();
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.error('❌ Sign out error:', error);
-    } finally {
-      // Reload the current origin, preserving any query params (e.g. ?school=greenschool)
-      window.location.href = window.location.origin + window.location.search;
-    }
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('sb-'))
+        .forEach(k => localStorage.removeItem(k));
+    } catch (_) {}
+
+    // Navigate to the root of the current origin, preserving ?school= param if present
+    window.location.href = window.location.origin + window.location.search;
   };
 
   const updatePassword = async (newPassword) => {
