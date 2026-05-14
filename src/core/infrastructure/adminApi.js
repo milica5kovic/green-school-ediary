@@ -81,6 +81,32 @@ export const checkAdminAccess = async () => {
   }
 };
 
+/**
+ * Atomically create an auth user + teacher record.
+ * On DB insert failure the edge function rolls back the auth user.
+ * Returns { user, teacher }.
+ */
+export const createTeacher = async ({ email, password, full_name, role, subjects, class_teacher_for }) => {
+  return callAdminFunction({
+    action: 'create_teacher',
+    email, password, full_name, role,
+    subjects: subjects || [],
+    class_teacher_for: class_teacher_for || null,
+  });
+};
+
+/**
+ * Atomically create an auth user + parent record.
+ * Returns { user, parent }.
+ */
+export const createParent = async ({ email, password, full_name, phone }) => {
+  return callAdminFunction({
+    action: 'create_parent',
+    email, password, full_name,
+    phone: phone || null,
+  });
+};
+
 export const createUser = async (email, password, metadata = {}) => {
   const result = await callAdminFunction({ action: 'create', email, password, metadata });
   return result.user;
@@ -102,4 +128,4 @@ export const generateTempPassword = (schoolName = 'School') => {
   return `${prefix}${number}${special}`;
 };
 
-export default { checkAdminAccess, createUser, deleteUser, updateUser, generateTempPassword };
+export default { checkAdminAccess, createTeacher, createParent, createUser, deleteUser, updateUser, generateTempPassword };

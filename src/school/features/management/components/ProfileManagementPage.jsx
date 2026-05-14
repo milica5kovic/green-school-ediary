@@ -24,7 +24,7 @@ import {
   supabase as rawSupabase,
   getCurrentSchoolId,
 } from "../../../../core/infrastructure/supabaseClient";
-import { createUser, generateTempPassword } from "../../../../core/infrastructure/adminApi";
+import { createTeacher, generateTempPassword } from "../../../../core/infrastructure/adminApi";
 
 import AddParentModal from "../../parents/modals/AddParentModal";
 import EditParentModal from "../../parents/modals/EditParentModal";
@@ -804,51 +804,18 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onSave }) =
       } else {
         // ── CREATE new teacher ───────────────────────────────
 
-        // Pre-check: does this email already exist in teachers for this school?
-        const { data: existing } = await supabase
-          .from('teachers')
-          .select('id')
-          .eq('email', formData.email)
-          .maybeSingle();
-
-        if (existing) {
-          setError('A staff member with this email already exists in your school.');
-          return;
-        }
-
         const tempPassword = generateTempPassword(schoolName);
 
-        // 1. Create auth user
-        const authUser = await createUser(formData.email, tempPassword, {
+        // Single atomic call: edge function creates auth user + teacher record.
+        // If DB insert fails the edge function rolls back the auth user.
+        await createTeacher({
+          email: formData.email,
+          password: tempPassword,
           full_name: formData.full_name,
           role,
+          subjects,
+          class_teacher_for,
         });
-        if (!authUser?.id) throw new Error('Failed to create auth user.');
-
-        // Small delay so DB triggers can fire
-        await new Promise(r => setTimeout(r, 500));
-
-        // 2. Insert teacher record
-        const { error: tErr } = await supabase
-          .from('teachers')
-          .insert([{
-            user_id: authUser.id,
-            school_id: schoolId,
-            full_name: formData.full_name,
-            email: formData.email,
-            role,
-            subjects,
-            class_teacher_for,
-            is_active: true,
-          }]);
-        if (tErr) {
-          if (tErr.message?.includes('duplicate') || tErr.message?.includes('unique')) {
-            setError('A staff member with this email already exists.');
-          } else {
-            setError(tErr.message || 'Account created but failed to save staff record. Contact support.');
-          }
-          return;
-        }
 
         setCredentials({ name: formData.full_name, email: formData.email, password: tempPassword });
         onSave();
