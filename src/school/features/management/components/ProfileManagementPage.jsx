@@ -737,7 +737,7 @@ const ProfileManagementPage = () => {
       {showAddParentModal && (
         <AddParentModal
           onClose={() => setShowAddParentModal(false)}
-          onSave={async () => { await loadAllData(); setShowAddParentModal(false); }}
+          onSave={async () => { await loadAllData(); }}
         />
       )}
 
