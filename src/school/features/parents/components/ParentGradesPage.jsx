@@ -166,7 +166,7 @@ const ParentGradesPage = () => {
         <div className="relative z-10">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <button onClick={() => setCurrentPage && setCurrentPage('parent-dashboard')}
+              <button onClick={() => setCurrentPage && setCurrentPage('home')}
                 className="bg-white/15 hover:bg-white/25 backdrop-blur p-2 rounded-lg transition-colors">
                 <ArrowLeft size={18} />
               </button>
