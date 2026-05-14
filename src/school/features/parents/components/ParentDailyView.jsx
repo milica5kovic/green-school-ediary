@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
+import {
   Calendar, Clock, ChevronLeft, ChevronRight, ChevronDown, AlertCircle,
   BookOpen, CheckCircle, XCircle, FileText, MessageSquare, Award, Home, Users
 } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
+import useParentChildren from '../../../../shared/hooks/useParentChildren';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PARENT DAILY VIEW PAGE - Uses useTermTheme for dynamic colors
@@ -15,51 +16,12 @@ const ParentDailyViewPage = () => {
   const theme = useTermTheme();
   const TermIcon = theme.icon;
 
-  const [children, setChildren] = useState([]);
-  const [selectedChild, setSelectedChild] = useState(null);
+  const { children, selectedChild, setSelectedChild, loading } = useParentChildren();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [dailyClasses, setDailyClasses] = useState([]);
   const [attendanceRecords, setAttendanceRecords] = useState({});
   const [homeworkDueToday, setHomeworkDueToday] = useState([]);
   const [studentHomeworkStatus, setStudentHomeworkStatus] = useState({});
-  const [loading, setLoading] = useState(true);
-
-  const loadChildren = useCallback(async () => {
-    
-    try {
-      setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      
-      const { data: parent } = await supabase
-        .from('parents')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-      
-      if (!parent) return;
-      
-      const { data: studentParents } = await supabase
-        .from('student_parents')
-        .select('students(*)')
-        .eq('parent_id', parent.id);
-      
-      const childrenList = studentParents?.map(sp => sp.students).filter(Boolean) || [];
-      setChildren(childrenList);
-      
-      if (childrenList.length > 0) {
-        setSelectedChild(childrenList[0]);
-      }
-    } catch (error) {
-      console.error('Error loading children:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [supabase]);
-
-  useEffect(() => {
-    loadChildren();
-  }, [loadChildren]);
 
   const loadDailyData = useCallback(async () => {
     if (!selectedChild) return;

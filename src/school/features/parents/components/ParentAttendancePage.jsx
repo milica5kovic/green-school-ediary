@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
+import useParentChildren from '../../../../shared/hooks/useParentChildren';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PARENT ATTENDANCE PAGE - Uses useTermTheme for dynamic colors
@@ -22,32 +23,11 @@ const ParentAttendancePage = () => {
   const theme = useTermTheme();
   const TermIcon = theme.icon;
 
-  const [children, setChildren] = useState([]);
-  const [selectedChild, setSelectedChild] = useState(null);
+  const { children, selectedChild, setSelectedChild, loading } = useParentChildren();
   const [attendance, setAttendance] = useState([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [stats, setStats] = useState({ total: 0, present: 0, absent: 0, late: 0, sentOut: 0, rate: 0 });
   const [termStats, setTermStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  // ─── Load children ────────────────────────────────────
-  useEffect(() => {
-    (async () => {
-      if (!supabase) return;
-      try {
-        setLoading(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const { data: parent } = await supabase.from('parents').select('id').eq('user_id', user.id).single();
-        if (!parent) return;
-        const { data: links } = await supabase.from('student_parents').select('students(*)').eq('parent_id', parent.id);
-        const list = links?.map(l => l.students).filter(Boolean) || [];
-        setChildren(list);
-        if (list.length > 0) setSelectedChild(list[0]);
-      } catch (err) { console.error(err); }
-      finally { setLoading(false); }
-    })();
-  }, [supabase]);
 
   // ─── Load attendance ──────────────────────────────────
   const loadAttendance = useCallback(async () => {

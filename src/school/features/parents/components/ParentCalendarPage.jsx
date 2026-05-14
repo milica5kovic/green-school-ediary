@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
+import useParentChildren from '../../../../shared/hooks/useParentChildren';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PARENT CALENDAR PAGE - Uses useTermTheme for dynamic colors
@@ -29,50 +30,12 @@ const ParentCalendarPage = () => {
   const theme = useTermTheme();
   const TermIcon = theme.icon;
 
-  const [children, setChildren] = useState([]);
-  const [selectedChild, setSelectedChild] = useState(null);
+  const { children, selectedChild, setSelectedChild, loading } = useParentChildren();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [schoolEvents, setSchoolEvents] = useState([]);
   const [scheduledTests, setScheduledTests] = useState([]);
   const [homeworkDue, setHomeworkDue] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState(null);
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // LOAD CHILDREN
-  // ══════════════════════════════════════════════════════════════════════════
-
-  useEffect(() => {
-    (async () => {
-      if (!supabase) return;
-      try {
-        setLoading(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        
-        const { data: parent } = await supabase
-          .from('parents')
-          .select('id')
-          .eq('user_id', user.id)
-          .single();
-        
-        if (!parent) return;
-        
-        const { data: links } = await supabase
-          .from('student_parents')
-          .select('students(*)')
-          .eq('parent_id', parent.id);
-        
-        const list = links?.map(l => l.students).filter(Boolean) || [];
-        setChildren(list);
-        if (list.length > 0) setSelectedChild(list[0]);
-      } catch (err) { 
-        console.error(err); 
-      } finally { 
-        setLoading(false); 
-      }
-    })();
-  }, [supabase]);
 
   // ══════════════════════════════════════════════════════════════════════════
   // LOAD CALENDAR DATA
@@ -239,7 +202,7 @@ const ParentCalendarPage = () => {
                 >
                   {children.map(c => (
                     <option key={c.id} value={c.id} className="text-gray-900">
-                      {c.full_name || c.name} — {c.class_name}
+                      {c.name} — {c.class_name}
                     </option>
                   ))}
                 </select>

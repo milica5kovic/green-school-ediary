@@ -6,6 +6,7 @@ import {
 import { useApp } from '../../../../core/context/AppContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
+import useParentChildren from '../../../../shared/hooks/useParentChildren';
 import { useBranding } from '../../../../core/context/BrandingContext';
 
 // ═══════════════════════════════════════════════════════════════
@@ -50,34 +51,13 @@ const ParentHomeworkPage = () => {
     return { color, name };
   };
 
-  const [children, setChildren] = useState([]);
-  const [selectedChild, setSelectedChild] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { children, selectedChild, setSelectedChild, loading } = useParentChildren();
   const [homework, setHomework] = useState([]);
   const [selectedTerm, setSelectedTerm] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [subjectFilter, setSubjectFilter] = useState('all');
 
   const today = new Date().toISOString().split('T')[0];
-
-  // ─── Load children ─────────────────────────────────────────
-  useEffect(() => {
-    (async () => {
-      if (!supabase) return;
-      try {
-        setLoading(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const { data: parent } = await supabase.from('parents').select('id').eq('user_id', user.id).single();
-        if (!parent) return;
-        const { data: links } = await supabase.from('student_parents').select('students(*)').eq('parent_id', parent.id);
-        const list = links?.map(l => l.students).filter(Boolean) || [];
-        setChildren(list);
-        if (list.length > 0) setSelectedChild(list[0]);
-      } catch (err) { console.error(err); }
-      finally { setLoading(false); }
-    })();
-  }, [supabase]);
 
   useEffect(() => {
     if (activeTerm && !selectedTerm) setSelectedTerm(activeTerm);

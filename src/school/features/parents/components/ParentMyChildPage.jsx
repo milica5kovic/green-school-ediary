@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { User, ChevronDown, Award, MessageSquare, TrendingUp, Star, AlertCircle, CheckCircle, Target, Users } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
+import useParentChildren from '../../../../shared/hooks/useParentChildren';
 import { getCambridgeGrade, isPrimaryClass } from '../../../../core/utils/cambridgeGrading';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -13,46 +14,10 @@ const ParentMyChildPage = () => {
   const theme = useTermTheme();
   const TermIcon = theme.icon;
 
-  const [children, setChildren] = useState([]);
-  const [selectedChild, setSelectedChild] = useState(null);
+  const { children, selectedChild, setSelectedChild, loading } = useParentChildren();
   const [teacherComments, setTeacherComments] = useState([]);
   const [topSubjects, setTopSubjects] = useState([]);
   const [behaviorStats, setBehaviorStats] = useState({ positive: 0, neutral: 0, needsAttention: 0 });
-  const [loading, setLoading] = useState(true);
-
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      
-      const { data: parent } = await supabase
-        .from('parents')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-      
-      if (!parent) return;
-      
-      const { data: studentParents } = await supabase
-        .from('student_parents')
-        .select('students(*)')
-        .eq('parent_id', parent.id);
-      
-      const childrenList = studentParents?.map(sp => sp.students).filter(Boolean) || [];
-      setChildren(childrenList);
-      
-      if (childrenList.length > 0) {
-        setSelectedChild(childrenList[0]);
-      }
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [supabase]);
-
-  useEffect(() => { loadData(); }, [loadData]);
 
   const loadChildDetails = useCallback(async () => {
     if (!selectedChild) return;
