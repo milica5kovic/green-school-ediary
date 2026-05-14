@@ -1,198 +1,153 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle } from 'lucide-react';
-import { supabase } from '../../../../core/infrastructure/supabaseClient';
-
+import { AlertTriangle, Trash2, Loader2, Users } from 'lucide-react';
+import { useApp } from '../../../../core/context/AppContext';
+import { useBranding } from '../../../../core/context/BrandingContext';
 
 const DeleteParentModal = ({ parent, onClose, onDelete }) => {
+  const { supabase } = useApp();
+  const { primaryColor } = useBranding();
   const [linkedStudents, setLinkedStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
-  const [confirmText, setConfirmText] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    loadLinkedStudents();
-  }, [parent.id]);
+  useEffect(() => { loadLinkedStudents(); }, [parent.id]);
 
   const loadLinkedStudents = async () => {
     try {
       const { data, error } = await supabase
         .from('student_parents')
-        .select(`
-          student:students(id, name, class_name)
-        `)
+        .select('student:students(id, name, class_name)')
         .eq('parent_id', parent.id);
-
       if (error) throw error;
-      setLinkedStudents(data?.map(d => d.student) || []);
-    } catch (error) {
-      console.error('Error loading linked students:', error);
+      setLinkedStudents(data?.map(d => d.student).filter(Boolean) || []);
+    } catch (err) {
+      console.error('Error loading linked students:', err);
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async () => {
-    if (confirmText !== 'DELETE') {
-      alert('Please type DELETE to confirm');
+    if (!confirmed) {
+      setError('Please confirm before deleting.');
       return;
     }
-
     try {
       setDeleting(true);
+      setError('');
 
-      // Step 1: Delete student-parent links
-      const { error: linksError } = await supabase
-        .from('student_parents')
-        .delete()
-        .eq('parent_id', parent.id);
-
-      if (linksError) throw linksError;
-
-      // Step 2: Delete parent record
-      const { error: parentError } = await supabase
-        .from('parents')
-        .delete()
-        .eq('id', parent.id);
-
+      await supabase.from('student_parents').delete().eq('parent_id', parent.id);
+      const { error: parentError } = await supabase.from('parents').delete().eq('id', parent.id);
       if (parentError) throw parentError;
 
-      // Step 3: Delete profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', parent.user_id);
-
-      if (profileError) {
-        console.warn('Profile delete failed:', profileError);
-      }
-
-      // Step 4: Delete auth user (optional - only if you want complete removal)
-      // This requires admin API access
-      try {
-        const response = await fetch(
-          `${process.env.REACT_APP_SUPABASE_URL}/auth/v1/admin/users/${parent.user_id}`,
-          {
-            method: 'DELETE',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY,
-              'Authorization': `Bearer ${process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY}`
-            }
-          }
-        );
-
-        if (!response.ok) {
-          console.warn('Auth user delete failed');
-        }
-      } catch (authError) {
-        console.warn('Could not delete auth user:', authError);
-      }
-
-      alert('✅ Parent deleted successfully!');
       onDelete();
-    } catch (error) {
-      console.error('Error deleting parent:', error);
-      alert('Failed to delete parent: ' + error.message);
+    } catch (err) {
+      setError(err.message || 'Failed to delete parent. Please try again.');
     } finally {
       setDeleting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
-        <div className="p-6 border-b">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-              <AlertTriangle size={24} className="text-red-600" />
-            </div>
-            <div>
-              <h3 className="text-xl font-bold text-gray-800">Delete Parent</h3>
-              <p className="text-sm text-gray-600">This action cannot be undone</p>
-            </div>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="p-5 bg-red-50 border-b border-red-100 flex items-center gap-3">
+          <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Trash2 size={18} className="text-red-600" />
+          </div>
+          <div>
+            <h3 className="font-bold text-gray-800">Delete Parent</h3>
+            <p className="text-xs text-gray-500 mt-0.5">This action cannot be undone</p>
           </div>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-5 space-y-4">
           {loading ? (
-            <div className="flex justify-center py-4">
-              <div className="w-6 h-6 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></div>
+            <div className="flex justify-center py-6">
+              <Loader2 size={24} className="animate-spin text-gray-400" />
             </div>
           ) : (
             <>
-              {/* Parent Info */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="font-semibold text-gray-800">{parent.full_name}</p>
-                <p className="text-sm text-gray-600">{parent.email}</p>
+              {/* Parent info */}
+              <div className="flex items-center gap-3 p-3.5 bg-gray-50 rounded-xl border border-gray-100">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0" style={{ backgroundColor: primaryColor }}>
+                  {parent.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-800 text-sm">{parent.full_name}</p>
+                  <p className="text-xs text-gray-500">{parent.email}</p>
+                </div>
               </div>
 
-              {/* Linked Students Warning */}
+              {/* Linked students warning */}
               {linkedStudents.length > 0 && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <p className="font-semibold text-yellow-800 mb-2">
-                    ⚠️ Warning: Linked Students
-                  </p>
-                  <p className="text-sm text-yellow-700 mb-2">
-                    This parent is linked to {linkedStudents.length} student(s):
-                  </p>
-                  <ul className="text-sm text-yellow-700 space-y-1">
-                    {linkedStudents.map(student => (
-                      <li key={student.id}>
-                        • {student.name} ({student.class_name})
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="text-sm text-yellow-700 mt-2">
-                    These links will be removed.
-                  </p>
+                <div className="flex items-start gap-2.5 p-3.5 bg-amber-50 border border-amber-200 rounded-xl">
+                  <Users size={15} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-700 mb-1">Linked to {linkedStudents.length} student{linkedStudents.length !== 1 ? 's' : ''}</p>
+                    <p className="text-xs text-amber-600">
+                      {linkedStudents.map(s => `${s.name} (${s.class_name})`).join(', ')} — all links will be removed.
+                    </p>
+                  </div>
                 </div>
               )}
 
-              {/* What will be deleted */}
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="font-semibold text-red-800 mb-2">
-                  This will permanently delete:
-                </p>
-                <ul className="text-sm text-red-700 space-y-1">
-                  <li>✗ Parent account and profile</li>
-                  <li>✗ Login credentials</li>
-                  <li>✗ All student links</li>
-                  <li>✗ All associated data</li>
+              {/* What gets deleted */}
+              <div className="p-3.5 bg-red-50 border border-red-100 rounded-xl">
+                <p className="text-xs font-semibold text-red-700 mb-2 uppercase tracking-wide">Will be permanently deleted:</p>
+                <ul className="space-y-1">
+                  {['Parent profile and record', 'All student links'].map(item => (
+                    <li key={item} className="flex items-center gap-2 text-xs text-red-600">
+                      <span className="w-1 h-1 rounded-full bg-red-400 flex-shrink-0" />
+                      {item}
+                    </li>
+                  ))}
                 </ul>
               </div>
 
-              {/* Confirmation Input */}
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Type <strong>DELETE</strong> to confirm:
-                </label>
+              {/* Confirmation checkbox */}
+              <label className="flex items-start gap-3 cursor-pointer group">
                 <input
-                  type="text"
-                  value={confirmText}
-                  onChange={(e) => setConfirmText(e.target.value)}
-                  className="w-full px-4 py-3 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none"
-                  placeholder="DELETE"
-                  autoComplete="off"
+                  type="checkbox"
+                  checked={confirmed}
+                  onChange={e => { setConfirmed(e.target.checked); setError(''); }}
+                  className="mt-0.5 w-4 h-4 rounded cursor-pointer accent-red-500"
                 />
-              </div>
+                <span className="text-sm text-gray-600 group-hover:text-gray-800 transition-colors leading-snug">
+                  I understand this will permanently delete <strong>{parent.full_name}</strong> and cannot be undone.
+                </span>
+              </label>
+
+              {/* Error */}
+              {error && (
+                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">
+                  <AlertTriangle size={14} className="flex-shrink-0" />
+                  {error}
+                </div>
+              )}
             </>
           )}
         </div>
 
-        <div className="p-6 border-t bg-gray-50 flex gap-3">
-          <button
-            onClick={handleDelete}
-            disabled={deleting || loading || confirmText !== 'DELETE'}
-            className="flex-1 bg-red-500 text-white py-3 rounded-lg hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-          >
-            {deleting ? 'Deleting...' : 'Delete Parent'}
-          </button>
+        {/* Actions */}
+        <div className="px-5 pb-5 flex gap-3">
           <button
             onClick={onClose}
             disabled={deleting}
-            className="flex-1 bg-gray-200 py-3 rounded-lg hover:bg-gray-300 font-medium"
+            className="flex-1 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
           >
             Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={deleting || loading || !confirmed}
+            className="flex-1 py-2.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-colors flex items-center justify-center gap-2"
+          >
+            {deleting ? <><Loader2 size={14} className="animate-spin" /> Deleting...</> : 'Delete Parent'}
           </button>
         </div>
       </div>

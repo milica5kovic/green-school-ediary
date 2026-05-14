@@ -761,7 +761,7 @@ const ProfileManagementPage = () => {
         <DeleteParentModal
           parent={selectedParent}
           onClose={() => { setShowDeleteParentModal(false); setSelectedParent(null); }}
-          onDelete={async () => { await loadAllData(); setShowDeleteParentModal(false); setSelectedParent(null); }}
+          onDelete={async () => { await loadAllData(); setShowDeleteParentModal(false); showToast(`${selectedParent?.full_name} has been removed.`); setSelectedParent(null); }}
         />
       )}
 
