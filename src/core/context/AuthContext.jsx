@@ -426,7 +426,7 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
     clearAuthState();
 
     // Tell Supabase to invalidate the server session (fire & forget — don't await)
-    supabase.auth.signOut().catch(() => {});
+    try { supabase.auth.signOut().catch(() => {}); } catch (_) {}
 
     // Clear session from localStorage immediately so the next page load sees no session
     try {
@@ -435,8 +435,8 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
         .forEach(k => localStorage.removeItem(k));
     } catch (_) {}
 
-    // Navigate to the root of the current origin, preserving ?school= param if present
-    window.location.href = window.location.origin + window.location.search;
+    // Reload the page — localStorage is now clear so it will show the login screen
+    window.location.reload();
   };
 
   const updatePassword = async (newPassword) => {
