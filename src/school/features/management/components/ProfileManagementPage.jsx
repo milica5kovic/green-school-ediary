@@ -1027,7 +1027,7 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onRefresh, 
                 onChange={(e) => setFormData(prev => ({ ...prev, full_name: e.target.value }))}
                 className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 transition-shadow"
                 required
-                placeholder="Ana Petrović"
+                placeholder="Jane Smith"
                 onFocus={(e) => e.target.style.boxShadow = `0 0 0 3px ${primaryColor}20`}
                 onBlur={(e) => e.target.style.boxShadow = 'none'}
               />

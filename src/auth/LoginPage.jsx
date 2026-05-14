@@ -39,21 +39,18 @@ const LoginPage = () => {
   // ─── Login Handler ─────────────────────────────────────
   const friendlyError = (msg = '') => {
     if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) {
-      return 'Pogrešan email ili lozinka. Pokušajte ponovo.';
+      return 'Incorrect email or password. Please try again.';
     }
     if (msg.includes('Email not confirmed')) {
-      return 'Email adresa nije potvrđena. Proverite inbox.';
+      return 'Email address not confirmed. Please check your inbox.';
     }
     if (msg.includes('Too many requests') || msg.includes('rate limit')) {
-      return 'Previše neuspelih pokušaja. Sačekajte nekoliko minuta.';
-    }
-    if (msg.includes('Nemate pristup') || msg.includes('school')) {
-      return msg;
+      return 'Too many failed attempts. Please wait a few minutes and try again.';
     }
     if (msg.includes('Network') || msg.includes('fetch')) {
-      return 'Problem sa vezom. Proverite internet i pokušajte ponovo.';
+      return 'Connection problem. Check your internet and try again.';
     }
-    return msg || 'Prijava nije uspela. Pokušajte ponovo.';
+    return msg || 'Sign in failed. Please try again.';
   };
 
   const handleSubmit = async (e) => {

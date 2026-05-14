@@ -24,8 +24,8 @@ function App() {
 const AppWithTenant = () => {
   const { schoolId, loading: tenantLoading } = useTenant();
   
-  // Čekaj da se tenant učita pre nego što renderuješ AuthProvider
-  // Ovo je bitno da AuthProvider ima schoolId od početka
+  // Wait for tenant to load before rendering AuthProvider
+  // Important: AuthProvider needs schoolId from the start
   if (tenantLoading) {
     return <LoadingScreen message="Loading..." />;
   }
@@ -198,9 +198,9 @@ const AccessDenied = ({ error }) => {
             </svg>
           </div>
 
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Pristup odbijen</h1>
+          <h1 className="text-xl font-bold text-gray-900 mb-2">Access Denied</h1>
           <p className="text-gray-500 text-sm leading-relaxed mb-7">
-            {error || 'Nemate pristup ovoj školi. Obratite se administratoru škole.'}
+            {error || "You don't have access to this school. Please contact your school administrator."}
           </p>
 
           <div className="space-y-3">
@@ -209,13 +209,13 @@ const AccessDenied = ({ error }) => {
               className="w-full py-3 text-white font-semibold rounded-xl transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
               style={{ backgroundColor: primaryColor, boxShadow: `0 8px 24px -8px ${primaryColor}60` }}
             >
-              Odjavi se i pokušaj ponovo
+              Sign out and try again
             </button>
             <button
               onClick={() => window.location.reload()}
               className="w-full py-3 text-gray-500 font-medium rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors text-sm"
             >
-              Osveži stranicu
+              Refresh page
             </button>
           </div>
         </div>
