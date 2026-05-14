@@ -255,7 +255,6 @@ const ProfileManagementPage = () => {
         email: r.email,
         subjects: r.subjects ? r.subjects.split(';').map(s => s.trim()).filter(Boolean) : [],
         class_teacher_for: r.class_teacher_for || null,
-        is_active: true,
       }));
 
     if (!inserts.length) { alert('No valid rows (full_name + email required).'); return; }

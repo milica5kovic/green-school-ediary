@@ -107,7 +107,6 @@ serve(async (req) => {
             role: role || 'teacher',
             subjects: subjects || [],
             class_teacher_for: class_teacher_for || null,
-            is_active: true,
           }])
           .select()
           .single();
