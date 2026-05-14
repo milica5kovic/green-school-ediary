@@ -418,59 +418,19 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
   };
 
   // ============================================================================
-  // SIGN OUT - Preserves subdomain for localhost
+  // SIGN OUT
   // ============================================================================
   const signOut = async () => {
     try {
-      console.log('🚪 Signing out...');
-      
-      // ✅ Get subdomain BEFORE clearing anything
-      const subdomain = initialSubdomain.current || getSubdomain();
-      console.log('🏫 Subdomain to preserve:', subdomain);
-      
       isSigningOut.current = true;
       hasLoadedInitialUser.current = false;
-      
       clearAuthState();
-      
-      const { error } = await supabase.auth.signOut();
-      
-      if (error) {
-        console.error('⚠️ Supabase sign out error:', error);
-      }
-      
-      console.log('✅ Signed out');
-      
-      // ═══════════════════════════════════════════════════════════════════════
-      // Reconstruct the correct URL with subdomain
-      // ═══════════════════════════════════════════════════════════════════════
-      
-      const protocol = window.location.protocol; // "http:" or "https:"
-      const port = window.location.port; // "3000" or ""
-      
-      let redirectUrl;
-      
-      if (subdomain) {
-        // For localhost with subdomain: greenschool.localhost:3000
-        if (window.location.hostname.includes('localhost') || window.location.hostname === 'localhost') {
-          redirectUrl = `${protocol}//${subdomain}.localhost${port ? ':' + port : ''}/`;
-        } else {
-          // For production: greenschool.schoolhub.com
-          const baseDomain = window.location.hostname.split('.').slice(-2).join('.');
-          redirectUrl = `${protocol}//${subdomain}.${baseDomain}${port ? ':' + port : ''}/`;
-        }
-      } else {
-        // No subdomain - just go to current origin
-        redirectUrl = `${protocol}//${window.location.hostname}${port ? ':' + port : ''}/`;
-      }
-      
-      console.log('🔄 Redirecting to:', redirectUrl);
-      window.location.href = redirectUrl;
-      
+      await supabase.auth.signOut();
     } catch (error) {
       console.error('❌ Sign out error:', error);
-      // Fallback: just reload
-      window.location.reload();
+    } finally {
+      // Reload the current origin, preserving any query params (e.g. ?school=greenschool)
+      window.location.href = window.location.origin + window.location.search;
     }
   };
 
