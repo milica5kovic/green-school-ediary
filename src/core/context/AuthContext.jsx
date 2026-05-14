@@ -211,7 +211,7 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
                 console.error('❌ User does not belong to this school - signing out');
                 await supabase.auth.signOut();
                 clearAuthState();
-                setError('You don't have access to this school.');
+                setError("You don't have access to this school.");
               }
             }
           } else if (profileData?.role === 'parent') {
@@ -221,7 +221,7 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
               console.error('❌ Parent does not belong to this school - signing out');
               await supabase.auth.signOut();
               clearAuthState();
-              setError('You don't have access to this school.');
+              setError("You don't have access to this school.");
             }
           }
         } else {
@@ -302,7 +302,7 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
               } else if (schoolId) {
                 // ❌ User signed in but doesn't belong to this school
                 console.error('❌ User does not belong to this school');
-                setError('You don't have access to this school.');
+                setError("You don't have access to this school.");
                 await supabase.auth.signOut();
               }
             }
@@ -401,7 +401,7 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
           console.error('   School ID:', schoolId);
           
           await supabase.auth.signOut();
-          throw new Error('You don't have access to this school.');
+          throw new Error("You don't have access to this school.");
         }
         
         console.log('✅ User verified for school:', schoolId);
