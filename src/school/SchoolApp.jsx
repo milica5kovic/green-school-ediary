@@ -121,8 +121,6 @@ const SchoolAppContent = () => {
     if (features[key] === undefined) return true;
     return features[key] === true;
   };
-  console.log('🔍 features:', features);
-console.log('🔍 timetable:', features?.timetable);
 
   // ── Page renderer ──────────────────────────────────────────────────────────
 
@@ -429,16 +427,6 @@ console.log('🔍 timetable:', features?.timetable);
             )}
           </nav>
 
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <a
-              href="https://akio.rs"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-gray-400 text-center block hover:text-gray-600 transition-colors"
-            >
-              Powered by <span className="font-semibold">Akio</span>
-            </a>
-          </div>
         </aside>
 
         {/* ── MAIN CONTENT ── */}

@@ -68,7 +68,7 @@ export default function Privacy() {
 
       <nav>
         <a href="/" className="nav-logo">
-          <img src="/Logo(1)_transparent.png" alt="Akio" style={{height:36}} />
+          <img src="/Logo(1)_transparent.png" alt="E-Diary" style={{height:36}} />
         </a>
         <a href="/" className="btn-p">← Back to Home</a>
       </nav>
@@ -76,15 +76,15 @@ export default function Privacy() {
       <div className="page">
         <div className="eyebrow"><span className="eline"/>Legal</div>
         <h1>Privacy <em>Policy</em></h1>
-        <p className="meta">Last updated: January 2026 &nbsp;·&nbsp; Akio Studio, Belgrade, Serbia</p>
+        <p className="meta">Last updated: January 2026</p>
 
         <div className="card">
-          <p>At Akio, we take your privacy seriously. This policy explains what data we collect, why we collect it, and how we protect it. We keep things simple — we only collect what we actually need.</p>
+          <p>We take your privacy seriously. This policy explains what data we collect, why we collect it, and how we protect it. We only collect what we actually need.</p>
         </div>
 
         <div className="section">
           <h2>Who We Are</h2>
-          <p>Akio is a custom software development studio based in Belgrade, Serbia. We build web applications, SaaS products, and digital tools for businesses and institutions. You can reach us at <a href="mailto:mia5ko@proton.me">mia5ko@proton.me</a>.</p>
+          <p>E-Diary is a school management platform. You can reach us at <a href="mailto:mia5ko@proton.me">mia5ko@proton.me</a>.</p>
         </div>
 
         <div className="section">
@@ -163,9 +163,9 @@ export default function Privacy() {
       <footer>
         <div className="fi2">
           <a href="/" className="nav-logo">
-            <img src="//Logo(1)_transparent.png" alt="Akio" style={{height:26}} />
+            <img src="//Logo(1)_transparent.png" alt="E-Diary" style={{height:26}} />
           </a>
-          <p className="fcopy">© 2026 Akio Studio. Crafted with 💜 in Belgrade.</p>
+          <p className="fcopy">© 2026 E-Diary</p>
           <div className="fll">
             <a href="/privacy">Privacy</a>
             <a href="/terms">Terms</a>

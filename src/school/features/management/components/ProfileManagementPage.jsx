@@ -15,15 +15,16 @@ import {
   UserPlus,
   GraduationCap,
   ChevronDown,
+  Copy,
 } from "lucide-react";
 import { useApp } from "../../../../core/context/AppContext";
 import { useBranding } from "../../../../core/context/BrandingContext";
+import { useTenant } from "../../../../core/context/TenantContext";
 import {
   supabase as rawSupabase,
-  createUserWithAdmin,
-  hasAdminAccess,
   getCurrentSchoolId,
 } from "../../../../core/infrastructure/supabaseClient";
+import { createUser, generateTempPassword } from "../../../../core/infrastructure/adminApi";
 
 import AddParentModal from "../../parents/modals/AddParentModal";
 import EditParentModal from "../../parents/modals/EditParentModal";
@@ -59,48 +60,43 @@ const ProfileManagementPage = () => {
   const loadTeachers = async () => {
     try {
       setLoading(true);
-      
-      let authUsers = { users: [] };
-      try {
-        const result = await rawSupabase.auth.admin.listUsers();
-        authUsers = result.data || { users: [] };
-      } catch (e) {
-        console.log('Auth admin not available');
-      }
-      
-      const { data: profiles } = await rawSupabase
-        .from('profiles')
-        .select('id, role, full_name')
-        .in('role', ['admin', 'teacher'])
-        .order('full_name');
 
-      const { data: teacherRecords } = await supabase
+      // Primary source: teachers table (tenant-scoped, always complete)
+      const { data: teacherRecords, error } = await supabase
         .from('teachers')
         .select('*')
         .order('full_name');
 
-      const combined = [];
-      
-      for (const profile of profiles || []) {
-        const teacherRecord = (teacherRecords || []).find(t => t.user_id === profile.id);
-        const authUser = authUsers?.users?.find(u => u.id === profile.id);
-        
-        if (teacherRecord) {
-          combined.push({
-            id: profile.id,
-            user_id: profile.id,
-            email: authUser?.email || teacherRecord?.email || 'No email',
-            full_name: profile.full_name || teacherRecord?.full_name || 'Unnamed',
-            role: profile.role,
-            subjects: teacherRecord?.subjects || [],
-            class_teacher_for: teacherRecord?.class_teacher_for || null,
-            is_super_admin: profile.role === 'admin' && teacherRecord !== undefined,
-            teacher_id: teacherRecord?.id || null
-          });
-        }
+      if (error) throw error;
+
+      // Enrich with profile data where available (for role/super-admin flag)
+      const userIds = (teacherRecords || []).map(t => t.user_id).filter(Boolean);
+      let profiles = [];
+      if (userIds.length > 0) {
+        const { data } = await rawSupabase
+          .from('profiles')
+          .select('id, role, full_name')
+          .in('id', userIds);
+        profiles = data || [];
       }
-      
-      console.log('✅ Staff loaded:', combined.length);
+
+      const combined = (teacherRecords || []).map(t => {
+        const profile = profiles.find(p => p.id === t.user_id);
+        const effectiveRole = profile?.role || t.role || 'teacher';
+        return {
+          id: t.user_id || t.id,
+          user_id: t.user_id,
+          email: t.email || '—',
+          full_name: t.full_name || profile?.full_name || 'Unnamed',
+          role: effectiveRole,
+          subjects: t.subjects || [],
+          class_teacher_for: t.class_teacher_for || null,
+          is_super_admin: effectiveRole === 'admin',
+          teacher_id: t.id,
+          has_login: !!t.user_id,
+        };
+      });
+
       setTeachers(combined);
     } catch (error) {
       console.error('Error loading teachers:', error);
@@ -129,7 +125,6 @@ const ProfileManagementPage = () => {
           .map((link) => link.student),
       }));
 
-      console.log("✅ Parents loaded:", parentsWithStudents.length);
       setParents(parentsWithStudents);
     } catch (error) {
       console.error("Error loading parents:", error);
@@ -533,6 +528,9 @@ const ProfileManagementPage = () => {
                               {teacher.is_super_admin && (
                                 <span className="text-[10px] text-purple-600 font-medium">★ Super Admin</span>
                               )}
+                              {!teacher.has_login && (
+                                <span className="text-[10px] text-amber-600 font-medium">⚠ No login account</span>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -747,6 +745,9 @@ const ProfileManagementPage = () => {
 // ════════════════════════════════════════════════════════════
 
 const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onSave }) => {
+  const { schoolId } = useTenant();
+  const { name: schoolName } = useBranding();
+
   const [formData, setFormData] = useState({
     full_name: teacher?.full_name || "",
     email: teacher?.email || "",
@@ -757,10 +758,12 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onSave }) =
   const [availableSubjects, setAvailableSubjects] = useState([]);
   const [availableClasses, setAvailableClasses] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [credentials, setCredentials] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    loadOptions();
-  }, []);
+  useEffect(() => { loadOptions(); }, []);
 
   const loadOptions = async () => {
     const { data: subjects } = await supabase.from("custom_subjects").select("subject_name").eq("is_active", true).order("subject_name");
@@ -771,61 +774,192 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onSave }) =
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.full_name || !formData.email) {
-      alert("Please fill in name and email");
+    setError("");
+    if (!formData.full_name.trim() || !formData.email.trim()) {
+      setError("Please fill in name and email.");
       return;
     }
 
+    const role = formData.user_type === 'super_admin' ? 'admin' : formData.user_type;
+    const subjects = formData.user_type === 'admin' ? [] : formData.subjects;
+    const class_teacher_for = formData.user_type === 'admin' ? null : (formData.class_teacher_for || null);
+
     try {
       setSaving(true);
-      const role = formData.user_type === 'super_admin' ? 'admin' : formData.user_type;
-      const subjects = formData.user_type === 'admin' ? [] : formData.subjects;
-      const class_teacher_for = formData.user_type === 'admin' ? null : (formData.class_teacher_for || null);
 
       if (teacher) {
-        // Update existing teacher record
-        const { error } = await supabase
+        // ── EDIT existing teacher ────────────────────────────
+        const { error: tErr } = await supabase
           .from('teachers')
           .update({ full_name: formData.full_name, role, subjects, class_teacher_for })
           .eq('id', teacher.teacher_id);
-        if (error) throw error;
+        if (tErr) throw tErr;
 
-        // Also update profile name if profile exists
         await supabase
           .from('profiles')
           .update({ full_name: formData.full_name, role })
           .eq('id', teacher.id);
-      } else {
-        // Create new teacher record
-        const { error } = await supabase
-          .from('teachers')
-          .insert([{ full_name: formData.full_name, email: formData.email, role, subjects, class_teacher_for }]);
-        if (error) throw error;
-      }
 
-      onSave();
-    } catch (error) {
-      alert("Failed: " + error.message);
+        onSave();
+      } else {
+        // ── CREATE new teacher ───────────────────────────────
+
+        // Pre-check: does this email already exist in teachers for this school?
+        const { data: existing } = await supabase
+          .from('teachers')
+          .select('id')
+          .eq('email', formData.email)
+          .maybeSingle();
+
+        if (existing) {
+          setError('A staff member with this email already exists in your school.');
+          return;
+        }
+
+        const tempPassword = generateTempPassword(schoolName);
+
+        // 1. Create auth user
+        const authUser = await createUser(formData.email, tempPassword, {
+          full_name: formData.full_name,
+          role,
+        });
+        if (!authUser?.id) throw new Error('Failed to create auth user.');
+
+        // Small delay so DB triggers can fire
+        await new Promise(r => setTimeout(r, 500));
+
+        // 2. Insert teacher record
+        const { error: tErr } = await supabase
+          .from('teachers')
+          .insert([{
+            user_id: authUser.id,
+            school_id: schoolId,
+            full_name: formData.full_name,
+            email: formData.email,
+            role,
+            subjects,
+            class_teacher_for,
+            is_active: true,
+          }]);
+        if (tErr) {
+          if (tErr.message?.includes('duplicate') || tErr.message?.includes('unique')) {
+            setError('A staff member with this email already exists.');
+          } else {
+            setError(tErr.message || 'Account created but failed to save staff record. Contact support.');
+          }
+          return;
+        }
+
+        setCredentials({ name: formData.full_name, email: formData.email, password: tempPassword });
+        onSave();
+      }
+    } catch (err) {
+      if (err.message?.includes('already registered') || err.message?.includes('already exists') || err.message?.includes('duplicate')) {
+        setError('This email is already registered. Please use a different email.');
+      } else if (err.message?.includes('permission') || err.message?.includes('Insufficient')) {
+        setError('Permission denied. You need admin or owner role to create users.');
+      } else {
+        setError(err.message || 'Failed to create account. Please try again.');
+      }
     } finally {
       setSaving(false);
     }
   };
 
+  const handleCopy = () => {
+    if (!credentials) return;
+    navigator.clipboard.writeText(
+      `Name: ${credentials.name}\nEmail: ${credentials.email}\nPassword: ${credentials.password}\nLogin: ${window.location.origin}`
+    ).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2500); })
+    .catch(() => {});
+  };
+
+  // ── Credentials screen ───────────────────────────────────
+  if (credentials) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+          <div className="p-6 border-b bg-emerald-50 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+              <Shield size={20} className="text-emerald-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-800">Staff Account Created</h3>
+              <p className="text-sm text-gray-500">Share these credentials with the staff member</p>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-3">
+            <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-2.5 text-sm font-mono">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 font-sans font-medium">Name</span>
+                <span className="text-gray-900">{credentials.name}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 font-sans font-medium">Email</span>
+                <span className="text-gray-900">{credentials.email}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 font-sans font-medium">Password</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-900 tracking-wider">
+                    {showPassword ? credentials.password : '••••••••'}
+                  </span>
+                  <button onClick={() => setShowPassword(v => !v)} className="text-gray-400 hover:text-gray-600">
+                    {showPassword
+                      ? <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                      : <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    }
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 font-sans font-medium">Login URL</span>
+                <span className="text-gray-900 text-xs">{window.location.origin}</span>
+              </div>
+            </div>
+
+            <button
+              onClick={handleCopy}
+              className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all ${copied ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+            >
+              <Copy size={14} />
+              {copied ? 'Copied!' : 'Copy credentials'}
+            </button>
+            <p className="text-xs text-gray-400 text-center">⚠️ Ask the staff member to change their password after first login.</p>
+          </div>
+
+          <div className="px-6 pb-6">
+            <button onClick={onClose} className="w-full bg-emerald-500 text-white py-3 rounded-xl hover:bg-emerald-600 font-medium transition-colors">
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Form ─────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
-        {/* Header */}
         <div className="px-6 py-4 border-b border-gray-100">
           <h3 className="text-lg font-bold text-gray-800">
             {teacher ? "Edit Staff Member" : "Add Staff Member"}
           </h3>
           <p className="text-gray-500 text-sm">
-            {teacher ? "Update account details" : "Create a new account"}
+            {teacher ? "Update account details" : "A login account will be created automatically"}
           </p>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
+              <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
+              {error}
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
             <input
@@ -833,7 +967,6 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onSave }) =
               value={formData.full_name}
               onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 transition-shadow"
-              style={{ '--tw-ring-color': `${primaryColor}40` }}
               required
               placeholder="John Doe"
             />
@@ -865,7 +998,7 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onSave }) =
             </select>
           </div>
 
-          {formData.user_type !== "admin" && (
+          {formData.user_type !== "admin" && formData.user_type !== "super_admin" && (
             <>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Subjects</label>
@@ -895,7 +1028,6 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onSave }) =
             </>
           )}
 
-          {/* Actions */}
           <div className="flex gap-3 pt-2">
             <button
               type="button"
@@ -910,7 +1042,7 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onSave }) =
               className="flex-1 px-4 py-2.5 text-sm font-medium text-white rounded-lg disabled:opacity-50 transition-colors"
               style={{ backgroundColor: primaryColor }}
             >
-              {saving ? "Saving..." : teacher ? "Update" : "Create"}
+              {saving ? "Creating..." : teacher ? "Update" : "Create Account"}
             </button>
           </div>
         </form>

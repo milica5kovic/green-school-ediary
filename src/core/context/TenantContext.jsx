@@ -25,69 +25,29 @@ export const useTenant = () => {
 //   - schoolhub.com → null (marketing)
 // ═══════════════════════════════════════════════════════════════════════════
 const extractSubdomain = (hostname) => {
-  // 1. Check URL params first (for development/testing)
+  // URL param override — for development/testing (?school=greenschool)
   const params = new URLSearchParams(window.location.search);
   const schoolParam = params.get('school');
-  if (schoolParam) {
-    console.log('🔍 Subdomain from URL param:', schoolParam);
-    return schoolParam;
-  }
-  
-  // 2. Handle xxx.localhost format (development)
-  //    e.g., "greenschool.localhost" → "greenschool"
+  if (schoolParam) return schoolParam;
+
+  // xxx.localhost (development)
   if (hostname.endsWith('.localhost') || hostname.includes('.localhost:')) {
-    const parts = hostname.split('.');
-    const subdomain = parts[0];
-    console.log('🔍 Subdomain from .localhost:', subdomain);
-    return subdomain;
+    return hostname.split('.')[0];
   }
-  
-  // 3. Plain localhost = marketing/landing page
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    console.log('🔍 Plain localhost - no subdomain');
-    return null;
-  }
-  
-  // 4. Production domains
+
+  // Plain localhost = marketing
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return null;
+
   const parts = hostname.split('.');
-  
-  // example.com (2 parts) = marketing
-  if (parts.length === 2) {
-    console.log('🔍 Root domain - no subdomain');
-    return null;
-  }
-  
-  // xxx.example.com (3 parts)
-  if (parts.length === 3) {
-    const sub = parts[0];
-    
-    // www.example.com = marketing
-    if (sub === 'www' || sub === 'schoolhub') {
-      console.log('🔍 www/schoolhub - no subdomain');
-      return null;
-    }
-    
-    // app.example.com = owner dashboard
-    if (sub === 'app') {
-      console.log('🔍 Owner dashboard');
-      return 'app';
-    }
-    
-    // greenschool.example.com = school tenant
-    console.log('🔍 School subdomain:', sub);
-    return sub;
-  }
-  
-  // xxx.yyy.example.com (4+ parts) - could be subdomain.region.domain.tld
-  if (parts.length >= 4) {
-    const sub = parts[0];
-    if (sub === 'app') return 'app';
-    if (sub === 'www') return null;
-    console.log('🔍 School subdomain (4+ parts):', sub);
-    return sub;
-  }
-  
-  return null;
+
+  // root domain (2 parts) = marketing
+  if (parts.length === 2) return null;
+
+  // xxx.example.com (3 parts) or more
+  const sub = parts[0];
+  if (sub === 'www' || sub === 'schoolhub') return null;
+  if (sub === 'app') return 'app';
+  return sub;
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -126,85 +86,46 @@ export const TenantProvider = ({ children }) => {
   
   useEffect(() => {
     const loadSchool = async () => {
-      console.log('TenantContext: hostname =', hostname);
-      console.log('TenantContext: subdomain =', subdomain);
-      console.log('TenantContext: customDomain =', customDomain);
-      console.log('TenantContext: isSchool =', isSchool, 'isMarketing =', isMarketing, 'isOwner =', isOwnerDashboard);
-      
-      // Always clear first
       clearCurrentSchoolId();
-      
-      // Marketing or Owner Dashboard - no school needed
+
       if (isMarketing || isOwnerDashboard) {
-        console.log('TenantContext: No school needed');
         setLoading(false);
         return;
       }
-      
-      // School tenant - load school data
+
       if (isSchool) {
         try {
           let data = null;
           let fetchError = null;
-          
-          // ═══════════════════════════════════════════════════════════════════
-          // KORAK 1: Ako je custom domen, traži po domain koloni
-          // Npr: portal.educa.school → schools.domain = 'portal.educa.school'
-          // ═══════════════════════════════════════════════════════════════════
+
+          // Try custom domain first, then slug
           if (customDomain) {
-            console.log('TenantContext: Trying custom domain lookup:', hostname);
-            
             const result = await supabase
               .from('schools')
               .select('*')
               .eq('domain', hostname)
               .single();
-            
             data = result.data;
             fetchError = result.error;
-            
-            if (data) {
-              console.log('✅ TenantContext: Found school by custom domain:', data.name);
-            }
           }
-          
-          // ═══════════════════════════════════════════════════════════════════
-          // KORAK 2: Fallback na subdomen (slug)
-          // Npr: educa.schoolhub.rs → schools.slug = 'educa'
-          // ═══════════════════════════════════════════════════════════════════
+
           if (!data && subdomain) {
-            console.log('TenantContext: Trying slug lookup:', subdomain);
-            
             const result = await supabase
               .from('schools')
               .select('*')
               .eq('slug', subdomain)
               .single();
-            
             data = result.data;
             fetchError = result.error;
-            
-            if (data) {
-              console.log('✅ TenantContext: Found school by slug:', data.name);
-            }
           }
-          
-          // ═══════════════════════════════════════════════════════════════════
-          // Rezultat
-          // ═══════════════════════════════════════════════════════════════════
+
           if (fetchError || !data) {
-            console.error('❌ TenantContext: School not found');
-            console.error('   Hostname:', hostname);
-            console.error('   Subdomain:', subdomain);
-            console.error('   Error:', fetchError);
-            
-            setError(`Škola nije pronađena za "${hostname}"`);
+            console.error('[TenantContext] School not found for:', hostname);
+            setError(`School not found for "${hostname}"`);
             setSchool(null);
           } else {
-            console.log('✅ TenantContext: School loaded:', data.name);
             setSchool(data);
             setCurrentSchoolId(data.id);
-            console.log('🔒 Tenant ID set:', data.id);
             
             // Set CSS variables for branding
             if (data.primary_color) {
@@ -229,7 +150,7 @@ export const TenantProvider = ({ children }) => {
             }
           }
         } catch (err) {
-          console.error('❌ TenantContext: Exception:', err);
+          console.error('[TenantContext] Error:', err.message);
           setError(err.message);
         }
       }
@@ -280,17 +201,6 @@ export const TenantProvider = ({ children }) => {
       setLoading(false);
     },
   };
-  
-  console.log('TenantContext value:', { 
-    loading, 
-    isMarketing, 
-    isSchool, 
-    isOwnerDashboard, 
-    subdomain,
-    customDomain,
-    schoolId: school?.id,
-    schoolName: school?.name
-  });
   
   return <TenantContext.Provider value={value}>{children}</TenantContext.Provider>;
 };

@@ -389,7 +389,7 @@ const DashboardHeader = ({ user, onSignOut }) => (
         </div>
         <div>
           <h1 className="text-xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
-            Akio
+            E-Diary
           </h1>
           <p className="text-xs text-slate-400">Platform Control</p>
         </div>
@@ -768,7 +768,7 @@ const EmptyState = ({ hasSearch, onAdd, onClearFilters }) => (
     <p className="text-sm text-slate-500 mb-8 max-w-md mx-auto">
       {hasSearch
         ? 'Try adjusting your search or filters'
-        : 'Add your first school to start managing it with Akio'}
+        : 'Add your first school to get started'}
     </p>
     <div className="flex items-center justify-center gap-3">
       {hasSearch && (

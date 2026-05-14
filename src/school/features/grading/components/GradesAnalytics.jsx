@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Download, TrendingUp, Award, AlertTriangle, User, BookOpen } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import { useAuth } from '../../../../core/context/AuthContext';
+import { useBranding } from '../../../../core/context/BrandingContext';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -9,6 +10,7 @@ import 'jspdf-autotable';
 const GradesAnalytics = () => {
   const { supabase, studentsService } = useApp();
   const { teacher, isAdmin } = useAuth();
+  const { name: schoolName } = useBranding();
 
   // Filters
   const [selectedClass, setSelectedClass] = useState('all');
@@ -434,7 +436,7 @@ const GradesAnalytics = () => {
       doc.setFontSize(8);
       doc.setTextColor(150);
       doc.text(
-        `Green School - Page ${i} of ${pageCount}`,
+        `${schoolName} - Page ${i} of ${pageCount}`,
         doc.internal.pageSize.getWidth() / 2,
         doc.internal.pageSize.getHeight() - 10,
         { align: 'center' }

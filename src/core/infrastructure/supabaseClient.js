@@ -14,8 +14,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // Raw supabase client
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-console.log('🔐 Supabase initialized (secure mode)');
-
 // ============================================================================
 // TENANT QUERY BUILDER - Auto-adds school_id filter
 // ============================================================================
@@ -24,14 +22,12 @@ let currentSchoolId = null;
 
 export const setCurrentSchoolId = (schoolId) => {
   currentSchoolId = schoolId;
-  console.log('🔒 Tenant ID set:', schoolId);
 };
 
 export const getCurrentSchoolId = () => currentSchoolId;
 
 export const clearCurrentSchoolId = () => {
   currentSchoolId = null;
-  console.log('🏫 Tenant cleared');
 };
 
 // Tables that should be filtered by school_id

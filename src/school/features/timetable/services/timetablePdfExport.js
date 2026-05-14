@@ -184,7 +184,7 @@ export async function exportTimetablePDF({
     doc.setPage(i);
     doc.setFontSize(7);
     doc.setTextColor(190, 190, 190);
-    doc.text(`${schoolName}  ·  Green School Ediary`, W / 2, H - 5, { align: 'center' });
+    doc.text(schoolName, W / 2, H - 5, { align: 'center' });
   }
 
   // ---- Save ----

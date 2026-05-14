@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useTenant } from './TenantContext';
+import { supabase } from '../infrastructure/supabaseClient';
 
 // ============================================================================
 // BRANDING CONTEXT
@@ -66,10 +67,10 @@ const DEFAULT_BRANDING = {
   secondaryRgb: { r: 13,  g: 148, b: 136 },
   accentRgb:    { r: 245, g: 158, b: 11  },
 
-  email:   'hello@akio.rs',
+  email:   '',
   phone:   '',
-  website: 'https://akio.rs',
-  address: 'Belgrade, Serbia',
+  website: '',
+  address: '',
 
   gradingSystem: 'cambridge',
   academicYear:  '2025-26',
@@ -77,7 +78,7 @@ const DEFAULT_BRANDING = {
   language:      'en',
 
   pdfHeaderText: 'SchoolHub',
-  pdfFooterText: 'Powered by Akio',
+  pdfFooterText: 'E-Diary · School Management',
   showLogoInPdf: true,
 
   features: DEFAULT_FEATURES,
@@ -197,7 +198,7 @@ const applyBrandingToDocument = (branding) => {
 // ============================================================================
 
 export const BrandingProvider = ({ children }) => {
-  const { school, schoolId, isSchool, loading: tenantLoading, supabase } = useTenant();
+  const { school, schoolId, isSchool, loading: tenantLoading } = useTenant();
   const [branding, setBranding] = useState(DEFAULT_BRANDING);
 
   // Refetch — call after settings change to pull latest from DB

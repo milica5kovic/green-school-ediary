@@ -3,6 +3,7 @@ import { supabase } from '../../../../core/infrastructure/supabaseClient';
 import { createUser, checkAdminAccess, generateTempPassword } from '../../../../core/infrastructure/adminApi';
 import { useTenant } from '../../../../core/context/TenantContext';
 import { useApp } from '../../../../core/context/AppContext';
+import { useBranding } from '../../../../core/context/BrandingContext';
 import { CheckCircle, Copy, AlertTriangle, X, Eye, EyeOff } from 'lucide-react';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -12,6 +13,7 @@ import { CheckCircle, Copy, AlertTriangle, X, Eye, EyeOff } from 'lucide-react';
 const AddParentModal = ({ onClose, onSave }) => {
   const { schoolId } = useTenant();
   const { supabase: tenantSupabase } = useApp();
+  const { name: schoolName } = useBranding();
 
   const [formData, setFormData] = useState({ full_name: '', email: '', phone: '', student_id: '' });
   const [students, setStudents]         = useState([]);
@@ -61,7 +63,7 @@ const AddParentModal = ({ onClose, onSave }) => {
 
     try {
       setSaving(true);
-      const tempPassword = generateTempPassword('Green');
+      const tempPassword = generateTempPassword(schoolName);
 
       const authUser = await createUser(formData.email, tempPassword, {
         full_name: formData.full_name,

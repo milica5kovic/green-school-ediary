@@ -480,7 +480,7 @@ const BrandingSettings = ({ school, onSave, onClose }) => {
                       </p>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-400 mt-3 text-center">Powered by Akio</p>
+                  <p className="text-xs text-gray-400 mt-3 text-center">E-Diary · School Management</p>
                 </div>
               </div>
             </div>

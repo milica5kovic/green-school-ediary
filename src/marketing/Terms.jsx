@@ -68,7 +68,7 @@ export default function Terms() {
 
       <nav>
         <a href="/" className="nav-logo">
-          <img src="/Logo(1)_transparent.png" alt="Akio" style={{height:36}} />
+          <img src="/Logo(1)_transparent.png" alt="E-Diary" style={{height:36}} />
         </a>
         <a href="/" className="btn-p">← Back to Home</a>
       </nav>
@@ -76,45 +76,32 @@ export default function Terms() {
       <div className="page">
         <div className="eyebrow"><span className="eline"/>Legal</div>
         <h1>Terms of <em>Service</em></h1>
-        <p className="meta">Last updated: January 2026 &nbsp;·&nbsp; Akio Studio, Belgrade, Serbia</p>
+        <p className="meta">Last updated: January 2026</p>
 
         <div className="card">
-          <p>By using this website or engaging Akio Studio for services, you agree to these terms. We've written them in plain language — no legal maze. If something is unclear, just ask us.</p>
+          <p>By using this platform, you agree to these terms. We've written them in plain language — no legal maze. If something is unclear, just ask us.</p>
         </div>
 
         <div className="section">
           <h2>Who These Terms Apply To</h2>
-          <p>These Terms of Service apply to all visitors of the Akio Studio website (akiostudio.com) and to any individual or organization that enters into a service agreement with Akio Studio for custom software development or related services.</p>
+          <p>These Terms of Service apply to all users of the E-Diary school management platform, including teachers, administrators, and parents.</p>
         </div>
 
         <div className="section">
-          <h2>Our Services</h2>
-          <p>Akio Studio provides custom software development, UI/UX design, SaaS product development, and related digital services. The specific scope, timeline, and pricing of any engagement is agreed upon in a separate project proposal or contract.</p>
-          <p>We reserve the right to decline any project at our discretion, including projects that conflict with our values or technical capabilities.</p>
-        </div>
-
-        <div className="section">
-          <h2>Using This Website</h2>
-          <p>You may use this website for lawful purposes only. You agree not to:</p>
+          <h2>Using the Platform</h2>
+          <p>You may use this platform for lawful purposes only. You agree not to:</p>
           <ul>
-            <li>Use the site in any way that violates applicable laws or regulations</li>
+            <li>Use the platform in any way that violates applicable laws or regulations</li>
             <li>Attempt to gain unauthorized access to any part of our systems</li>
-            <li>Transmit spam, malware, or any harmful content via our contact form</li>
-            <li>Misrepresent your identity or affiliation when contacting us</li>
+            <li>Share your account credentials with others</li>
+            <li>Misrepresent your identity or affiliation</li>
           </ul>
         </div>
 
         <div className="section">
-          <h2>Intellectual Property</h2>
-          <p>All content on this website — including design, copy, graphics, and code — is the property of Akio Studio unless otherwise stated. You may not reproduce, distribute, or use our content without written permission.</p>
-          <p>For client projects: upon full payment, clients receive ownership of the custom-built deliverables as agreed in the project contract. We retain the right to display work in our portfolio unless explicitly agreed otherwise.</p>
-        </div>
-
-        <div className="section">
-          <h2>SchoolHub & SaaS Products</h2>
-          <p>Use of SchoolHub and any other Akio SaaS products is governed by a separate subscription agreement provided at the time of onboarding. Key terms include:</p>
+          <h2>E-Diary Platform</h2>
+          <p>Use of the E-Diary platform is subject to your school's agreement. Key terms include:</p>
           <ul>
-            <li>Subscriptions are billed monthly or annually as selected</li>
             <li>Data you enter into the platform remains yours at all times</li>
             <li>We do not share your institution's data with third parties</li>
             <li>You are responsible for maintaining the security of your account credentials</li>
@@ -123,15 +110,9 @@ export default function Terms() {
         </div>
 
         <div className="section">
-          <h2>Payments & Refunds</h2>
-          <p>For custom development projects, payment terms are specified in the project proposal. Typically this involves a deposit before work begins and milestone-based payments thereafter.</p>
-          <p>SaaS subscriptions are non-refundable for the current billing period but can be cancelled before the next renewal. If you believe you've been charged in error, contact us and we'll make it right.</p>
-        </div>
-
-        <div className="section">
           <h2>Limitation of Liability</h2>
-          <p>Akio Studio's liability for any claim arising from our services is limited to the amount paid for the specific service in question. We are not liable for indirect, incidental, or consequential damages including lost profits or data loss.</p>
-          <p>We build with care and diligence, but software is complex — we cannot guarantee that our products will be entirely free of bugs or uninterrupted at all times.</p>
+          <p>The platform is provided in good faith. We are not liable for indirect, incidental, or consequential damages including lost profits or data loss.</p>
+          <p>We build with care and diligence, but software is complex — we cannot guarantee that the platform will be entirely free of bugs or uninterrupted at all times.</p>
         </div>
 
         <div className="section">
@@ -153,9 +134,9 @@ export default function Terms() {
       <footer>
         <div className="fi2">
           <a href="/" className="nav-logo">
-            <img src="/Logo(1)_transparent.png" alt="Akio" style={{height:26}} />
+            <img src="/Logo(1)_transparent.png" alt="E-Diary" style={{height:26}} />
           </a>
-          <p className="fcopy">© 2026 Akio. Crafted with 💜 in Belgrade.</p>
+          <p className="fcopy">© 2026 E-Diary</p>
           <div className="fll">
             <a href="/privacy">Privacy</a>
             <a href="/terms">Terms</a>

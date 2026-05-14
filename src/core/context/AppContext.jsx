@@ -62,27 +62,20 @@ export const AppProvider = ({ children }) => {
     setSelectedDate(new Date());
   }, []);
 
-const services = useMemo(() => {
-  console.log('🔧 Creating services with schoolId:', schoolId || 'none');
-  return {
+  const services = useMemo(() => ({
     attendance: new AttendanceService(tenantSupabase, schoolId),
     classes: new ClassService(tenantSupabase, schoolId),
     students: new StudentsService(tenantSupabase, schoolId),
     grading: new GradingService(tenantSupabase, schoolId),
-    schedule: new ScheduleService(tenantSupabase, schoolId), 
+    schedule: new ScheduleService(tenantSupabase, schoolId),
     todos: new TodoService(tenantSupabase, schoolId),
     parents: new ParentService(tenantSupabase, schoolId),
-  };
-}, [schoolId]);
+  }), [schoolId]);
 
   // Clear caches when school changes
   useEffect(() => {
     if (schoolId) {
-      console.log('🧹 Clearing caches for school:', schoolId);
-      if (services.grading?.clearCache) {
-        console.log('🧹 GradingService cache cleared');
-        services.grading.clearCache();
-      }
+      services.grading?.clearCache?.();
       setStudents([]);
       setDataLoaded(false);
       setError(null);
@@ -92,17 +85,15 @@ const services = useMemo(() => {
   const loadAllStudents = useCallback(async () => {
     if (tenantLoading) return;
     if (!schoolId && isSchool) return;
-    
+
     try {
       setLoading(true);
       setError(null);
-      console.log('📚 Loading students for school:', schoolId);
       const data = await services.students.getAllStudents();
-      console.log(`✅ Loaded ${data?.length || 0} students`);
       setStudents(data || []);
       setDataLoaded(true);
     } catch (err) {
-      console.error('❌ Error loading students:', err);
+      console.error('[AppContext] Error loading students:', err);
       setError(err.message);
     } finally {
       setLoading(false);
