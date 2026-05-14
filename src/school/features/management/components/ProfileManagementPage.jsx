@@ -1,21 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
-  Plus,
-  Trash2,
-  Edit2,
-  Upload,
-  Download,
-  Users,
-  Mail,
-  Shield,
-  AlertTriangle,
-  BookOpen,
-  Search,
-  Filter,
-  UserPlus,
-  GraduationCap,
-  ChevronDown,
-  Copy,
+  Plus, Trash2, Edit2, Upload, Download, Users, Mail, Shield,
+  AlertTriangle, BookOpen, Search, UserPlus, GraduationCap,
+  ChevronDown, Copy, CheckCircle, X, Loader2, Eye, EyeOff,
+  BookOpenCheck, Crown, UserCog,
 } from "lucide-react";
 import { useApp } from "../../../../core/context/AppContext";
 import { useBranding } from "../../../../core/context/BrandingContext";
@@ -32,10 +20,83 @@ import ManageChildrenModal from "../../parents/modals/ManageChildrenModal";
 import DeleteParentModal from "../../parents/modals/DeleteParentModal";
 import ExportEmailsModal from "../../parents/modals/ExportEmailsModal";
 
+// ════════════════════════════════════════════════════════════
+// TOAST NOTIFICATION
+// ════════════════════════════════════════════════════════════
+
+const Toast = ({ toast }) => {
+  if (!toast) return null;
+  const isError = toast.type === 'error';
+  return (
+    <div className={`fixed top-5 right-5 z-[100] flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium border transition-all animate-fade-in max-w-sm ${
+      isError
+        ? 'bg-red-50 border-red-200 text-red-700'
+        : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+    }`}>
+      {isError
+        ? <AlertTriangle size={16} className="flex-shrink-0" />
+        : <CheckCircle size={16} className="flex-shrink-0" />
+      }
+      <span>{toast.message}</span>
+    </div>
+  );
+};
+
+// ════════════════════════════════════════════════════════════
+// CONFIRM MODAL
+// ════════════════════════════════════════════════════════════
+
+const ConfirmModal = ({ config, onCancel }) => {
+  if (!config) return null;
+  const { title, message, confirmLabel = 'Confirm', danger = false, onConfirm, loading } = config;
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className={`p-5 border-b ${danger ? 'bg-red-50 border-red-100' : 'bg-gray-50 border-gray-100'}`}>
+          <div className="flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${danger ? 'bg-red-100' : 'bg-blue-100'}`}>
+              {danger
+                ? <Trash2 size={16} className="text-red-600" />
+                : <AlertTriangle size={16} className="text-blue-600" />
+              }
+            </div>
+            <h3 className="font-bold text-gray-800">{title}</h3>
+          </div>
+        </div>
+        <div className="p-5">
+          <p className="text-gray-500 text-sm leading-relaxed">{message}</p>
+        </div>
+        <div className="px-5 pb-5 flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className={`flex-1 px-4 py-2.5 text-sm font-medium text-white rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-60 ${
+              danger ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'
+            }`}
+          >
+            {loading && <Loader2 size={14} className="animate-spin" />}
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ════════════════════════════════════════════════════════════
+// MAIN PAGE
+// ════════════════════════════════════════════════════════════
+
 const ProfileManagementPage = () => {
   const { supabase } = useApp();
   const { primaryColor } = useBranding();
-  
+
   const [teachers, setTeachers] = useState([]);
   const [parents, setParents] = useState([]);
   const [students, setStudents] = useState([]);
@@ -49,9 +110,17 @@ const ProfileManagementPage = () => {
   const [selectedParent, setSelectedParent] = useState(null);
   const [activeTab, setActiveTab] = useState("teachers");
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [confirm, setConfirm] = useState(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
 
   const [parentFilters, setParentFilters] = useState({ status: "all", search: "" });
   const [teacherFilters, setTeacherFilters] = useState({ role: 'all', search: '' });
+
+  const showToast = useCallback((message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
 
   // ════════════════════════════════════════════════════════════
   // DATA LOADING
@@ -60,8 +129,6 @@ const ProfileManagementPage = () => {
   const loadTeachers = async () => {
     try {
       setLoading(true);
-
-      // Primary source: teachers table (tenant-scoped, always complete)
       const { data: teacherRecords, error } = await supabase
         .from('teachers')
         .select('*')
@@ -69,7 +136,6 @@ const ProfileManagementPage = () => {
 
       if (error) throw error;
 
-      // Enrich with profile data where available (for role/super-admin flag)
       const userIds = (teacherRecords || []).map(t => t.user_id).filter(Boolean);
       let profiles = [];
       if (userIds.length > 0) {
@@ -91,7 +157,7 @@ const ProfileManagementPage = () => {
           role: effectiveRole,
           subjects: t.subjects || [],
           class_teacher_for: t.class_teacher_for || null,
-          is_super_admin: effectiveRole === 'admin',
+          is_super_admin: effectiveRole === 'admin' || effectiveRole === 'owner',
           teacher_id: t.id,
           has_login: !!t.user_id,
         };
@@ -99,7 +165,7 @@ const ProfileManagementPage = () => {
 
       setTeachers(combined);
     } catch (error) {
-      console.error('Error loading teachers:', error);
+      showToast('Failed to load staff: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -108,7 +174,6 @@ const ProfileManagementPage = () => {
   const loadParents = async () => {
     try {
       setLoading(true);
-
       const { data: parentsData } = await supabase
         .from("parents")
         .select("*")
@@ -127,7 +192,7 @@ const ProfileManagementPage = () => {
 
       setParents(parentsWithStudents);
     } catch (error) {
-      console.error("Error loading parents:", error);
+      showToast('Failed to load parents: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -146,13 +211,11 @@ const ProfileManagementPage = () => {
     }
   };
 
-  const loadAllData = async () => {
+  const loadAllData = useCallback(async () => {
     await Promise.all([loadTeachers(), loadParents(), loadStudents()]);
-  };
-
-  useEffect(() => {
-    loadAllData();
   }, []);
+
+  useEffect(() => { loadAllData(); }, []);
 
   // ════════════════════════════════════════════════════════════
   // FILTERS
@@ -160,17 +223,14 @@ const ProfileManagementPage = () => {
 
   const filteredTeachers = teachers.filter(teacher => {
     if (teacherFilters.role !== 'all') {
-      if (teacherFilters.role === 'super_admin' && !teacher.is_super_admin) return false;
-      if (teacherFilters.role === 'admin' && (teacher.is_super_admin || teacher.role !== 'admin')) return false;
-      if (teacherFilters.role === 'teacher' && teacher.role !== 'teacher') return false;
+      if (teacherFilters.role === 'admin' && !teacher.is_super_admin) return false;
+      if (teacherFilters.role === 'teacher' && (teacher.is_super_admin || teacher.role !== 'teacher')) return false;
     }
     if (teacherFilters.search) {
-      const search = teacherFilters.search.toLowerCase();
-      if (!teacher.full_name?.toLowerCase().includes(search) &&
-          !teacher.email?.toLowerCase().includes(search) &&
-          !teacher.subjects?.some(s => s.toLowerCase().includes(search))) {
-        return false;
-      }
+      const s = teacherFilters.search.toLowerCase();
+      if (!teacher.full_name?.toLowerCase().includes(s) &&
+          !teacher.email?.toLowerCase().includes(s) &&
+          !teacher.subjects?.some(sub => sub.toLowerCase().includes(s))) return false;
     }
     return true;
   });
@@ -178,44 +238,52 @@ const ProfileManagementPage = () => {
   const filteredParents = parents.filter((parent) => {
     if (parentFilters.status !== "all" && parent.status !== parentFilters.status) return false;
     if (parentFilters.search) {
-      const search = parentFilters.search.toLowerCase();
-      if (!parent.full_name?.toLowerCase().includes(search) &&
-          !parent.email?.toLowerCase().includes(search) &&
-          !parent.linkedStudents?.some((s) => s.name.toLowerCase().includes(search))) {
-        return false;
-      }
+      const s = parentFilters.search.toLowerCase();
+      if (!parent.full_name?.toLowerCase().includes(s) &&
+          !parent.email?.toLowerCase().includes(s) &&
+          !parent.linkedStudents?.some((st) => st.name.toLowerCase().includes(s))) return false;
     }
     return true;
   });
 
   // ════════════════════════════════════════════════════════════
-  // ACTIONS
+  // DELETE TEACHER
   // ════════════════════════════════════════════════════════════
 
-  const handleDeleteTeacher = async (teacher) => {
+  const handleDeleteTeacher = (teacher) => {
     if (teacher.is_super_admin) {
-      alert("❌ Cannot delete Super Admin!");
+      showToast('Cannot delete an Admin or Owner account.', 'error');
       return;
     }
-    if (!window.confirm(`Delete ${teacher.full_name}?`)) return;
-
-    try {
-      setLoading(true);
-      if (teacher.teacher_id) {
-        await supabase.from("teachers").delete().eq("id", teacher.teacher_id);
-      }
-      await rawSupabase.from("profiles").delete().eq("id", teacher.user_id);
-      alert("✅ User deleted!");
-      await loadTeachers();
-    } catch (error) {
-      alert("❌ Failed: " + error.message);
-    } finally {
-      setLoading(false);
-    }
+    setConfirm({
+      title: 'Delete Staff Member',
+      message: `Are you sure you want to delete ${teacher.full_name}? Their login account will also be removed. This cannot be undone.`,
+      confirmLabel: 'Delete',
+      danger: true,
+      onConfirm: async () => {
+        setConfirmLoading(true);
+        try {
+          if (teacher.teacher_id) {
+            await supabase.from("teachers").delete().eq("id", teacher.teacher_id);
+          }
+          if (teacher.user_id) {
+            await rawSupabase.from("profiles").delete().eq("id", teacher.user_id);
+          }
+          showToast(`${teacher.full_name} has been removed.`);
+          setConfirm(null);
+          await loadTeachers();
+        } catch (error) {
+          showToast('Failed to delete: ' + error.message, 'error');
+          setConfirm(null);
+        } finally {
+          setConfirmLoading(false);
+        }
+      },
+    });
   };
 
   // ════════════════════════════════════════════════════════════
-  // CSV IMPORT HELPERS
+  // CSV IMPORT
   // ════════════════════════════════════════════════════════════
 
   const parseCsvRows = (text) => {
@@ -223,7 +291,6 @@ const ProfileManagementPage = () => {
     if (lines.length < 2) return { headers: [], rows: [] };
     const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
     const rows = lines.slice(1).map(line => {
-      // handle quoted fields containing commas
       const cols = [];
       let cur = '', inQuote = false;
       for (let i = 0; i < line.length; i++) {
@@ -244,7 +311,7 @@ const ProfileManagementPage = () => {
     e.target.value = '';
     const text = await file.text();
     const { rows } = parseCsvRows(text);
-    if (!rows.length) { alert('No data rows found in CSV.'); return; }
+    if (!rows.length) { showToast('No data rows found in CSV.', 'error'); return; }
 
     const schoolId = getCurrentSchoolId();
     const inserts = rows
@@ -253,15 +320,16 @@ const ProfileManagementPage = () => {
         school_id: schoolId,
         full_name: r.full_name,
         email: r.email,
+        role: ['admin', 'owner', 'teacher'].includes(r.role) ? r.role : 'teacher',
         subjects: r.subjects ? r.subjects.split(';').map(s => s.trim()).filter(Boolean) : [],
         class_teacher_for: r.class_teacher_for || null,
       }));
 
-    if (!inserts.length) { alert('No valid rows (full_name + email required).'); return; }
+    if (!inserts.length) { showToast('No valid rows found (full_name + email required).', 'error'); return; }
 
     const { error } = await supabase.from('teachers').insert(inserts);
-    if (error) { alert(`Import failed: ${error.message}`); return; }
-    alert(`✅ ${inserts.length} teacher${inserts.length !== 1 ? 's' : ''} imported successfully.`);
+    if (error) { showToast(`Import failed: ${error.message}`, 'error'); return; }
+    showToast(`${inserts.length} staff member${inserts.length !== 1 ? 's' : ''} imported.`);
     loadTeachers();
   };
 
@@ -271,7 +339,7 @@ const ProfileManagementPage = () => {
     e.target.value = '';
     const text = await file.text();
     const { rows } = parseCsvRows(text);
-    if (!rows.length) { alert('No data rows found in CSV.'); return; }
+    if (!rows.length) { showToast('No data rows found in CSV.', 'error'); return; }
 
     const schoolId = getCurrentSchoolId();
     let imported = 0, failed = 0;
@@ -285,7 +353,6 @@ const ProfileManagementPage = () => {
         .single();
       if (error) { failed++; continue; }
 
-      // Link students by name if provided
       if (r.student_names && parent?.id) {
         const names = r.student_names.split(';').map(n => n.trim()).filter(Boolean);
         for (const name of names) {
@@ -299,7 +366,7 @@ const ProfileManagementPage = () => {
       imported++;
     }
 
-    alert(`✅ ${imported} parent${imported !== 1 ? 's' : ''} imported.${failed ? ` ${failed} rows skipped (missing name/email).` : ''}`);
+    showToast(`${imported} parent${imported !== 1 ? 's' : ''} imported.${failed ? ` ${failed} rows skipped.` : ''}`);
     loadParents();
   };
 
@@ -327,6 +394,12 @@ const ProfileManagementPage = () => {
 
   return (
     <div className="space-y-6">
+      <Toast toast={toast} />
+      <ConfirmModal
+        config={confirm ? { ...confirm, loading: confirmLoading } : null}
+        onCancel={() => setConfirm(null)}
+      />
+
       {/* ═══ HEADER ═══════════════════════════════════════════ */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -334,7 +407,6 @@ const ProfileManagementPage = () => {
           <p className="text-gray-500 text-sm mt-1">Manage staff and parent accounts</p>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
           {activeTab === "teachers" ? (
             <>
@@ -396,44 +468,26 @@ const ProfileManagementPage = () => {
       {/* ═══ TABS ═════════════════════════════════════════════ */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="flex border-b border-gray-200">
-          <button
-            onClick={() => setActiveTab("teachers")}
-            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
-              activeTab === "teachers"
-                ? "border-b-2 bg-opacity-10"
-                : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-            }`}
-            style={activeTab === "teachers" ? { 
-              borderColor: primaryColor, 
-              color: primaryColor,
-              backgroundColor: `${primaryColor}08`
-            } : {}}
-          >
-            <GraduationCap size={16} />
-            Staff ({teachers.length})
-          </button>
-          <button
-            onClick={() => setActiveTab("parents")}
-            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
-              activeTab === "parents"
-                ? "border-b-2 bg-opacity-10"
-                : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-            }`}
-            style={activeTab === "parents" ? { 
-              borderColor: primaryColor, 
-              color: primaryColor,
-              backgroundColor: `${primaryColor}08`
-            } : {}}
-          >
-            <Users size={16} />
-            Parents ({parents.length})
-          </button>
+          {[
+            { key: 'teachers', label: 'Staff', count: teachers.length, icon: GraduationCap },
+            { key: 'parents', label: 'Parents', count: parents.length, icon: Users },
+          ].map(({ key, label, count, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                activeTab === key ? "border-b-2" : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+              }`}
+              style={activeTab === key ? { borderColor: primaryColor, color: primaryColor, backgroundColor: `${primaryColor}08` } : {}}
+            >
+              <Icon size={16} />
+              {label} ({count})
+            </button>
+          ))}
         </div>
 
-        {/* ═══ CONTENT ════════════════════════════════════════ */}
         <div className="p-4">
-          
-          {/* ─── FILTERS ─────────────────────────────────────── */}
+          {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <div className="relative flex-1">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -441,12 +495,11 @@ const ProfileManagementPage = () => {
                 type="text"
                 placeholder={activeTab === "teachers" ? "Search staff..." : "Search parents..."}
                 value={activeTab === "teachers" ? teacherFilters.search : parentFilters.search}
-                onChange={(e) => activeTab === "teachers" 
-                  ? setTeacherFilters({ ...teacherFilters, search: e.target.value })
-                  : setParentFilters({ ...parentFilters, search: e.target.value })
+                onChange={(e) => activeTab === "teachers"
+                  ? setTeacherFilters(f => ({ ...f, search: e.target.value }))
+                  : setParentFilters(f => ({ ...f, search: e.target.value }))
                 }
-                className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:border-transparent transition-shadow"
-                style={{ '--tw-ring-color': `${primaryColor}40` }}
+                className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 transition-shadow"
                 onFocus={(e) => e.target.style.boxShadow = `0 0 0 3px ${primaryColor}20`}
                 onBlur={(e) => e.target.style.boxShadow = 'none'}
               />
@@ -455,17 +508,15 @@ const ProfileManagementPage = () => {
               <select
                 value={activeTab === "teachers" ? teacherFilters.role : parentFilters.status}
                 onChange={(e) => activeTab === "teachers"
-                  ? setTeacherFilters({ ...teacherFilters, role: e.target.value })
-                  : setParentFilters({ ...parentFilters, status: e.target.value })
+                  ? setTeacherFilters(f => ({ ...f, role: e.target.value }))
+                  : setParentFilters(f => ({ ...f, status: e.target.value }))
                 }
-                className="appearance-none pl-3 pr-8 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 transition-shadow cursor-pointer"
-                style={{ '--tw-ring-color': `${primaryColor}40` }}
+                className="appearance-none pl-3 pr-8 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 cursor-pointer"
               >
                 {activeTab === "teachers" ? (
                   <>
                     <option value="all">All Roles</option>
-                    <option value="super_admin">Super Admin</option>
-                    <option value="admin">Admin</option>
+                    <option value="admin">Admin / Owner</option>
                     <option value="teacher">Teacher</option>
                   </>
                 ) : (
@@ -480,20 +531,17 @@ const ProfileManagementPage = () => {
             </div>
           </div>
 
-          {/* ─── LOADING ─────────────────────────────────────── */}
+          {/* Loading */}
           {loading && (
             <div className="flex justify-center py-12">
-              <div 
-                className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
-                style={{ borderColor: primaryColor, borderTopColor: 'transparent' }}
-              />
+              <Loader2 className="w-7 h-7 animate-spin" style={{ color: primaryColor }} />
             </div>
           )}
 
-          {/* ─── STAFF TABLE ─────────────────────────────────── */}
+          {/* Staff Table */}
           {!loading && activeTab === "teachers" && (
             filteredTeachers.length === 0 ? (
-              <div className="text-center py-12">
+              <div className="text-center py-14">
                 <GraduationCap size={40} className="mx-auto text-gray-300 mb-3" />
                 <p className="text-gray-500 font-medium">No staff members found</p>
                 <p className="text-gray-400 text-sm mt-1">Add your first staff member to get started</p>
@@ -503,85 +551,85 @@ const ProfileManagementPage = () => {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100">
-                      <th className="text-left py-3 px-3 font-semibold text-gray-600">Name</th>
-                      <th className="text-left py-3 px-3 font-semibold text-gray-600">Email</th>
-                      <th className="text-left py-3 px-3 font-semibold text-gray-600 hidden md:table-cell">Subjects</th>
-                      <th className="text-left py-3 px-3 font-semibold text-gray-600">Role</th>
-                      <th className="text-left py-3 px-3 font-semibold text-gray-600 hidden lg:table-cell">Class Teacher</th>
-                      <th className="text-center py-3 px-3 font-semibold text-gray-600 w-24">Actions</th>
+                      <th className="text-left py-3 px-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Name</th>
+                      <th className="text-left py-3 px-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Email</th>
+                      <th className="text-left py-3 px-3 font-semibold text-gray-500 text-xs uppercase tracking-wide hidden md:table-cell">Subjects</th>
+                      <th className="text-left py-3 px-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Role</th>
+                      <th className="text-left py-3 px-3 font-semibold text-gray-500 text-xs uppercase tracking-wide hidden lg:table-cell">Class</th>
+                      <th className="text-center py-3 px-3 font-semibold text-gray-500 text-xs uppercase tracking-wide w-24">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {filteredTeachers.map((teacher) => (
-                      <tr key={teacher.id} className="hover:bg-gray-50 transition-colors">
+                      <tr key={teacher.teacher_id || teacher.id} className="hover:bg-gray-50 transition-colors group">
                         <td className="py-3 px-3">
-                          <div className="flex items-center gap-2">
-                            <div 
-                              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
                               style={{ backgroundColor: primaryColor }}
                             >
-                              {teacher.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                              {teacher.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                             </div>
                             <div>
-                              <p className="font-medium text-gray-800">{teacher.full_name}</p>
+                              <p className="font-medium text-gray-800 leading-tight">{teacher.full_name}</p>
                               {teacher.is_super_admin && (
-                                <span className="text-[10px] text-purple-600 font-medium">★ Super Admin</span>
+                                <span className="text-[10px] text-purple-600 font-semibold flex items-center gap-0.5">
+                                  <Crown size={9} /> Admin
+                                </span>
                               )}
                               {!teacher.has_login && (
-                                <span className="text-[10px] text-amber-600 font-medium">⚠ No login account</span>
+                                <span className="text-[10px] text-amber-500 font-medium">⚠ No login</span>
                               )}
                             </div>
                           </div>
                         </td>
-                        <td className="py-3 px-3 text-gray-600">{teacher.email}</td>
+                        <td className="py-3 px-3 text-gray-500 text-xs">{teacher.email}</td>
                         <td className="py-3 px-3 hidden md:table-cell">
                           {teacher.subjects?.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
                               {teacher.subjects.slice(0, 2).map((s, i) => (
-                                <span key={i} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">
-                                  {s}
-                                </span>
+                                <span key={i} className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-md text-xs font-medium">{s}</span>
                               ))}
                               {teacher.subjects.length > 2 && (
-                                <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">
-                                  +{teacher.subjects.length - 2}
-                                </span>
+                                <span className="px-2 py-0.5 bg-gray-100 text-gray-400 rounded-md text-xs">+{teacher.subjects.length - 2}</span>
                               )}
                             </div>
                           ) : (
-                            <span className="text-gray-400">—</span>
+                            <span className="text-gray-300">—</span>
                           )}
                         </td>
                         <td className="py-3 px-3">
-                          <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                            teacher.is_super_admin ? "bg-purple-100 text-purple-700"
-                            : teacher.role === "admin" ? "bg-indigo-100 text-indigo-700"
-                            : "bg-green-100 text-green-700"
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
+                            teacher.is_super_admin
+                              ? "bg-purple-50 text-purple-600"
+                              : "bg-green-50 text-green-600"
                           }`}>
-                            {teacher.is_super_admin ? "S.Admin" : teacher.role}
+                            {teacher.is_super_admin ? 'Admin' : 'Teacher'}
                           </span>
                         </td>
-                        <td className="py-3 px-3 text-gray-600 hidden lg:table-cell">
-                          {teacher.class_teacher_for || "—"}
+                        <td className="py-3 px-3 text-gray-500 text-xs hidden lg:table-cell">
+                          {teacher.class_teacher_for || <span className="text-gray-300">—</span>}
                         </td>
                         <td className="py-3 px-3">
-                          <div className="flex items-center justify-center gap-1">
+                          <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={() => { setEditingTeacher(teacher); setShowAddModal(true); }}
                               className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Edit"
                             >
-                              <Edit2 size={15} />
+                              <Edit2 size={14} />
                             </button>
                             <button
                               onClick={() => handleDeleteTeacher(teacher)}
                               disabled={teacher.is_super_admin}
                               className={`p-1.5 rounded-lg transition-colors ${
-                                teacher.is_super_admin 
-                                  ? "text-gray-300 cursor-not-allowed" 
+                                teacher.is_super_admin
+                                  ? "text-gray-200 cursor-not-allowed"
                                   : "text-gray-400 hover:text-red-600 hover:bg-red-50"
                               }`}
+                              title="Delete"
                             >
-                              <Trash2 size={15} />
+                              <Trash2 size={14} />
                             </button>
                           </div>
                         </td>
@@ -593,10 +641,10 @@ const ProfileManagementPage = () => {
             )
           )}
 
-          {/* ─── PARENTS TABLE ───────────────────────────────── */}
+          {/* Parents Table */}
           {!loading && activeTab === "parents" && (
             filteredParents.length === 0 ? (
-              <div className="text-center py-12">
+              <div className="text-center py-14">
                 <Users size={40} className="mx-auto text-gray-300 mb-3" />
                 <p className="text-gray-500 font-medium">No parents found</p>
                 <p className="text-gray-400 text-sm mt-1">Add parents to link them with students</p>
@@ -606,21 +654,21 @@ const ProfileManagementPage = () => {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100">
-                      <th className="text-left py-3 px-3 font-semibold text-gray-600">Name</th>
-                      <th className="text-left py-3 px-3 font-semibold text-gray-600">Email</th>
-                      <th className="text-left py-3 px-3 font-semibold text-gray-600 hidden md:table-cell">Phone</th>
-                      <th className="text-left py-3 px-3 font-semibold text-gray-600">Children</th>
-                      <th className="text-left py-3 px-3 font-semibold text-gray-600 hidden sm:table-cell">Status</th>
-                      <th className="text-center py-3 px-3 font-semibold text-gray-600 w-28">Actions</th>
+                      <th className="text-left py-3 px-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Name</th>
+                      <th className="text-left py-3 px-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Email</th>
+                      <th className="text-left py-3 px-3 font-semibold text-gray-500 text-xs uppercase tracking-wide hidden md:table-cell">Phone</th>
+                      <th className="text-left py-3 px-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Children</th>
+                      <th className="text-left py-3 px-3 font-semibold text-gray-500 text-xs uppercase tracking-wide hidden sm:table-cell">Status</th>
+                      <th className="text-center py-3 px-3 font-semibold text-gray-500 text-xs uppercase tracking-wide w-28">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {filteredParents.map((parent) => (
-                      <tr key={parent.id} className="hover:bg-gray-50 transition-colors">
+                      <tr key={parent.id} className="hover:bg-gray-50 transition-colors group">
                         <td className="py-3 px-3">
-                          <div className="flex items-center gap-2">
-                            <div 
-                              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
                               style={{ backgroundColor: primaryColor }}
                             >
                               {parent.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2) || '?'}
@@ -628,55 +676,39 @@ const ProfileManagementPage = () => {
                             <span className="font-medium text-gray-800">{parent.full_name || "N/A"}</span>
                           </div>
                         </td>
-                        <td className="py-3 px-3 text-gray-600">{parent.email}</td>
-                        <td className="py-3 px-3 text-gray-600 hidden md:table-cell">{parent.phone || "—"}</td>
+                        <td className="py-3 px-3 text-gray-500 text-xs">{parent.email}</td>
+                        <td className="py-3 px-3 text-gray-500 text-xs hidden md:table-cell">{parent.phone || <span className="text-gray-300">—</span>}</td>
                         <td className="py-3 px-3">
                           {parent.linkedStudents?.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
                               {parent.linkedStudents.slice(0, 2).map((s) => (
-                                <span key={s.id} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">
-                                  {s.name.split(' ')[0]}
-                                </span>
+                                <span key={s.id} className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-md text-xs font-medium">{s.name.split(' ')[0]}</span>
                               ))}
                               {parent.linkedStudents.length > 2 && (
-                                <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">
-                                  +{parent.linkedStudents.length - 2}
-                                </span>
+                                <span className="px-2 py-0.5 bg-gray-100 text-gray-400 rounded-md text-xs">+{parent.linkedStudents.length - 2}</span>
                               )}
                             </div>
                           ) : (
-                            <span className="text-gray-400 text-xs">No children linked</span>
+                            <span className="text-gray-300 text-xs">None linked</span>
                           )}
                         </td>
                         <td className="py-3 px-3 hidden sm:table-cell">
-                          <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                            parent.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+                          <span className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${
+                            parent.status === "active" ? "bg-green-50 text-green-600" : "bg-gray-100 text-gray-500"
                           }`}>
                             {parent.status || "active"}
                           </span>
                         </td>
                         <td className="py-3 px-3">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => { setSelectedParent(parent); setShowEditParentModal(true); }}
-                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Edit"
-                            >
-                              <Edit2 size={15} />
+                          <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => { setSelectedParent(parent); setShowEditParentModal(true); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
+                              <Edit2 size={14} />
                             </button>
-                            <button
-                              onClick={() => { setSelectedParent(parent); setShowManageChildrenModal(true); }}
-                              className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                              title="Manage Children"
-                            >
-                              <Users size={15} />
+                            <button onClick={() => { setSelectedParent(parent); setShowManageChildrenModal(true); }} className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Manage Children">
+                              <Users size={14} />
                             </button>
-                            <button
-                              onClick={() => { setSelectedParent(parent); setShowDeleteParentModal(true); }}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 size={15} />
+                            <button onClick={() => { setSelectedParent(parent); setShowDeleteParentModal(true); }} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                              <Trash2 size={14} />
                             </button>
                           </div>
                         </td>
@@ -697,7 +729,8 @@ const ProfileManagementPage = () => {
           primaryColor={primaryColor}
           supabase={supabase}
           onClose={() => { setShowAddModal(false); setEditingTeacher(null); }}
-          onSave={async () => { await loadAllData(); setShowAddModal(false); setEditingTeacher(null); }}
+          onRefresh={loadAllData}
+          showToast={showToast}
         />
       )}
 
@@ -740,10 +773,32 @@ const ProfileManagementPage = () => {
 };
 
 // ════════════════════════════════════════════════════════════
-// ADD/EDIT TEACHER MODAL
+// ADD / EDIT TEACHER MODAL
 // ════════════════════════════════════════════════════════════
 
-const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onSave }) => {
+const ROLES = [
+  {
+    value: 'teacher',
+    label: 'Teacher',
+    description: 'Can mark attendance and manage grades',
+    icon: BookOpenCheck,
+    color: 'emerald',
+  },
+  {
+    value: 'admin',
+    label: 'Admin',
+    description: 'Full access to school management',
+    icon: Crown,
+    color: 'purple',
+  },
+];
+
+const colorMap = {
+  emerald: { border: 'border-emerald-400', bg: 'bg-emerald-50', text: 'text-emerald-600', dot: 'bg-emerald-400' },
+  purple: { border: 'border-purple-400', bg: 'bg-purple-50', text: 'text-purple-600', dot: 'bg-purple-400' },
+};
+
+const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onRefresh, showToast }) => {
   const { schoolId } = useTenant();
   const { name: schoolName } = useBranding();
 
@@ -751,7 +806,7 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onSave }) =
     full_name: teacher?.full_name || "",
     email: teacher?.email || "",
     subjects: teacher?.subjects || [],
-    user_type: teacher?.is_super_admin ? "super_admin" : teacher?.role === "admin" ? "admin" : "teacher",
+    role: teacher?.is_super_admin ? 'admin' : (teacher?.role === 'admin' ? 'admin' : 'teacher'),
     class_teacher_for: teacher?.class_teacher_for || "",
   });
   const [availableSubjects, setAvailableSubjects] = useState([]);
@@ -765,10 +820,21 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onSave }) =
   useEffect(() => { loadOptions(); }, []);
 
   const loadOptions = async () => {
-    const { data: subjects } = await supabase.from("custom_subjects").select("subject_name").eq("is_active", true).order("subject_name");
-    const { data: classes } = await supabase.from("custom_classes").select("class_name").eq("is_active", true).order("class_name");
+    const [{ data: subjects }, { data: classes }] = await Promise.all([
+      supabase.from("custom_subjects").select("subject_name").eq("is_active", true).order("subject_name"),
+      supabase.from("custom_classes").select("class_name").eq("is_active", true).order("class_name"),
+    ]);
     setAvailableSubjects(subjects?.map(s => s.subject_name) || []);
     setAvailableClasses(classes?.map(c => c.class_name) || []);
+  };
+
+  const toggleSubject = (subject) => {
+    setFormData(prev => ({
+      ...prev,
+      subjects: prev.subjects.includes(subject)
+        ? prev.subjects.filter(s => s !== subject)
+        : [...prev.subjects, subject],
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -779,53 +845,53 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onSave }) =
       return;
     }
 
-    const role = formData.user_type === 'super_admin' ? 'admin' : formData.user_type;
-    const subjects = formData.user_type === 'admin' ? [] : formData.subjects;
-    const class_teacher_for = formData.user_type === 'admin' ? null : (formData.class_teacher_for || null);
+    const subjects = formData.role === 'admin' ? [] : formData.subjects;
+    const class_teacher_for = formData.role === 'admin' ? null : (formData.class_teacher_for || null);
 
     try {
       setSaving(true);
 
       if (teacher) {
-        // ── EDIT existing teacher ────────────────────────────
+        // EDIT
         const { error: tErr } = await supabase
           .from('teachers')
-          .update({ full_name: formData.full_name, role, subjects, class_teacher_for })
+          .update({ full_name: formData.full_name, role: formData.role, subjects, class_teacher_for })
           .eq('id', teacher.teacher_id);
         if (tErr) throw tErr;
 
-        await supabase
+        await rawSupabase
           .from('profiles')
-          .update({ full_name: formData.full_name, role })
-          .eq('id', teacher.id);
+          .update({ full_name: formData.full_name, role: formData.role })
+          .eq('id', teacher.user_id);
 
-        onSave();
+        showToast(`${formData.full_name} updated successfully.`);
+        await onRefresh();
+        onClose();
       } else {
-        // ── CREATE new teacher ───────────────────────────────
-
+        // CREATE — atomic via edge function
         const tempPassword = generateTempPassword(schoolName);
 
-        // Single atomic call: edge function creates auth user + teacher record.
-        // If DB insert fails the edge function rolls back the auth user.
         await createTeacher({
           email: formData.email,
           password: tempPassword,
           full_name: formData.full_name,
-          role,
+          role: formData.role,
           subjects,
           class_teacher_for,
         });
 
+        await onRefresh();
+        // Show credentials AFTER refresh — do NOT call onClose
         setCredentials({ name: formData.full_name, email: formData.email, password: tempPassword });
-        onSave();
       }
     } catch (err) {
-      if (err.message?.includes('already registered') || err.message?.includes('already exists') || err.message?.includes('duplicate')) {
-        setError('This email is already registered. Please use a different email.');
-      } else if (err.message?.includes('permission') || err.message?.includes('Insufficient')) {
-        setError('Permission denied. You need admin or owner role to create users.');
+      const msg = err.message || '';
+      if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('duplicate')) {
+        setError('This email is already registered. Use a different email.');
+      } else if (msg.includes('permission') || msg.includes('Insufficient') || msg.includes('staff record')) {
+        setError('Permission denied. You need admin or owner role to create accounts.');
       } else {
-        setError(err.message || 'Failed to create account. Please try again.');
+        setError(msg || 'Failed to create account. Please try again.');
       }
     } finally {
       setSaving(false);
@@ -836,67 +902,79 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onSave }) =
     if (!credentials) return;
     navigator.clipboard.writeText(
       `Name: ${credentials.name}\nEmail: ${credentials.email}\nPassword: ${credentials.password}\nLogin: ${window.location.origin}`
-    ).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2500); })
-    .catch(() => {});
+    ).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2500); }).catch(() => {});
   };
 
   // ── Credentials screen ───────────────────────────────────
   if (credentials) {
     return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
-          <div className="p-6 border-b bg-emerald-50 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-              <Shield size={20} className="text-emerald-600" />
-            </div>
-            <div>
-              <h3 className="font-bold text-gray-800">Staff Account Created</h3>
-              <p className="text-sm text-gray-500">Share these credentials with the staff member</p>
+          {/* Header */}
+          <div className="p-6 bg-gradient-to-br from-emerald-500 to-teal-600 text-white">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                <CheckCircle size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg">Account Created!</h3>
+                <p className="text-emerald-100 text-sm">Share these credentials with {credentials.name}</p>
+              </div>
             </div>
           </div>
 
-          <div className="p-6 space-y-3">
-            <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-2.5 text-sm font-mono">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 font-sans font-medium">Name</span>
-                <span className="text-gray-900">{credentials.name}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 font-sans font-medium">Email</span>
-                <span className="text-gray-900">{credentials.email}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 font-sans font-medium">Password</span>
+          <div className="p-6 space-y-4">
+            {/* Credentials card */}
+            <div className="bg-gray-50 rounded-xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
+              {[
+                { label: 'Name', value: credentials.name },
+                { label: 'Email', value: credentials.email },
+                { label: 'Login URL', value: window.location.origin },
+              ].map(({ label, value }) => (
+                <div key={label} className="flex justify-between items-center px-4 py-3">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{label}</span>
+                  <span className="text-sm text-gray-800 font-medium">{value}</span>
+                </div>
+              ))}
+              {/* Password row */}
+              <div className="flex justify-between items-center px-4 py-3">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Password</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-900 tracking-wider">
-                    {showPassword ? credentials.password : '••••••••'}
+                  <span className="text-sm font-mono text-gray-800 tracking-wider">
+                    {showPassword ? credentials.password : '••••••••••'}
                   </span>
-                  <button onClick={() => setShowPassword(v => !v)} className="text-gray-400 hover:text-gray-600">
-                    {showPassword
-                      ? <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                      : <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    }
+                  <button
+                    onClick={() => setShowPassword(v => !v)}
+                    className="p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                  >
+                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 font-sans font-medium">Login URL</span>
-                <span className="text-gray-900 text-xs">{window.location.origin}</span>
               </div>
             </div>
 
             <button
               onClick={handleCopy}
-              className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all ${copied ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+              className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                copied
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+              }`}
             >
-              <Copy size={14} />
-              {copied ? 'Copied!' : 'Copy credentials'}
+              {copied ? <CheckCircle size={15} /> : <Copy size={15} />}
+              {copied ? 'Copied to clipboard!' : 'Copy all credentials'}
             </button>
-            <p className="text-xs text-gray-400 text-center">⚠️ Ask the staff member to change their password after first login.</p>
+
+            <p className="text-xs text-gray-400 text-center">
+              Ask the staff member to change their password after first login.
+            </p>
           </div>
 
           <div className="px-6 pb-6">
-            <button onClick={onClose} className="w-full bg-emerald-500 text-white py-3 rounded-xl hover:bg-emerald-600 font-medium transition-colors">
+            <button
+              onClick={onClose}
+              className="w-full bg-emerald-500 text-white py-3 rounded-xl hover:bg-emerald-600 font-semibold transition-colors"
+            >
               Done
             </button>
           </div>
@@ -907,108 +985,164 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onSave }) =
 
   // ── Form ─────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h3 className="text-lg font-bold text-gray-800">
-            {teacher ? "Edit Staff Member" : "Add Staff Member"}
-          </h3>
-          <p className="text-gray-500 text-sm">
-            {teacher ? "Update account details" : "A login account will be created automatically"}
-          </p>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${primaryColor}15` }}>
+              <UserPlus size={18} style={{ color: primaryColor }} />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-800">
+                {teacher ? "Edit Staff Member" : "Add Staff Member"}
+              </h3>
+              <p className="text-gray-400 text-xs mt-0.5">
+                {teacher ? "Update their details below" : "A login account will be created automatically"}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+            <X size={18} />
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+          {/* Error */}
           {error && (
-            <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
+            <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-xl p-3.5 text-sm text-red-700">
               <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
-              {error}
+              <span>{error}</span>
             </div>
           )}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-            <input
-              type="text"
-              value={formData.full_name}
-              onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 transition-shadow"
-              required
-              placeholder="John Doe"
-            />
+          {/* Name + Email */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Full Name</label>
+              <input
+                type="text"
+                value={formData.full_name}
+                onChange={(e) => setFormData(prev => ({ ...prev, full_name: e.target.value }))}
+                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 transition-shadow"
+                required
+                placeholder="Ana Petrović"
+                onFocus={(e) => e.target.style.boxShadow = `0 0 0 3px ${primaryColor}20`}
+                onBlur={(e) => e.target.style.boxShadow = 'none'}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Email</label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 transition-shadow disabled:bg-gray-50 disabled:text-gray-400"
+                required
+                disabled={!!teacher}
+                placeholder="ana@school.com"
+                onFocus={(e) => e.target.style.boxShadow = `0 0 0 3px ${primaryColor}20`}
+                onBlur={(e) => e.target.style.boxShadow = 'none'}
+              />
+            </div>
           </div>
 
+          {/* Role selector */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 transition-shadow"
-              required
-              disabled={!!teacher}
-              placeholder="john@school.com"
-            />
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Role</label>
+            <div className="grid grid-cols-2 gap-3">
+              {ROLES.map(({ value, label, description, icon: Icon, color }) => {
+                const c = colorMap[color];
+                const selected = formData.role === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, role: value }))}
+                    className={`text-left p-3.5 rounded-xl border-2 transition-all ${
+                      selected ? `${c.border} ${c.bg}` : 'border-gray-200 hover:border-gray-300 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon size={15} className={selected ? c.text : 'text-gray-400'} />
+                      <span className={`text-sm font-semibold ${selected ? c.text : 'text-gray-700'}`}>{label}</span>
+                      {selected && <div className={`ml-auto w-2 h-2 rounded-full ${c.dot}`} />}
+                    </div>
+                    <p className="text-xs text-gray-400 leading-snug">{description}</p>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-            <select
-              value={formData.user_type}
-              onChange={(e) => setFormData({ ...formData, user_type: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2"
-            >
-              <option value="teacher">Teacher</option>
-              <option value="admin">Admin</option>
-              <option value="super_admin">Super Admin</option>
-            </select>
-          </div>
-
-          {formData.user_type !== "admin" && formData.user_type !== "super_admin" && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Subjects</label>
-                <select
-                  multiple
-                  value={formData.subjects}
-                  onChange={(e) => setFormData({ ...formData, subjects: Array.from(e.target.selectedOptions, o => o.value) })}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2"
-                  size="4"
-                >
-                  {availableSubjects.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <p className="text-xs text-gray-400 mt-1">Ctrl/Cmd + click to select multiple</p>
+          {/* Subjects (teacher only) */}
+          {formData.role === 'teacher' && availableSubjects.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Subjects</label>
+              <div className="flex flex-wrap gap-2">
+                {availableSubjects.map(subject => {
+                  const active = formData.subjects.includes(subject);
+                  return (
+                    <button
+                      key={subject}
+                      type="button"
+                      onClick={() => toggleSubject(subject)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                        active
+                          ? 'border-blue-400 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                      }`}
+                    >
+                      {active && <span className="mr-1">✓</span>}
+                      {subject}
+                    </button>
+                  );
+                })}
               </div>
+            </div>
+          )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Class Teacher For</label>
+          {/* Class teacher for (teacher only) */}
+          {formData.role === 'teacher' && availableClasses.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Class Teacher For</label>
+              <div className="relative">
                 <select
                   value={formData.class_teacher_for}
-                  onChange={(e) => setFormData({ ...formData, class_teacher_for: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2"
+                  onChange={(e) => setFormData(prev => ({ ...prev, class_teacher_for: e.target.value }))}
+                  className="w-full appearance-none px-3 py-2.5 pr-8 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 bg-white cursor-pointer"
+                  onFocus={(e) => e.target.style.boxShadow = `0 0 0 3px ${primaryColor}20`}
+                  onBlur={(e) => e.target.style.boxShadow = 'none'}
                 >
                   <option value="">None</option>
                   {availableClasses.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
-            </>
+            </div>
           )}
 
-          <div className="flex gap-3 pt-2">
+          {/* Buttons */}
+          <div className="flex gap-3 pt-1">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 px-4 py-2.5 text-sm font-medium text-white rounded-lg disabled:opacity-50 transition-colors"
+              className="flex-1 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-60"
               style={{ backgroundColor: primaryColor }}
             >
-              {saving ? "Creating..." : teacher ? "Update" : "Create Account"}
+              {saving && <Loader2 size={15} className="animate-spin" />}
+              {saving
+                ? (teacher ? 'Saving...' : 'Creating account...')
+                : (teacher ? 'Save Changes' : 'Create Account')
+              }
             </button>
           </div>
         </form>
