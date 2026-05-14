@@ -24,6 +24,8 @@ import {
   UserCog,
   Activity,
   CalendarRange,
+  Menu,
+  X,
 } from "lucide-react";
 
 import { AppProvider, useApp } from "../core/context/AppContext";
@@ -96,6 +98,7 @@ const SchoolAppContent = () => {
   } = useAuth();
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   if (authLoading || brandingLoading) {
     return (
@@ -267,44 +270,137 @@ const SchoolAppContent = () => {
     return null;
   };
 
+  const navContent = (
+    <nav className="space-y-1" onClick={() => setSidebarOpen(false)}>
+      {/* ════════ PARENT NAV ════════ */}
+      {isParent() ? (
+        <>
+          {hasFeature("parent_portal") && (
+            <>
+              <NavItem icon={LayoutDashboard} label="Dashboard"  page="home" />
+              <NavItem icon={UserCircle}      label="My Child"   page="my-child" />
+              {hasFeature("parent_grades")     && <NavItem icon={Award}         label="Grades"     page="grading" />}
+              {hasFeature("parent_attendance") && <NavItem icon={CalendarCheck} label="Attendance" page="parent-attendance" />}
+              {hasFeature("parent_calendar")   && <NavItem icon={Calendar}      label="Calendar"   page="parent-calendar" />}
+              <NavItem icon={CalendarDays} label="Daily View" page="parent-daily" />
+              {hasFeature("parent_homework")   && <NavItem icon={ClipboardList} label="Homework"   page="homework" />}
+            </>
+          )}
+          <NavItem icon={Settings} label="Settings" page="settings" />
+        </>
+
+      /* ════════ SUPER ADMIN NAV ════════ */
+      ) : isSuperAdmin ? (
+        <>
+          {hasFeature("home")            && <NavItem icon={Home}           label="Teacher Home"     page="home" />}
+          {hasFeature("admin_dashboard") && <NavItem icon={LayoutDashboard}label="Admin Dashboard"  page="admin-dashboard" />}
+
+          <div className="border-t border-gray-200 my-3" />
+
+          {hasFeature("schedule")        && <NavItem icon={Clock}          label="My Schedule"      page="schedule" />}
+          {hasFeature("calendar")        && <NavItem icon={Calendar}       label="Calendar"         page="teacher-calendar" />}
+          {hasFeature("admin_calendar")  && <NavItem icon={CalendarDays}   label="School Calendar"  page="admin-calendar" />}
+          {hasFeature("tasks")           && <NavItem icon={CheckSquare}    label="My Tasks"         page="tasks" />}
+          {hasFeature("homework")        && <NavItem icon={BookMarked}     label="Homework"         page="homework" />}
+          {hasFeature("activity")        && <NavItem icon={Activity}       label="Activity Tracker" page="activity" />}
+          {hasFeature("grading")         && <NavItem icon={GraduationCap}  label="Grading"          page="grading" />}
+          {teacher?.class_teacher_for && hasFeature("daily_overview") &&
+            <NavItem icon={ClipboardCheck} label="Daily Overview" page="daily-overview" />
+          }
+          {hasFeature("test_maker")      && <NavItem icon={FileText}       label="Test Maker"       page="test-maker" />}
+
+          <div className="border-t border-gray-200 my-3" />
+
+          {hasFeature("management")      && <NavItem icon={Users}          label="Management"       page="management" />}
+          {hasFeature("admissions")      && <NavItem icon={UserPlus}       label="Admissions"       page="admissions" />}
+          {hasFeature("timetable")       && <NavItem icon={CalendarRange}  label="Timetable"        page="timetable" />}
+          {hasFeature("reports")         && <NavItem icon={BarChart3}      label="Reports"          page="reports" />}
+          <NavItem icon={Settings} label="Settings" page="settings" />
+        </>
+
+      /* ════════ PURE ADMIN NAV ════════ */
+      ) : isPureAdmin ? (
+        <>
+          {hasFeature("admin_dashboard") && <NavItem icon={LayoutDashboard}label="Dashboard"        page="home" />}
+          {hasFeature("admin_calendar")  && <NavItem icon={CalendarDays}   label="School Calendar"  page="admin-calendar" />}
+          {hasFeature("management")      && <NavItem icon={Users}          label="Management"       page="management" />}
+          {hasFeature("admissions")      && <NavItem icon={UserPlus}       label="Admissions"       page="admissions" />}
+          {hasFeature("timetable")       && <NavItem icon={CalendarRange}  label="Timetable"        page="timetable" />}
+          {hasFeature("reports")         && <NavItem icon={BarChart3}      label="Reports"          page="reports" />}
+          <NavItem icon={Settings} label="Settings" page="settings" />
+        </>
+
+      /* ════════ TEACHER NAV ════════ */
+      ) : (
+        <>
+          {hasFeature("home")            && <NavItem icon={Home}           label="Home"             page="home" />}
+          {hasFeature("schedule")        && <NavItem icon={Clock}          label="My Schedule"      page="schedule" />}
+          {hasFeature("calendar")        && <NavItem icon={Calendar}       label="Calendar"         page="teacher-calendar" />}
+          {hasFeature("tasks")           && <NavItem icon={CheckSquare}    label="My Tasks"         page="tasks" />}
+          {hasFeature("homework")        && <NavItem icon={BookMarked}     label="Homework"         page="homework" />}
+          {hasFeature("activity")        && <NavItem icon={Activity}       label="Activity Tracker" page="activity" />}
+          {hasFeature("grading")         && <NavItem icon={GraduationCap}  label="Grading"          page="grading" />}
+          {teacher?.class_teacher_for && hasFeature("daily_overview") &&
+            <NavItem icon={ClipboardCheck} label="Daily Overview" page="daily-overview" />
+          }
+          {hasFeature("test_maker")      && <NavItem icon={FileText}       label="Test Maker"       page="test-maker" />}
+          <NavItem icon={Settings} label="Settings" page="settings" />
+        </>
+      )}
+    </nav>
+  );
+
   return (
     <div
       className="min-h-screen"
       style={{ background: `linear-gradient(to bottom right, ${primaryColor}08, ${primaryColor}03)` }}
     >
       {/* ── HEADER ── */}
-      <header className="bg-white border-b-2 shadow-md" style={{ borderColor: primaryColor }}>
-        <div className="max-w-7xl mx-auto px-6 py-3">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12">
+      <header className="bg-white border-b-2 shadow-md sticky top-0 z-30" style={{ borderColor: primaryColor }}>
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3">
+          <div className="flex justify-between items-center gap-2">
+
+            {/* Left: hamburger (mobile) + logo + name */}
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              {/* Hamburger — mobile only */}
+              <button
+                className="md:hidden p-2 rounded-xl hover:bg-gray-100 transition-colors flex-shrink-0"
+                onClick={() => setSidebarOpen(true)}
+                aria-label="Open menu"
+              >
+                <Menu size={22} className="text-gray-700" />
+              </button>
+
+              <div className="w-9 h-9 sm:w-12 sm:h-12 flex-shrink-0">
                 {logoUrl ? (
                   <img
                     src={logoUrl}
                     alt={schoolName}
-                    className="w-12 h-12 rounded-xl object-contain bg-white shadow-sm"
+                    className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl object-contain bg-white shadow-sm"
                   />
                 ) : (
                   <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg"
+                    className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-white font-bold text-base sm:text-lg shadow-lg"
                     style={{ backgroundColor: primaryColor }}
                   >
                     {schoolName?.charAt(0) || "S"}
                   </div>
                 )}
               </div>
-              <div>
-                <h1 className="text-lg font-bold text-gray-900 leading-tight">
+
+              <div className="min-w-0">
+                <h1 className="text-sm sm:text-lg font-bold text-gray-900 leading-tight truncate">
                   {schoolName || "School"} E-Diary
                 </h1>
-                <p className="text-xs font-medium" style={{ color: primaryColor }}>
+                <p className="text-xs font-medium hidden sm:block" style={{ color: primaryColor }}>
                   {tagline || "Digital Learning Management"}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="text-right border-r border-gray-300 pr-3">
+            {/* Right: user info + avatar */}
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+              <div className="text-right border-r border-gray-300 pr-2 sm:pr-3 hidden sm:block">
                 <p className="text-sm font-semibold text-gray-900">
                   {teacher?.full_name || profile?.full_name || "User"}
                 </p>
@@ -313,10 +409,10 @@ const SchoolAppContent = () => {
               <div className="relative">
                 <button
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                  className="w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-md text-white"
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all shadow-md text-white"
                   style={{ backgroundColor: primaryColor }}
                 >
-                  <User size={20} />
+                  <User size={18} />
                 </button>
 
                 {profileMenuOpen && (
@@ -324,6 +420,12 @@ const SchoolAppContent = () => {
                     <div className="p-3 border-b" style={{ backgroundColor: `${primaryColor}10` }}>
                       <p className="text-xs text-gray-600 font-medium">{getUserRole()}</p>
                       <p className="text-sm font-semibold text-gray-900 truncate">{user?.email}</p>
+                    </div>
+                    {/* Show name on mobile in the dropdown */}
+                    <div className="px-4 py-2 border-b border-gray-100 sm:hidden">
+                      <p className="text-sm font-semibold text-gray-900">
+                        {teacher?.full_name || profile?.full_name || "User"}
+                      </p>
                     </div>
                     <button
                       onClick={handleSignOut}
@@ -340,93 +442,89 @@ const SchoolAppContent = () => {
         </div>
       </header>
 
-      {/* ── LAYOUT ── */}
-      <div className="max-w-7xl mx-auto px-6 py-6 flex gap-6">
+      {/* ── MOBILE SIDEBAR OVERLAY ── */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
-        {/* ── SIDEBAR ── */}
+      {/* ── MOBILE SIDEBAR DRAWER ── */}
+      <div
+        className={`fixed top-0 left-0 h-full w-72 bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 md:hidden ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        {/* Drawer header */}
+        <div
+          className="flex items-center justify-between px-5 py-4 border-b"
+          style={{ borderColor: `${primaryColor}20` }}
+        >
+          <div className="flex items-center gap-2.5">
+            {logoUrl ? (
+              <img src={logoUrl} alt={schoolName} className="w-8 h-8 rounded-lg object-contain" />
+            ) : (
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm"
+                style={{ backgroundColor: primaryColor }}
+              >
+                {schoolName?.charAt(0) || "S"}
+              </div>
+            )}
+            <span className="font-bold text-gray-900 text-sm">{schoolName}</span>
+          </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            <X size={20} className="text-gray-500" />
+          </button>
+        </div>
+
+        {/* Drawer nav */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {navContent}
+        </div>
+
+        {/* Drawer footer: user info */}
+        <div
+          className="p-4 border-t"
+          style={{ borderColor: `${primaryColor}20` }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center text-white flex-shrink-0"
+              style={{ backgroundColor: primaryColor }}
+            >
+              <User size={16} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-900 truncate">
+                {teacher?.full_name || profile?.full_name || "User"}
+              </p>
+              <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+            </div>
+          </div>
+          <button
+            onClick={handleSignOut}
+            className="mt-3 w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors"
+          >
+            <LogOut size={15} />
+            Logout
+          </button>
+        </div>
+      </div>
+
+      {/* ── LAYOUT ── */}
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 md:flex md:gap-6">
+
+        {/* ── DESKTOP SIDEBAR ── */}
         <aside
-          className="w-64 bg-white rounded-2xl shadow-lg p-6 h-fit sticky top-6 border"
+          className="hidden md:block w-64 bg-white rounded-2xl shadow-lg p-6 h-fit sticky top-24 border flex-shrink-0"
           style={{ borderColor: `${primaryColor}30` }}
         >
-          <nav className="space-y-1">
-
-            {/* ════════ PARENT NAV ════════ */}
-            {isParent() ? (
-              <>
-                {hasFeature("parent_portal") && (
-                  <>
-                    <NavItem icon={LayoutDashboard} label="Dashboard"  page="home" />
-                    <NavItem icon={UserCircle}      label="My Child"   page="my-child" />
-                    {hasFeature("parent_grades")     && <NavItem icon={Award}         label="Grades"     page="grading" />}
-                    {hasFeature("parent_attendance") && <NavItem icon={CalendarCheck} label="Attendance" page="parent-attendance" />}
-                    {hasFeature("parent_calendar")   && <NavItem icon={Calendar}      label="Calendar"   page="parent-calendar" />}
-                    <NavItem icon={CalendarDays} label="Daily View" page="parent-daily" />
-                    {hasFeature("parent_homework")   && <NavItem icon={ClipboardList} label="Homework"   page="homework" />}
-                  </>
-                )}
-                <NavItem icon={Settings} label="Settings" page="settings" />
-              </>
-
-            /* ════════ SUPER ADMIN NAV ════════ */
-            ) : isSuperAdmin ? (
-              <>
-                {hasFeature("home")            && <NavItem icon={Home}           label="Teacher Home"     page="home" />}
-                {hasFeature("admin_dashboard") && <NavItem icon={LayoutDashboard}label="Admin Dashboard"  page="admin-dashboard" />}
-
-                <div className="border-t border-gray-200 my-3" />
-
-                {hasFeature("schedule")        && <NavItem icon={Clock}          label="My Schedule"      page="schedule" />}
-                {hasFeature("calendar")        && <NavItem icon={Calendar}       label="Calendar"         page="teacher-calendar" />}
-                {hasFeature("admin_calendar")  && <NavItem icon={CalendarDays}   label="School Calendar"  page="admin-calendar" />}
-                {hasFeature("tasks")           && <NavItem icon={CheckSquare}    label="My Tasks"         page="tasks" />}
-                {hasFeature("homework")        && <NavItem icon={BookMarked}     label="Homework"         page="homework" />}
-                {hasFeature("activity")        && <NavItem icon={Activity}       label="Activity Tracker" page="activity" />}
-                {hasFeature("grading")         && <NavItem icon={GraduationCap}  label="Grading"          page="grading" />}
-                {teacher?.class_teacher_for && hasFeature("daily_overview") &&
-                  <NavItem icon={ClipboardCheck} label="Daily Overview" page="daily-overview" />
-                }
-                {hasFeature("test_maker")      && <NavItem icon={FileText}       label="Test Maker"       page="test-maker" />}
-
-                <div className="border-t border-gray-200 my-3" />
-
-                {hasFeature("management")      && <NavItem icon={Users}          label="Management"       page="management" />}
-                {hasFeature("admissions")      && <NavItem icon={UserPlus}       label="Admissions"       page="admissions" />}
-                {hasFeature("timetable")       && <NavItem icon={CalendarRange}  label="Timetable"        page="timetable" />}
-                {hasFeature("reports")         && <NavItem icon={BarChart3}      label="Reports"          page="reports" />}
-                <NavItem icon={Settings} label="Settings" page="settings" />
-              </>
-
-            /* ════════ PURE ADMIN NAV ════════ */
-            ) : isPureAdmin ? (
-              <>
-                {hasFeature("admin_dashboard") && <NavItem icon={LayoutDashboard}label="Dashboard"        page="home" />}
-                {hasFeature("admin_calendar")  && <NavItem icon={CalendarDays}   label="School Calendar"  page="admin-calendar" />}
-                {hasFeature("management")      && <NavItem icon={Users}          label="Management"       page="management" />}
-                {hasFeature("admissions")      && <NavItem icon={UserPlus}       label="Admissions"       page="admissions" />}
-                {hasFeature("timetable")       && <NavItem icon={CalendarRange}  label="Timetable"        page="timetable" />}
-                {hasFeature("reports")         && <NavItem icon={BarChart3}      label="Reports"          page="reports" />}
-                <NavItem icon={Settings} label="Settings" page="settings" />
-              </>
-
-            /* ════════ TEACHER NAV ════════ */
-            ) : (
-              <>
-                {hasFeature("home")            && <NavItem icon={Home}           label="Home"             page="home" />}
-                {hasFeature("schedule")        && <NavItem icon={Clock}          label="My Schedule"      page="schedule" />}
-                {hasFeature("calendar")        && <NavItem icon={Calendar}       label="Calendar"         page="teacher-calendar" />}
-                {hasFeature("tasks")           && <NavItem icon={CheckSquare}    label="My Tasks"         page="tasks" />}
-                {hasFeature("homework")        && <NavItem icon={BookMarked}     label="Homework"         page="homework" />}
-                {hasFeature("activity")        && <NavItem icon={Activity}       label="Activity Tracker" page="activity" />}
-                {hasFeature("grading")         && <NavItem icon={GraduationCap}  label="Grading"          page="grading" />}
-                {teacher?.class_teacher_for && hasFeature("daily_overview") &&
-                  <NavItem icon={ClipboardCheck} label="Daily Overview" page="daily-overview" />
-                }
-                {hasFeature("test_maker")      && <NavItem icon={FileText}       label="Test Maker"       page="test-maker" />}
-                <NavItem icon={Settings} label="Settings" page="settings" />
-              </>
-            )}
-          </nav>
-
+          {navContent}
         </aside>
 
         {/* ── MAIN CONTENT ── */}
