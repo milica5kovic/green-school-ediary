@@ -37,19 +37,38 @@ const LoginPage = () => {
   const tagline = school?.tagline || 'Digital Learning Platform';
 
   // ─── Login Handler ─────────────────────────────────────
+  const friendlyError = (msg = '') => {
+    if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) {
+      return 'Pogrešan email ili lozinka. Pokušajte ponovo.';
+    }
+    if (msg.includes('Email not confirmed')) {
+      return 'Email adresa nije potvrđena. Proverite inbox.';
+    }
+    if (msg.includes('Too many requests') || msg.includes('rate limit')) {
+      return 'Previše neuspelih pokušaja. Sačekajte nekoliko minuta.';
+    }
+    if (msg.includes('Nemate pristup') || msg.includes('school')) {
+      return msg;
+    }
+    if (msg.includes('Network') || msg.includes('fetch')) {
+      return 'Problem sa vezom. Proverite internet i pokušajte ponovo.';
+    }
+    return msg || 'Prijava nije uspela. Pokušajte ponovo.';
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    
+
     try {
       const result = await signIn(email, password);
-      
+
       if (!result.success) {
-        setError(result.error || 'Invalid email or password');
+        setError(friendlyError(result.error));
       }
     } catch (err) {
-      setError(err.message || 'Failed to login');
+      setError(friendlyError(err.message));
     } finally {
       setLoading(false);
     }
@@ -294,7 +313,7 @@ const LoginPage = () => {
           {(error || authError) && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-700">{error || authError}</p>
+              <p className="text-sm text-red-700">{error || friendlyError(authError)}</p>
             </div>
           )}
 

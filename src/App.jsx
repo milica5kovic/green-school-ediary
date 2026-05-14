@@ -156,25 +156,77 @@ const SchoolNotFound = ({ error }) => (
 // ══════════════════════════════════════════════════════════
 // ACCESS DENIED (user doesn't belong to this school)
 // ══════════════════════════════════════════════════════════
-const AccessDenied = ({ error }) => (
-  <div className="min-h-screen flex items-center justify-center bg-gray-50">
-    <div className="text-center max-w-md mx-auto p-8">
-      <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
-        <svg className="w-10 h-10 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-        </svg>
+const AccessDenied = ({ error }) => {
+  const { school } = useTenant();
+  const { signOut } = useAuth();
+
+  const primaryColor = school?.primary_color || '#10b981';
+  const logoUrl = school?.logo_url;
+  const schoolName = school?.name || 'School';
+
+  const handleSignOut = async () => {
+    await signOut();
+    window.location.reload();
+  };
+
+  return (
+    <div
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{ background: `linear-gradient(135deg, ${primaryColor}08 0%, ${primaryColor}18 50%, ${primaryColor}08 100%)` }}
+    >
+      <div className="w-full max-w-md">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          {logoUrl ? (
+            <img src={logoUrl} alt={schoolName} className="h-16 w-auto object-contain mx-auto" style={{ maxWidth: '200px' }} />
+          ) : (
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg mx-auto" style={{ backgroundColor: primaryColor }}>
+              <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+              </svg>
+            </div>
+          )}
+          <p className="text-gray-500 text-sm mt-3 font-medium">{schoolName}</p>
+        </div>
+
+        {/* Card */}
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 text-center">
+          <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-5">
+            <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+
+          <h1 className="text-xl font-bold text-gray-900 mb-2">Pristup odbijen</h1>
+          <p className="text-gray-500 text-sm leading-relaxed mb-7">
+            {error || 'Nemate pristup ovoj školi. Obratite se administratoru škole.'}
+          </p>
+
+          <div className="space-y-3">
+            <button
+              onClick={handleSignOut}
+              className="w-full py-3 text-white font-semibold rounded-xl transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
+              style={{ backgroundColor: primaryColor, boxShadow: `0 8px 24px -8px ${primaryColor}60` }}
+            >
+              Odjavi se i pokušaj ponovo
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full py-3 text-gray-500 font-medium rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors text-sm"
+            >
+              Osveži stranicu
+            </button>
+          </div>
+        </div>
+
+        <p className="text-center text-xs text-gray-400 mt-6">
+          Powered by <span className="font-medium text-gray-500">SchoolHub</span>
+        </p>
       </div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Pristup odbijen</h1>
-      <p className="text-gray-600 mb-6">{error || 'Nemate pristup ovoj školi.'}</p>
-      <button 
-        onClick={() => window.location.reload()}
-        className="inline-block px-6 py-3 bg-violet-600 text-white font-semibold rounded-xl hover:bg-violet-700 transition-colors"
-      >
-        Pokušaj ponovo
-      </button>
     </div>
-  </div>
-);
+  );
+};
 
 // ══════════════════════════════════════════════════════════
 // PLATFORM PAGE — shown on main domain (not a school subdomain)
