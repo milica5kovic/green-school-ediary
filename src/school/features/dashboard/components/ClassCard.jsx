@@ -4,7 +4,7 @@ import { useApp } from "../../../../core/context/AppContext";
 import { supabase } from "../../../../core/infrastructure/supabaseClient";
 import { useBranding } from "../../../../core/context/BrandingContext";
 
-const ClassCard = ({ cls, onRemove }) => {
+const ClassCard = ({ cls, onRemove, stackIndex = 0, total = 1 }) => {
   const { attendanceService, getDateKey, selectedDate } = useApp();
   const branding = useBranding();
   const primaryColor = branding?.primaryColor || '#10b981';
@@ -175,73 +175,85 @@ const ClassCard = ({ cls, onRemove }) => {
 
   return (
     <>
-      <div className="bg-white rounded-2xl shadow-lg border overflow-hidden" style={{ borderColor: `${primaryColor}25` }}>
+      <div
+        className="bg-white rounded-2xl border overflow-hidden transition-shadow duration-200"
+        style={{
+          borderColor: `${primaryColor}20`,
+          boxShadow: isExpanded
+            ? `0 8px 24px ${primaryColor}18, 0 2px 6px rgba(0,0,0,0.06)`
+            : `0 2px 8px rgba(0,0,0,0.05)`,
+        }}
+      >
+        {/* ── Accent bar on left when expanded ── */}
+        {isExpanded && (
+          <div className="h-1 w-full" style={{ background: `linear-gradient(90deg, ${primaryColor}, ${primaryColor}60)` }} />
+        )}
 
-        {/* ── Clickable Header (always visible) ── */}
+        {/* ── Clickable Header ── */}
         <button
-          className="w-full text-left px-5 py-4 flex items-center justify-between gap-3 hover:bg-gray-50 transition-colors focus:outline-none"
+          className="w-full text-left px-4 py-3.5 flex items-center justify-between gap-3 hover:bg-gray-50 transition-colors focus:outline-none"
           onClick={() => setIsExpanded(prev => !prev)}
         >
-          {/* Left: class info */}
+          {/* Left: time badge + class info */}
           <div className="flex items-center gap-3 min-w-0">
+            {/* Time bubble */}
             <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-              style={{ backgroundColor: `${primaryColor}18` }}
+              className="flex-shrink-0 rounded-xl px-3 py-2 text-center min-w-[52px]"
+              style={{ backgroundColor: `${primaryColor}12` }}
             >
-              <Users size={18} style={{ color: primaryColor }} />
+              <p className="text-xs font-bold leading-none" style={{ color: primaryColor }}>
+                {cls.time?.split(':')[0] || ''}
+              </p>
+              <p className="text-[10px] leading-none mt-0.5" style={{ color: `${primaryColor}99` }}>
+                {cls.time?.includes(':') ? `:${cls.time.split(':')[1]}` : cls.time}
+              </p>
             </div>
+
+            {/* Class + subject */}
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-base font-bold text-gray-800 leading-tight">
-                  {cls.class} — {cls.subject}
-                </h3>
-                <span
-                  className="text-xs px-2.5 py-0.5 rounded-full font-medium flex-shrink-0"
-                  style={{ backgroundColor: `${primaryColor}18`, color: primaryColor }}
-                >
-                  {cls.time}
-                </span>
+                <span className="text-sm font-bold text-gray-800">{cls.class}</span>
+                <span className="text-xs text-gray-400">·</span>
+                <span className="text-sm font-semibold" style={{ color: primaryColor }}>{cls.subject}</span>
               </div>
               {cls.title && (
-                <p className="text-xs text-gray-500 mt-0.5 truncate">{cls.title}</p>
+                <p className="text-xs text-gray-400 mt-0.5 truncate">{cls.title}</p>
               )}
             </div>
           </div>
 
-          {/* Right: mini stats + chevron */}
-          <div className="flex items-center gap-3 flex-shrink-0">
-            {/* Mini stat pills */}
+          {/* Right: mini stats + remove + chevron */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Mini stat dots */}
             <div className="hidden sm:flex items-center gap-1.5">
-              <span className="text-xs font-semibold text-green-600 bg-green-50 border border-green-200 rounded-lg px-2 py-1">
-                ✓ {stats.present}
+              <span className="text-xs font-semibold text-green-600 bg-green-50 rounded-lg px-2 py-1">
+                {stats.present}✓
               </span>
-              <span className="text-xs font-semibold text-red-500 bg-red-50 border border-red-200 rounded-lg px-2 py-1">
-                ✗ {stats.absent}
+              <span className="text-xs font-semibold text-red-400 bg-red-50 rounded-lg px-2 py-1">
+                {stats.absent}✗
               </span>
               {stats.late > 0 && (
-                <span className="text-xs font-semibold text-orange-500 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1">
-                  ⏱ {stats.late}
+                <span className="text-xs font-semibold text-orange-400 bg-orange-50 rounded-lg px-2 py-1">
+                  {stats.late}⏱
                 </span>
               )}
               {stats.sentOut > 0 && (
-                <span className="text-xs font-semibold text-purple-500 bg-purple-50 border border-purple-200 rounded-lg px-2 py-1">
-                  ↗ {stats.sentOut}
+                <span className="text-xs font-semibold text-purple-400 bg-purple-50 rounded-lg px-2 py-1">
+                  {stats.sentOut}↗
                 </span>
               )}
             </div>
 
-            {/* Remove button */}
             <button
               onClick={(e) => { e.stopPropagation(); onRemove(cls.id); }}
-              className="p-1.5 hover:bg-red-100 text-red-400 rounded-lg transition-colors"
+              className="p-1.5 hover:bg-red-50 text-gray-300 hover:text-red-400 rounded-lg transition-colors"
               title="Remove class"
             >
-              <X size={16} />
+              <X size={15} />
             </button>
 
-            {/* Chevron */}
-            <div style={{ color: primaryColor }}>
-              {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+            <div className="text-gray-300" style={isExpanded ? { color: primaryColor } : {}}>
+              {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
             </div>
           </div>
         </button>

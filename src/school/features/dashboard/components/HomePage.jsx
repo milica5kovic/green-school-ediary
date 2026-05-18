@@ -141,6 +141,14 @@ const HomePage = () => {
     }
   };
 
+  // Sort: latest time at top, earliest at bottom
+  const parseTime = (t) => {
+    if (!t) return 0;
+    const [h, m] = t.replace(/[APap][Mm]/, '').trim().split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+  const sortedClasses = [...dailyClasses].sort((a, b) => parseTime(b.time) - parseTime(a.time));
+
   const hasSchedule = todaySchedule.length > 0;
   const showAdminMessage = profile?.role === 'admin' && !teacher?.user_id;
 
@@ -221,9 +229,9 @@ const HomePage = () => {
           )}
         </div>
       ) : (
-        <div className="space-y-6">
-          {dailyClasses.map((cls) => (
-            <ClassCard key={cls.id} cls={cls} onRemove={removeClass} />
+        <div className="flex flex-col gap-3">
+          {sortedClasses.map((cls, idx) => (
+            <ClassCard key={cls.id} cls={cls} onRemove={removeClass} stackIndex={idx} total={sortedClasses.length} />
           ))}
         </div>
       )}
