@@ -97,7 +97,6 @@ const SchoolAppContent = () => {
     isParent,
   } = useAuth();
 
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   if (authLoading || brandingLoading) {
@@ -398,45 +397,33 @@ const SchoolAppContent = () => {
               </div>
             </div>
 
-            {/* Right: user info + avatar */}
+            {/* Right: user info + logout */}
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-              <div className="text-right border-r border-gray-300 pr-2 sm:pr-3 hidden sm:block">
+              {/* User info — desktop only */}
+              <div className="text-right hidden sm:block">
                 <p className="text-sm font-semibold text-gray-900">
                   {teacher?.full_name || profile?.full_name || "User"}
                 </p>
                 {getUserBadge()}
               </div>
-              <div className="relative">
-                <button
-                  onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all shadow-md text-white"
-                  style={{ backgroundColor: primaryColor }}
-                >
-                  <User size={18} />
-                </button>
 
-                {profileMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-50">
-                    <div className="p-3 border-b" style={{ backgroundColor: `${primaryColor}10` }}>
-                      <p className="text-xs text-gray-600 font-medium">{getUserRole()}</p>
-                      <p className="text-sm font-semibold text-gray-900 truncate">{user?.email}</p>
-                    </div>
-                    {/* Show name on mobile in the dropdown */}
-                    <div className="px-4 py-2 border-b border-gray-100 sm:hidden">
-                      <p className="text-sm font-semibold text-gray-900">
-                        {teacher?.full_name || profile?.full_name || "User"}
-                      </p>
-                    </div>
-                    <button
-                      onClick={handleSignOut}
-                      className="w-full px-4 py-2.5 text-left flex items-center gap-2 hover:bg-red-50 text-red-600 transition-colors"
-                    >
-                      <LogOut size={16} />
-                      <span className="font-medium">Logout</span>
-                    </button>
-                  </div>
-                )}
+              {/* Avatar */}
+              <div
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shadow-md text-white flex-shrink-0"
+                style={{ backgroundColor: primaryColor }}
+              >
+                <User size={18} />
               </div>
+
+              {/* Logout button — always visible */}
+              <button
+                onClick={handleSignOut}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-red-600 bg-red-50 hover:bg-red-100 transition-colors font-medium text-sm"
+                title="Logout"
+              >
+                <LogOut size={16} />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
             </div>
           </div>
         </div>
