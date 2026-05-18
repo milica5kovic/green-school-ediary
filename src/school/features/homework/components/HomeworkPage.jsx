@@ -166,8 +166,26 @@ const HomeworkPage = () => {
         const { error } = await supabase.from('homework').update(record).eq('id', editingHomework.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('homework').insert([record]);
+        // Insert and get back the new row so we can pre-seed student_homework
+        const { data: newHw, error } = await supabase
+          .from('homework')
+          .insert([record])
+          .select()
+          .single();
         if (error) throw error;
+
+        // Pre-seed a student_homework row (not_done) for every student in the
+        // class so that grading only ever needs UPDATE — avoids INSERT RLS issues
+        if (newHw?.id && students.length > 0) {
+          const rows = students.map(s => ({
+            homework_id: newHw.id,
+            student_id: s.id,
+            school_id: schoolId,
+            status: 'not_done',
+          }));
+          // Ignore errors here — worst case grading still falls back to INSERT
+          await supabase.from('student_homework').insert(rows);
+        }
       }
 
       setShowAddModal(false);
@@ -201,6 +219,7 @@ const HomeworkPage = () => {
           .eq('id', existing.id);
         if (error) throw error;
       } else {
+        // Fallback insert (pre-seed should have covered this, but just in case)
         const { error } = await supabase
           .from('student_homework')
           .insert([{
@@ -210,7 +229,7 @@ const HomeworkPage = () => {
             school_id: schoolId,
             submitted_at: status === 'done' ? new Date().toISOString() : null
           }]);
-        if (error) throw error;
+        if (error) throw new Error('Cannot save — contact admin to check database permissions.');
       }
       await loadHomework();
     } catch (err) { showError('Failed to update status: ' + err.message); }
