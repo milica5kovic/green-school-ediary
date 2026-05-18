@@ -516,6 +516,9 @@ const SchoolAppContent = () => {
             <LogOut size={15} />
             Logout
           </button>
+          <p className="mt-3 text-center text-[10px] text-gray-300 select-none">
+            Powered by Milica Petkovic
+          </p>
         </div>
       </div>
 
@@ -528,6 +531,9 @@ const SchoolAppContent = () => {
           style={{ borderColor: `${primaryColor}30` }}
         >
           {navContent}
+          <p className="mt-6 text-center text-[10px] text-gray-300 select-none">
+            Powered by Milica Petkovic
+          </p>
         </aside>
 
         {/* ── MAIN CONTENT ── */}

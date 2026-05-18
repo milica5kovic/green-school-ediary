@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Users, BookOpen, Award, Edit2, Trash2, Check, X, Plus, 
-  AlertCircle, CheckCircle, Settings, ChevronDown, ChevronUp,
-  GraduationCap, Percent, RefreshCw
+import {
+  Users, BookOpen, Award, Edit2, Trash2, Check, X, Plus,
+  AlertCircle, CheckCircle, ChevronDown, ChevronUp, RefreshCw
 } from 'lucide-react';
 import { supabase } from '../../../../core/infrastructure/supabaseClient';
 import { useTenant } from '../../../../core/context/TenantContext';
@@ -14,65 +13,31 @@ import useTermTheme from '../../../../shared/hooks/useTermTheme';
 // Multi-tenant aware - all data filtered by school_id
 // ============================================================================
 
-// ─── Grading System Presets ──────────────────────────────────────────────────
+// ─── Default Grading Configs ─────────────────────────────────────────────────
 
-const GRADING_PRESETS = {
-  cambridge: {
-    name: 'Cambridge (IGCSE)',
-    description: 'A* to U grades',
-    usePercentage: true,
-    grades: [
-      { id: '1', label: 'A*', min: 90, max: 100, color: '#10b981' },
-      { id: '2', label: 'A', min: 80, max: 89, color: '#22c55e' },
-      { id: '3', label: 'B', min: 70, max: 79, color: '#84cc16' },
-      { id: '4', label: 'C', min: 60, max: 69, color: '#eab308' },
-      { id: '5', label: 'D', min: 50, max: 59, color: '#f97316' },
-      { id: '6', label: 'E', min: 40, max: 49, color: '#ef4444' },
-      { id: '7', label: 'U', min: 0, max: 39, color: '#dc2626' },
-    ]
-  },
-  serbian: {
-    name: 'Serbian (1-5)',
-    description: 'Odličan to Nedovoljan',
-    usePercentage: true,
-    grades: [
-      { id: '1', label: '5', description: 'Odličan', min: 90, max: 100, color: '#10b981' },
-      { id: '2', label: '4', description: 'Vrlo dobar', min: 75, max: 89, color: '#22c55e' },
-      { id: '3', label: '3', description: 'Dobar', min: 60, max: 74, color: '#eab308' },
-      { id: '4', label: '2', description: 'Dovoljan', min: 50, max: 59, color: '#f97316' },
-      { id: '5', label: '1', description: 'Nedovoljan', min: 0, max: 49, color: '#ef4444' },
-    ]
-  },
-  us_letter: {
-    name: 'US Letter (A-F)',
-    description: 'American system',
-    usePercentage: true,
-    grades: [
-      { id: '1', label: 'A', min: 90, max: 100, color: '#10b981' },
-      { id: '2', label: 'B', min: 80, max: 89, color: '#22c55e' },
-      { id: '3', label: 'C', min: 70, max: 79, color: '#eab308' },
-      { id: '4', label: 'D', min: 60, max: 69, color: '#f97316' },
-      { id: '5', label: 'F', min: 0, max: 59, color: '#ef4444' },
-    ]
-  },
-  descriptive: {
-    name: 'Descriptive Only',
-    description: 'Text-based, no percentages',
-    usePercentage: false,
-    grades: [
-      { id: '1', label: 'Excellent', description: 'Outstanding work', color: '#10b981' },
-      { id: '2', label: 'Very Good', description: 'Above expectations', color: '#22c55e' },
-      { id: '3', label: 'Good', description: 'Meets expectations', color: '#eab308' },
-      { id: '4', label: 'Satisfactory', description: 'Needs improvement', color: '#f97316' },
-      { id: '5', label: 'Unsatisfactory', description: 'Below expectations', color: '#ef4444' },
-    ]
-  },
-  custom: {
-    name: 'Custom',
-    description: 'Build your own',
-    usePercentage: true,
-    grades: []
-  }
+const DEFAULT_PRIMARY_BANDS = {
+  usePercentage: true,
+  grades: [
+    { id: '6', label: 'Band 6', description: 'Exceptional', min: 85, max: 100, color: '#10b981' },
+    { id: '5', label: 'Band 5', description: 'Strong',      min: 70, max: 84,  color: '#22c55e' },
+    { id: '4', label: 'Band 4', description: 'Secure',      min: 55, max: 69,  color: '#84cc16' },
+    { id: '3', label: 'Band 3', description: 'Developing',  min: 40, max: 54,  color: '#eab308' },
+    { id: '2', label: 'Band 2', description: 'Beginning',   min: 25, max: 39,  color: '#f97316' },
+    { id: '1', label: 'Band 1', description: 'Below expectations', min: 0, max: 24, color: '#ef4444' },
+  ]
+};
+
+const DEFAULT_IGCSE_GRADES = {
+  usePercentage: true,
+  grades: [
+    { id: '1', label: 'A*', description: 'Outstanding',  min: 90, max: 100, color: '#10b981' },
+    { id: '2', label: 'A',  description: 'Excellent',    min: 80, max: 89,  color: '#22c55e' },
+    { id: '3', label: 'B',  description: 'Very Good',    min: 70, max: 79,  color: '#84cc16' },
+    { id: '4', label: 'C',  description: 'Good',         min: 60, max: 69,  color: '#eab308' },
+    { id: '5', label: 'D',  description: 'Satisfactory', min: 50, max: 59,  color: '#f97316' },
+    { id: '6', label: 'E',  description: 'Marginal',     min: 40, max: 49,  color: '#ef4444' },
+    { id: '7', label: 'U',  description: 'Ungraded',     min: 0,  max: 39,  color: '#dc2626' },
+  ]
 };
 
 const GRADE_COLORS = [
@@ -277,6 +242,101 @@ const GradeDisplayRow = ({ grade, usePercentage }) => (
   </div>
 );
 
+// ─── Grading Tier Panel ──────────────────────────────────────────────────────
+
+const GradingTierPanel = ({
+  title, years, subtitle, badge,
+  config, editing, saving, theme,
+  onToggleEdit, onUpdate, onAdd, onDelete, onMove, onSave,
+}) => (
+  <div className="space-y-3">
+    {/* Header row */}
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <h4 className="font-bold text-gray-800">{title}</h4>
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${badge}`}>
+              {years}
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
+        </div>
+      </div>
+      <button
+        onClick={onToggleEdit}
+        className="text-xs font-medium px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+        style={{ color: theme.color, backgroundColor: theme.withAlpha(0.1) }}
+      >
+        {editing ? <><X size={12} /> Cancel</> : <><Edit2 size={12} /> Edit</>}
+      </button>
+    </div>
+
+    {/* Grades */}
+    {editing ? (
+      <div className="space-y-2">
+        {config.grades.map((grade, idx) => (
+          <CustomGradeEditor
+            key={grade.id || idx}
+            grade={grade}
+            index={idx}
+            usePercentage={config.usePercentage}
+            onUpdate={(updated) => onUpdate(idx, updated)}
+            onDelete={() => onDelete(idx)}
+            onMoveUp={() => onMove(idx, -1)}
+            onMoveDown={() => onMove(idx, 1)}
+            isFirst={idx === 0}
+            isLast={idx === config.grades.length - 1}
+          />
+        ))}
+
+        <button
+          onClick={onAdd}
+          className="w-full p-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:border-gray-400 hover:text-gray-600 transition-colors flex items-center justify-center gap-2 text-sm"
+        >
+          <Plus size={15} /> Add Grade
+        </button>
+
+        <button
+          onClick={onSave}
+          disabled={saving}
+          className="w-full py-2.5 rounded-xl text-white text-sm font-medium transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+          style={{ backgroundColor: theme.color }}
+        >
+          {saving
+            ? <><RefreshCw size={15} className="animate-spin" /> Saving...</>
+            : <><Check size={15} /> Save</>
+          }
+        </button>
+      </div>
+    ) : (
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+        {config.grades.map((grade, idx) => (
+          <div
+            key={grade.id || idx}
+            className="flex items-center gap-2 p-2 rounded-xl border bg-gray-50"
+          >
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs flex-shrink-0"
+              style={{ backgroundColor: grade.color }}
+            >
+              {grade.label}
+            </div>
+            <div className="min-w-0">
+              {grade.description && (
+                <p className="text-xs text-gray-600 truncate">{grade.description}</p>
+              )}
+              {grade.min !== undefined && config.usePercentage && (
+                <p className="text-[10px] text-gray-400">{grade.min}–{grade.max}%</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+);
+
 // ═══════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
@@ -301,13 +361,11 @@ const CurriculumSettingsTab = () => {
   const [editSubjectName, setEditSubjectName] = useState('');
   const [subjectsExpanded, setSubjectsExpanded] = useState(true);
   
-  // Grading
-  const [gradingSystem, setGradingSystem] = useState('cambridge');
-  const [gradingConfig, setGradingConfig] = useState({
-    usePercentage: true,
-    grades: []
-  });
-  const [editingGrades, setEditingGrades] = useState(false);
+  // Grading — two fixed tiers
+  const [primaryConfig, setPrimaryConfig] = useState(DEFAULT_PRIMARY_BANDS);
+  const [secondaryConfig, setSecondaryConfig] = useState(DEFAULT_IGCSE_GRADES);
+  const [editingPrimary, setEditingPrimary] = useState(false);
+  const [editingSecondary, setEditingSecondary] = useState(false);
   const [gradingExpanded, setGradingExpanded] = useState(true);
   
   // UI
@@ -349,17 +407,11 @@ const CurriculumSettingsTab = () => {
       setClasses(classesData || []);
       setSubjects(subjectsData || []);
       
-      if (schoolData) {
-        setGradingSystem(schoolData.grading_system || 'cambridge');
-        if (schoolData.grading_config) {
-          setGradingConfig(schoolData.grading_config);
-        } else {
-          // Default to cambridge preset
-          setGradingConfig({
-            usePercentage: GRADING_PRESETS.cambridge.usePercentage,
-            grades: GRADING_PRESETS.cambridge.grades
-          });
-        }
+      if (schoolData?.grading_config) {
+        const cfg = schoolData.grading_config;
+        // Support nested { primary, secondary } shape or legacy flat shape
+        if (cfg.primary) setPrimaryConfig(cfg.primary);
+        if (cfg.secondary) setSecondaryConfig(cfg.secondary);
       }
       
     } catch (error) {
@@ -533,100 +585,79 @@ const CurriculumSettingsTab = () => {
     }
   };
 
-  // ─── Grading System ────────────────────────────────────────────────────────
+  // ─── Grading Helpers (shared, tier = 'primary' | 'secondary') ─────────────
 
-  const handleGradingSystemChange = (system) => {
-    setGradingSystem(system);
-    const preset = GRADING_PRESETS[system];
-    if (preset && system !== 'custom') {
-      setGradingConfig({
-        usePercentage: preset.usePercentage,
-        grades: preset.grades.map(g => ({ ...g })) // Clone grades
-      });
-    }
-    // For custom, keep existing config or start fresh
-    if (system === 'custom' && (!gradingConfig?.grades || gradingConfig.grades.length === 0)) {
-      setGradingConfig({
-        usePercentage: true,
-        grades: []
-      });
-      setEditingGrades(true);
-    }
-  };
+  const getConfig = (tier) => tier === 'primary' ? primaryConfig : secondaryConfig;
+  const setConfig = (tier, val) => tier === 'primary' ? setPrimaryConfig(val) : setSecondaryConfig(val);
 
-  const handleTogglePercentage = () => {
-    setGradingConfig(prev => ({
-      ...prev,
-      usePercentage: !prev.usePercentage
-    }));
-  };
-
-  const handleGradeUpdate = (index, updatedGrade) => {
-    const newGrades = [...(gradingConfig?.grades || [])];
+  const handleGradeUpdate = (tier, index, updatedGrade) => {
+    const cfg = getConfig(tier);
+    const newGrades = [...cfg.grades];
     newGrades[index] = updatedGrade;
-    setGradingConfig({ ...gradingConfig, grades: newGrades });
+    setConfig(tier, { ...cfg, grades: newGrades });
   };
 
-  const handleAddGrade = () => {
+  const handleAddGrade = (tier) => {
+    const cfg = getConfig(tier);
     const newGrade = {
       id: Date.now().toString(),
       label: '',
       description: '',
-      color: GRADE_COLORS[gradingConfig.grades.length % GRADE_COLORS.length],
+      color: GRADE_COLORS[cfg.grades.length % GRADE_COLORS.length],
       min: 0,
-      max: 100
+      max: 100,
     };
-    setGradingConfig(prev => ({
-      ...prev,
-      grades: [...(prev.grades || []), newGrade]
-    }));
+    setConfig(tier, { ...cfg, grades: [...cfg.grades, newGrade] });
   };
 
-  const handleDeleteGrade = (index) => {
-    setGradingConfig(prev => ({
-      ...prev,
-      grades: prev.grades.filter((_, i) => i !== index)
-    }));
+  const handleDeleteGrade = (tier, index) => {
+    const cfg = getConfig(tier);
+    setConfig(tier, { ...cfg, grades: cfg.grades.filter((_, i) => i !== index) });
   };
 
-  const handleMoveGrade = (index, direction) => {
-    const newGrades = [...gradingConfig.grades];
+  const handleMoveGrade = (tier, index, direction) => {
+    const cfg = getConfig(tier);
+    const newGrades = [...cfg.grades];
     const newIndex = index + direction;
     if (newIndex < 0 || newIndex >= newGrades.length) return;
     [newGrades[index], newGrades[newIndex]] = [newGrades[newIndex], newGrades[index]];
-    setGradingConfig(prev => ({ ...prev, grades: newGrades }));
+    setConfig(tier, { ...cfg, grades: newGrades });
   };
 
-  const handleSaveGrading = async () => {
+  const handleSaveGrading = async (tier) => {
     if (!schoolId) return;
-    
-    // Validate
-    if (gradingConfig.grades.length === 0) {
+
+    const cfg = getConfig(tier);
+
+    if (!cfg.grades.length) {
       showAlert('error', 'Please add at least one grade');
       return;
     }
-    
-    const hasEmptyLabels = gradingConfig.grades.some(g => !g.label?.trim());
-    if (hasEmptyLabels) {
+    if (cfg.grades.some(g => !g.label?.trim())) {
       showAlert('error', 'All grades must have a label');
       return;
     }
-    
+
     try {
       setSaving(true);
-      
+
+      // Merge both tiers into grading_config
+      const merged = {
+        primary: tier === 'primary' ? cfg : primaryConfig,
+        secondary: tier === 'secondary' ? cfg : secondaryConfig,
+      };
+
       const { error } = await supabase
         .from('schools')
-        .update({
-          grading_system: gradingSystem,
-          grading_config: gradingConfig
-        })
+        .update({ grading_system: 'dual', grading_config: merged })
         .eq('id', schoolId);
-      
+
       if (error) throw error;
-      
-      setEditingGrades(false);
-      showAlert('success', 'Grading system saved!');
+
+      if (tier === 'primary') setEditingPrimary(false);
+      else setEditingSecondary(false);
+
+      showAlert('success', `${tier === 'primary' ? 'Primary' : 'Secondary'} grading saved!`);
     } catch (err) {
       showAlert('error', err.message);
     } finally {
@@ -777,135 +808,53 @@ const CurriculumSettingsTab = () => {
         <SectionHeader
           icon={Award}
           title="Grading System"
-          count={gradingConfig?.grades?.length || 0}
+          count={primaryConfig.grades.length + secondaryConfig.grades.length}
           expanded={gradingExpanded}
           onToggle={() => setGradingExpanded(!gradingExpanded)}
           theme={theme}
         />
-        
+
         {gradingExpanded && (
-          <div className="p-4 pt-0 space-y-4">
-            {/* System selector */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-              {Object.entries(GRADING_PRESETS).map(([key, system]) => (
-                <button
-                  key={key}
-                  onClick={() => handleGradingSystemChange(key)}
-                  className={`p-3 rounded-xl border-2 text-left transition-all ${
-                    gradingSystem === key 
-                      ? 'border-current shadow-sm' 
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                  style={gradingSystem === key ? { borderColor: theme.color, backgroundColor: theme.withAlpha(0.05) } : {}}
-                >
-                  <p className="font-semibold text-sm text-gray-800">{system.name}</p>
-                  <p className="text-[10px] text-gray-500 mt-0.5 line-clamp-1">{system.description}</p>
-                </button>
-              ))}
-            </div>
-            
-            {/* Options */}
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-              <div className="flex items-center gap-2">
-                <Percent size={16} className="text-gray-500" />
-                <span className="text-sm text-gray-700">Use percentage ranges</span>
-              </div>
-              <button
-                onClick={handleTogglePercentage}
-                className={`relative w-12 h-6 rounded-full transition-colors ${
-                  gradingConfig?.usePercentage ? 'bg-green-500' : 'bg-gray-300'
-                }`}
-              >
-                <span 
-                  className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                    gradingConfig?.usePercentage ? 'left-7' : 'left-1'
-                  }`}
-                />
-              </button>
-            </div>
-            
-            {/* Edit/View toggle */}
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-semibold text-gray-700">
-                {editingGrades ? 'Edit Grades' : 'Grade Scale'}
-              </h4>
-              <button
-                onClick={() => setEditingGrades(!editingGrades)}
-                className="text-xs font-medium px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
-                style={{ color: theme.color, backgroundColor: theme.withAlpha(0.1) }}
-              >
-                {editingGrades ? <><X size={12} /> Cancel</> : <><Edit2 size={12} /> Edit</>}
-              </button>
-            </div>
-            
-            {/* Grades list */}
-            {editingGrades ? (
-              <div className="space-y-2">
-                {gradingConfig?.grades?.map((grade, idx) => (
-                  <CustomGradeEditor
-                    key={grade.id || idx}
-                    grade={grade}
-                    index={idx}
-                    usePercentage={gradingConfig.usePercentage}
-                    onUpdate={(updated) => handleGradeUpdate(idx, updated)}
-                    onDelete={() => handleDeleteGrade(idx)}
-                    onMoveUp={() => handleMoveGrade(idx, -1)}
-                    onMoveDown={() => handleMoveGrade(idx, 1)}
-                    isFirst={idx === 0}
-                    isLast={idx === gradingConfig.grades.length - 1}
-                  />
-                ))}
-                
-                {/* Add new grade button */}
-                <button
-                  onClick={handleAddGrade}
-                  className="w-full p-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:border-gray-400 hover:text-gray-600 transition-colors flex items-center justify-center gap-2"
-                >
-                  <Plus size={16} />
-                  Add Grade
-                </button>
-                
-                {/* Save button */}
-                <button
-                  onClick={handleSaveGrading}
-                  disabled={saving}
-                  className="w-full py-3 rounded-xl text-white font-medium transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                  style={{ backgroundColor: theme.color }}
-                >
-                  {saving ? (
-                    <><RefreshCw size={16} className="animate-spin" /> Saving...</>
-                  ) : (
-                    <><Check size={16} /> Save Grading System</>
-                  )}
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {gradingConfig?.grades?.length > 0 ? (
-                  gradingConfig.grades.map((grade, idx) => (
-                    <GradeDisplayRow 
-                      key={grade.id || idx} 
-                      grade={grade} 
-                      usePercentage={gradingConfig.usePercentage}
-                    />
-                  ))
-                ) : (
-                  <p className="text-sm text-gray-400 italic py-4 text-center">
-                    No grades defined. Click Edit to add grades.
-                  </p>
-                )}
-              </div>
-            )}
-            
-            {/* Info */}
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-              <p className="text-xs text-amber-800">
-                <strong>💡 Tip:</strong> {gradingConfig?.usePercentage 
-                  ? 'Percentages determine which grade a score receives. Make sure ranges don\'t overlap.'
-                  : 'Without percentages, teachers will select grades directly from this list.'
-                }
-              </p>
-            </div>
+          <div className="p-4 pt-0 space-y-5">
+
+            {/* ── PRIMARY (Y1–Y6) ── */}
+            <GradingTierPanel
+              title="Primary"
+              years="Y1 – Y6"
+              subtitle="Band System (1–6)"
+              badge="bg-emerald-50 text-emerald-700 border-emerald-200"
+              config={primaryConfig}
+              editing={editingPrimary}
+              saving={saving}
+              theme={theme}
+              onToggleEdit={() => setEditingPrimary(e => !e)}
+              onUpdate={(idx, g) => handleGradeUpdate('primary', idx, g)}
+              onAdd={() => handleAddGrade('primary')}
+              onDelete={(idx) => handleDeleteGrade('primary', idx)}
+              onMove={(idx, dir) => handleMoveGrade('primary', idx, dir)}
+              onSave={() => handleSaveGrading('primary')}
+            />
+
+            <div className="border-t border-gray-100" />
+
+            {/* ── LOWER SECONDARY (Y7–Y9) ── */}
+            <GradingTierPanel
+              title="Lower Secondary"
+              years="Y7 – Y9"
+              subtitle="IGCSE (A* – U)"
+              badge="bg-blue-50 text-blue-700 border-blue-200"
+              config={secondaryConfig}
+              editing={editingSecondary}
+              saving={saving}
+              theme={theme}
+              onToggleEdit={() => setEditingSecondary(e => !e)}
+              onUpdate={(idx, g) => handleGradeUpdate('secondary', idx, g)}
+              onAdd={() => handleAddGrade('secondary')}
+              onDelete={(idx) => handleDeleteGrade('secondary', idx)}
+              onMove={(idx, dir) => handleMoveGrade('secondary', idx, dir)}
+              onSave={() => handleSaveGrading('secondary')}
+            />
+
           </div>
         )}
       </div>
