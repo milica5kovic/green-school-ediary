@@ -3,7 +3,7 @@ import {
   Plus, Trash2, Edit2, Upload, Download, Users, Mail, Shield,
   AlertTriangle, BookOpen, Search, UserPlus, GraduationCap,
   ChevronDown, Copy, CheckCircle, X, Loader2, Eye, EyeOff,
-  BookOpenCheck, Crown, UserCog,
+  BookOpenCheck, Crown, UserCog, Key,
 } from "lucide-react";
 import { useApp } from "../../../../core/context/AppContext";
 import { useBranding } from "../../../../core/context/BrandingContext";
@@ -101,6 +101,7 @@ const ProfileManagementPage = () => {
   const [parents, setParents] = useState([]);
   const [students, setStudents] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [changePwTeacher, setChangePwTeacher] = useState(null);
   const [showAddParentModal, setShowAddParentModal] = useState(false);
   const [showEditParentModal, setShowEditParentModal] = useState(false);
   const [showManageChildrenModal, setShowManageChildrenModal] = useState(false);
@@ -251,8 +252,8 @@ const ProfileManagementPage = () => {
   // ════════════════════════════════════════════════════════════
 
   const handleDeleteTeacher = (teacher) => {
-    if (teacher.is_super_admin) {
-      showToast('Cannot delete an Admin or Owner account.', 'error');
+    if (teacher.role === 'owner') {
+      showToast('Cannot delete the school owner account.', 'error');
       return;
     }
     setConfirm({
@@ -263,11 +264,14 @@ const ProfileManagementPage = () => {
       onConfirm: async () => {
         setConfirmLoading(true);
         try {
-          if (teacher.teacher_id) {
-            await supabase.from("teachers").delete().eq("id", teacher.teacher_id);
-          }
           if (teacher.user_id) {
-            await rawSupabase.from("profiles").delete().eq("id", teacher.user_id);
+            // Delete auth user via Edge Function (cascades to teachers + profiles)
+            const { data, error: fnErr } = await rawSupabase.functions.invoke('create-user', {
+              body: { action: 'delete', schoolId: getCurrentSchoolId(), userId: teacher.user_id },
+            });
+            if (fnErr || data?.error) throw new Error(fnErr?.message || data?.error || 'Delete failed');
+          } else if (teacher.teacher_id) {
+            await supabase.from("teachers").delete().eq("id", teacher.teacher_id);
           }
           showToast(`${teacher.full_name} has been removed.`);
           setConfirm(null);
@@ -619,11 +623,20 @@ const ProfileManagementPage = () => {
                             >
                               <Edit2 size={14} />
                             </button>
+                            {teacher.user_id && (
+                              <button
+                                onClick={() => setChangePwTeacher(teacher)}
+                                className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                title="Change password"
+                              >
+                                <Key size={14} />
+                              </button>
+                            )}
                             <button
                               onClick={() => handleDeleteTeacher(teacher)}
-                              disabled={teacher.is_super_admin}
+                              disabled={teacher.role === 'owner'}
                               className={`p-1.5 rounded-lg transition-colors ${
-                                teacher.is_super_admin
+                                teacher.role === 'owner'
                                   ? "text-gray-200 cursor-not-allowed"
                                   : "text-gray-400 hover:text-red-600 hover:bg-red-50"
                               }`}
@@ -730,6 +743,14 @@ const ProfileManagementPage = () => {
           supabase={supabase}
           onClose={() => { setShowAddModal(false); setEditingTeacher(null); }}
           onRefresh={loadAllData}
+          showToast={showToast}
+        />
+      )}
+
+      {changePwTeacher && (
+        <ChangePasswordModal
+          teacher={changePwTeacher}
+          onClose={() => setChangePwTeacher(null)}
           showToast={showToast}
         />
       )}
@@ -1143,6 +1164,92 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onRefresh, 
                 ? (teacher ? 'Saving...' : 'Creating account...')
                 : (teacher ? 'Save Changes' : 'Create Account')
               }
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// ════════════════════════════════════════════════════════════
+// CHANGE PASSWORD MODAL
+// ════════════════════════════════════════════════════════════
+
+const ChangePasswordModal = ({ teacher, onClose, showToast }) => {
+  const [password, setPassword] = useState('');
+  const [showPw, setShowPw]     = useState(false);
+  const [saving, setSaving]     = useState(false);
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (password.length < 6) {
+      showToast('Password must be at least 6 characters.', 'error');
+      return;
+    }
+    try {
+      setSaving(true);
+      const { data, error } = await rawSupabase.functions.invoke('create-user', {
+        body: {
+          action: 'update',
+          schoolId: getCurrentSchoolId(),
+          userId: teacher.user_id,
+          password,
+        },
+      });
+      if (error || data?.error) throw new Error(error?.message || data?.error || 'Failed');
+      showToast(`Password updated for ${teacher.full_name}.`);
+      onClose();
+    } catch (err) {
+      showToast(err.message || 'Failed to update password.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+        <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center">
+              <Key size={17} className="text-amber-600" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-800">Change Password</h3>
+              <p className="text-xs text-gray-400 mt-0.5">{teacher.full_name} · {teacher.email}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSave} className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">New Password</label>
+            <div className="relative">
+              <input
+                type={showPw ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Min. 6 characters"
+                autoFocus
+                className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-300 bg-gray-50 text-sm"
+              />
+              <button type="button" onClick={() => setShowPw(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                {showPw ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving || !password} className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-amber-500 hover:bg-amber-600 rounded-xl disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+              {saving && <Loader2 size={14} className="animate-spin" />}
+              {saving ? 'Saving…' : 'Update Password'}
             </button>
           </div>
         </form>
