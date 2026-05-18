@@ -8,7 +8,8 @@ import { useApp } from '../../../../core/context/AppContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
 import useParentChildren from '../../../../shared/hooks/useParentChildren';
-import { getCambridgeGrade, isPrimaryClass } from '../../../../core/utils/cambridgeGrading';
+import { useBranding } from '../../../../core/context/BrandingContext';
+import { getGradeFromConfig, isPrimaryClass } from '../../../../core/utils/cambridgeGrading';
 
 // ═══════════════════════════════════════════════════════════
 // PARENT DASHBOARD - Uses useTermTheme for dynamic colors
@@ -35,6 +36,7 @@ const ParentDashboard = () => {
   const { supabase, setCurrentPage } = useApp();
   const { activeTerm } = useActiveTerm();
   const theme = useTermTheme();
+  const { gradingConfig } = useBranding();
   const TermIcon = theme.icon;
 
   const { children, selectedChild, setSelectedChild, loading } = useParentChildren();
@@ -87,14 +89,14 @@ const ParentDashboard = () => {
 
       const enriched = allGrades.map(g => {
         const pct = Math.round((g.grade / g.max_grade) * 100);
-        const cambridge = getCambridgeGrade(pct, className);
+        const cambridge = getGradeFromConfig(pct, className, gradingConfig);
         return { ...g, percentage: pct, cambridge };
       });
       setRecentGrades(enriched.slice(0, 6));
 
       if (enriched.length > 0) {
         const avgPct = Math.round(enriched.reduce((s, g) => s + g.percentage, 0) / enriched.length);
-        setOverallGrade(getCambridgeGrade(avgPct, className));
+        setOverallGrade(getGradeFromConfig(avgPct, className, gradingConfig));
       } else {
         setOverallGrade(null);
       }
@@ -368,22 +370,26 @@ const ParentDashboard = () => {
                 </div>
               ))}
 
-              {/* Grade scale */}
-              <div className="pt-3 mt-1 border-t border-gray-100">
-                <p className="text-[10px] text-gray-400 mb-1.5 font-medium">{primary ? 'Cambridge Primary Scale' : 'IGCSE Scale'}</p>
-                <div className="flex gap-1.5 flex-wrap">
-                  {primary
-                    ? [
-                        { l: 'B6', c: '#059669' }, { l: 'B5', c: '#10b981' }, { l: 'B4', c: '#3b82f6' },
-                        { l: 'B3', c: '#f59e0b' }, { l: 'B2', c: '#f97316' }, { l: 'B1', c: '#ef4444' }
-                      ].map(b => <div key={b.l} className="w-7 h-6 rounded text-[9px] font-bold text-white flex items-center justify-center" style={{ backgroundColor: b.c }}>{b.l}</div>)
-                    : ['A*', 'A', 'B', 'C', 'D', 'E', 'F'].map(g => {
-                        const c = getCambridgeGrade(g === 'A*' ? 95 : g === 'A' ? 85 : g === 'B' ? 75 : g === 'C' ? 65 : g === 'D' ? 55 : g === 'E' ? 45 : 35, 'Y7');
-                        return <div key={g} className="w-7 h-6 rounded text-[9px] font-bold text-white flex items-center justify-center" style={{ backgroundColor: c.color }}>{g}</div>;
-                      })
-                  }
-                </div>
-              </div>
+              {/* Grade scale — from school config */}
+              {(() => {
+                const tierCfg = primary ? gradingConfig?.primary : gradingConfig?.secondary;
+                const scaleGrades = tierCfg?.grades;
+                if (!scaleGrades?.length) return null;
+                return (
+                  <div className="pt-3 mt-1 border-t border-gray-100">
+                    <p className="text-[10px] text-gray-400 mb-1.5 font-medium">
+                      {primary ? 'Primary Scale' : 'Secondary Scale'}
+                    </p>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {scaleGrades.map((g, i) => (
+                        <div key={i} className="w-7 h-6 rounded text-[9px] font-bold text-white flex items-center justify-center" style={{ backgroundColor: g.color }}>
+                          {g.label}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           ) : (
             <div className="text-center py-10 bg-gray-50 rounded-xl">

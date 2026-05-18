@@ -6,7 +6,8 @@ import { useAuth } from '../../../../core/context/AuthContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
 import { useBranding } from '../../../../core/context/BrandingContext';
-import { getGrade, getPercentageColor } from '../../../../core/utils/gradingSystem';
+import { getPercentageColor } from '../../../../core/utils/gradingSystem';
+import { getGradeFromConfig } from '../../../../core/utils/cambridgeGrading';
 
 // ════════════════════════════════════════════════════════════════════════════
 // GRADES PAGE - Uses useTermTheme for dynamic colors
@@ -17,7 +18,7 @@ const GradesPage = () => {
   const { teacher } = useAuth();
   const { activeTerm, allTerms, loading: termsLoading } = useActiveTerm();
   const branding = useBranding();
-  const { gradingSystem } = branding;
+  const { gradingConfig } = branding;
   
   // ═══ TERM THEME ═══
   const theme = useTermTheme();
@@ -406,7 +407,7 @@ const GradesPage = () => {
                   <tbody>
                     {students.map((student, rowIdx) => {
                       const avg = getStudentAverage(student.id);
-                      const avgGrade = avg !== null ? getGrade(avg, gradingSystem, selectedClass) : null;
+                      const avgGrade = avg !== null ? getGradeFromConfig(avg, selectedClass, gradingConfig) : null;
 
                       return (
                         <tr key={student.id} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
@@ -427,7 +428,7 @@ const GradesPage = () => {
                             }
 
                             const pct = (grade.grade / grade.max_grade) * 100;
-                            const gradeInfo = getGrade(pct, gradingSystem, selectedClass);
+                            const gradeInfo = getGradeFromConfig(pct, selectedClass, gradingConfig);
 
                             return (
                               <td key={a.key} className="px-2 py-2 text-center group relative">
@@ -553,7 +554,7 @@ const GradesPage = () => {
                   students.map(student => {
                     const score = studentScores[student.id];
                     const pct = score && formData.maxGrade ? (parseFloat(score) / parseFloat(formData.maxGrade)) * 100 : null;
-                    const gradeInfo = pct !== null ? getGrade(pct, gradingSystem, selectedClass) : null;
+                    const gradeInfo = pct !== null ? getGradeFromConfig(pct, selectedClass, gradingConfig) : null;
 
                     return (
                       <div key={student.id} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">

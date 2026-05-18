@@ -66,8 +66,43 @@ const getPercentageColor = (percentage) => {
   return '#ef4444';
 };
 
+// ─── Config-aware grade lookup ────────────────────────────────────────────────
+// Uses the school's saved grading_config ({ primary: {...}, secondary: {...} })
+// Falls back to hardcoded Cambridge defaults if config is missing.
+
+const getGradeFromConfig = (percentage, className, gradingConfig) => {
+  const primary = isPrimaryClass(className);
+  const tierConfig = primary
+    ? gradingConfig?.primary
+    : gradingConfig?.secondary;
+
+  const grades = tierConfig?.grades;
+
+  if (!grades?.length) {
+    // Fallback: use hardcoded Cambridge/IGCSE
+    return getCambridgeGrade(percentage, className);
+  }
+
+  // Find grade whose range contains this percentage
+  const match = grades.find(
+    g => g.min !== undefined && g.max !== undefined
+      && percentage >= g.min && percentage <= g.max
+  ) || grades[grades.length - 1]; // default to lowest grade
+
+  return {
+    display:     match.description ? match.label : match.label,
+    short:       match.label,
+    color:       match.color || '#6b7280',
+    isPrimary:   primary,
+    band:        null,
+    equivalent:  match.label,
+    description: match.description || '',
+  };
+};
+
 export {
   getCambridgeGrade,
+  getGradeFromConfig,
   getBand,
   getIGCSEGrade,
   isPrimaryClass,

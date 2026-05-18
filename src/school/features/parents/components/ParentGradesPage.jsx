@@ -7,7 +7,7 @@ import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
 import useParentChildren from '../../../../shared/hooks/useParentChildren';
 import { useBranding } from '../../../../core/context/BrandingContext';
-import { getCambridgeGrade, isPrimaryClass } from '../../../../core/utils/cambridgeGrading';
+import { getGradeFromConfig, isPrimaryClass } from '../../../../core/utils/cambridgeGrading';
 
 // ═══════════════════════════════════════════════════════════════
 // PARENT GRADES PAGE - Uses useTermTheme for dynamic colors
@@ -80,7 +80,7 @@ const ParentGradesPage = () => {
       // Enrich with Cambridge grades
       const enriched = all.map(g => {
         const pct = Math.round((g.grade / g.max_grade) * 100);
-        const cambridge = getCambridgeGrade(pct, className);
+        const cambridge = getGradeFromConfig(pct, className, branding.gradingConfig);
         return { ...g, percentage: pct, cambridge };
       });
 
@@ -111,15 +111,15 @@ const ParentGradesPage = () => {
     const className = selectedChild?.class_name || 'Y1';
     return Object.entries(map).map(([subject, { total, count }]) => {
       const avg = Math.round(total / count);
-      return { subject, avgPct: avg, count, cambridge: getCambridgeGrade(avg, className) };
+      return { subject, avgPct: avg, count, cambridge: getGradeFromConfig(avg, className, branding.gradingConfig) };
     }).sort((a, b) => b.avgPct - a.avgPct);
   }, [grades, selectedChild]);
 
   const overallAvg = useMemo(() => {
     if (grades.length === 0) return null;
     const avg = Math.round(grades.reduce((s, g) => s + g.percentage, 0) / grades.length);
-    return getCambridgeGrade(avg, selectedChild?.class_name || 'Y1');
-  }, [grades, selectedChild]);
+    return getGradeFromConfig(avg, selectedChild?.class_name || 'Y1', branding.gradingConfig);
+  }, [grades, selectedChild, branding.gradingConfig]);
 
   const primary = isPrimaryClass(selectedChild?.class_name);
   const selectedTermInfo = selectedTerm ? getTermInfo(selectedTerm.term_number) : null;
@@ -323,33 +323,38 @@ const ParentGradesPage = () => {
           </div>
         )}
 
-        {/* Grade scale legend */}
-        {filteredGrades.length > 0 && (
-          <div className="pt-4 mt-3 border-t border-gray-100">
-            <p className="text-[10px] text-gray-400 mb-2 font-medium">{primary ? 'Cambridge Primary Scale' : 'Cambridge IGCSE Scale'}</p>
-            <div className="flex gap-1.5 flex-wrap">
-              {primary
-                ? [
-                    { l: 'B6', c: '#059669', d: '90%+' }, { l: 'B5', c: '#10b981', d: '80%+' },
-                    { l: 'B4', c: '#3b82f6', d: '70%+' }, { l: 'B3', c: '#f59e0b', d: '60%+' },
-                    { l: 'B2', c: '#f97316', d: '50%+' }, { l: 'B1', c: '#ef4444', d: '<50%' }
-                  ].map(b => (
-                    <div key={b.l} className="flex items-center gap-1">
-                      <div className="w-7 h-6 rounded text-[9px] font-bold text-white flex items-center justify-center" style={{ backgroundColor: b.c }}>{b.l}</div>
-                      <span className="text-[9px] text-gray-400 hidden sm:inline">{b.d}</span>
+        {/* Grade scale legend — driven by school's grading config */}
+        {filteredGrades.length > 0 && (() => {
+          const tierConfig = primary
+            ? branding.gradingConfig?.primary
+            : branding.gradingConfig?.secondary;
+          const scaleGrades = tierConfig?.grades;
+          if (!scaleGrades?.length) return null;
+          return (
+            <div className="pt-4 mt-3 border-t border-gray-100">
+              <p className="text-[10px] text-gray-400 mb-2 font-medium">
+                {primary ? 'Primary Scale' : 'Secondary Scale'}
+              </p>
+              <div className="flex gap-1.5 flex-wrap">
+                {scaleGrades.map((g, i) => (
+                  <div key={i} className="flex items-center gap-1">
+                    <div
+                      className="w-7 h-6 rounded text-[9px] font-bold text-white flex items-center justify-center"
+                      style={{ backgroundColor: g.color }}
+                    >
+                      {g.label}
                     </div>
-                  ))
-                : ['A*', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'U'].map(grade => {
-                    const pct = grade === 'A*' ? 95 : grade === 'A' ? 85 : grade === 'B' ? 75 : grade === 'C' ? 65 : grade === 'D' ? 55 : grade === 'E' ? 45 : grade === 'F' ? 35 : grade === 'G' ? 25 : 10;
-                    const c = getCambridgeGrade(pct, 'Y7');
-                    return (
-                      <div key={grade} className="w-7 h-6 rounded text-[9px] font-bold text-white flex items-center justify-center" style={{ backgroundColor: c.color }}>{grade}</div>
-                    );
-                  })
-              }
+                    {g.min !== undefined && (
+                      <span className="text-[9px] text-gray-400 hidden sm:inline">
+                        {g.min}%+
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* ═══ TERM FOOTER - Dynamic colors ═════════════════════ */}

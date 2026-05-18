@@ -3,7 +3,8 @@ import { User, ChevronDown, Award, MessageSquare, TrendingUp, Star, AlertCircle,
 import { useApp } from '../../../../core/context/AppContext';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
 import useParentChildren from '../../../../shared/hooks/useParentChildren';
-import { getCambridgeGrade, isPrimaryClass } from '../../../../core/utils/cambridgeGrading';
+import { useBranding } from '../../../../core/context/BrandingContext';
+import { getGradeFromConfig, isPrimaryClass } from '../../../../core/utils/cambridgeGrading';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PARENT MY CHILD PAGE - Uses useTermTheme for dynamic colors
@@ -12,6 +13,7 @@ import { getCambridgeGrade, isPrimaryClass } from '../../../../core/utils/cambri
 const ParentMyChildPage = () => {
   const { supabase } = useApp();
   const theme = useTermTheme();
+  const { gradingConfig } = useBranding();
   const TermIcon = theme.icon;
 
   const { children, selectedChild, setSelectedChild, loading } = useParentChildren();
@@ -71,7 +73,7 @@ const ParentMyChildPage = () => {
         
         const topSubjectsData = Object.values(subjectAverages).map(subj => {
           const avgPct = Math.round(subj.grades.reduce((sum, g) => sum + (g.grade / g.max_grade * 100), 0) / subj.total);
-          const cambridge = getCambridgeGrade(avgPct, className);
+          const cambridge = getGradeFromConfig(avgPct, className, gradingConfig);
           return { subject: subj.subject, avgPct, count: subj.total, cambridge };
         }).sort((a, b) => b.avgPct - a.avgPct).slice(0, 5);
         

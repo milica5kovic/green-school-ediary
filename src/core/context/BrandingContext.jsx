@@ -73,6 +73,7 @@ const DEFAULT_BRANDING = {
   address: '',
 
   gradingSystem: 'cambridge',
+  gradingConfig: null,
   academicYear:  '2025-26',
   timezone:      'Europe/Belgrade',
   language:      'en',
@@ -140,6 +141,7 @@ const buildBrandingFromSchool = (school) => ({
   address: school.address || DEFAULT_BRANDING.address,
 
   gradingSystem: school.grading_system   || DEFAULT_BRANDING.gradingSystem,
+  gradingConfig: school.grading_config   || DEFAULT_BRANDING.gradingConfig,
   academicYear:  school.academic_year    || DEFAULT_BRANDING.academicYear,
   timezone:      school.timezone         || DEFAULT_BRANDING.timezone,
   language:      school.default_language || DEFAULT_BRANDING.language,

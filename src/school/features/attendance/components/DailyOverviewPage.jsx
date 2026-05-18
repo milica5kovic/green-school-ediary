@@ -6,9 +6,9 @@ import {
 } from "lucide-react";
 import { useApp } from "../../../../core/context/AppContext";
 import { useAuth } from "../../../../core/context/AuthContext";
+import { useBranding } from "../../../../core/context/BrandingContext";
 import useActiveTerm from "../../../../shared/hooks/useActiveTerm";
-// import { getCambridgeGrade, getPercentageColor } from "../../../../shared/utils/cambridgeGrading";
-import { getCambridgeGrade, getPercentageColor } from "../../../../core/utils/cambridgeGrading";
+import { getGradeFromConfig, getPercentageColor } from "../../../../core/utils/cambridgeGrading";
 const TERM_ICONS = { 1: '❄️', 2: '🌸', 3: '☀️' };
 const TERM_NAMES = { 1: 'Winter', 2: 'Spring', 3: 'Summer' };
 
@@ -16,6 +16,7 @@ const DailyOverviewPage = () => {
   const { supabase, studentsService } = useApp();
   const { getClassTeacherFor } = useAuth();
   const { activeTerm } = useActiveTerm();
+  const { gradingConfig } = useBranding();
 
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [students, setStudents] = useState([]);
@@ -298,7 +299,7 @@ const DailyOverviewPage = () => {
                       <div className="bg-green-50 rounded-xl p-3.5 border border-green-200">
                         <p className="text-xs font-medium text-green-700 mb-0.5">Average</p>
                         <p className="text-2xl font-bold text-green-700">{studentFullData.gradeAverage}%</p>
-                        {(() => { const g = getCambridgeGrade(studentFullData.gradeAverage, selectedStudent.class_name); return <span className="text-xs font-bold px-2 py-0.5 rounded mt-1 inline-block" style={{ color: g.color, backgroundColor: g.color + '15' }}>{g.display}</span>; })()}
+                        {(() => { const g = getGradeFromConfig(studentFullData.gradeAverage, selectedStudent.class_name, gradingConfig); return <span className="text-xs font-bold px-2 py-0.5 rounded mt-1 inline-block" style={{ color: g.color, backgroundColor: g.color + '15' }}>{g.display}</span>; })()}
                       </div>
                       <div className="bg-purple-50 rounded-xl p-3.5 border border-purple-200">
                         <p className="text-xs font-medium text-purple-700 mb-0.5">Grades</p>
@@ -314,7 +315,7 @@ const DailyOverviewPage = () => {
                       <h4 className="font-bold text-gray-900 mb-3 text-sm flex items-center gap-2"><BookOpen size={16} className="text-purple-600" /> Subject Performance</h4>
                       <div className="space-y-2.5">
                         {studentFullData.subjectAverages.map((subject, idx) => {
-                          const g = getCambridgeGrade(subject.average, selectedStudent.class_name);
+                          const g = getGradeFromConfig(subject.average, selectedStudent.class_name, gradingConfig);
                           return (
                             <div key={idx}>
                               <div className="flex items-center justify-between mb-1">
@@ -347,7 +348,7 @@ const DailyOverviewPage = () => {
                       <div className="space-y-1.5 max-h-[350px] overflow-y-auto">
                         {(subjectFilter === "all" ? studentFullData.grades : studentFullData.gradesBySubject[subjectFilter] || []).map((grade, idx) => {
                           const pct = (grade.grade / grade.max_grade * 100);
-                          const g = getCambridgeGrade(pct, selectedStudent.class_name);
+                          const g = getGradeFromConfig(pct, selectedStudent.class_name, gradingConfig);
                           return (
                             <div key={idx} className="p-2.5 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100">
                               <div className="flex items-center justify-between gap-3">
@@ -475,7 +476,7 @@ const DailyOverviewPage = () => {
                       <div className="bg-green-50 rounded-xl p-3.5 border border-green-200">
                         <p className="text-xs font-medium text-green-700 mb-0.5">Average</p>
                         <p className="text-xl font-bold text-green-700">{studentFullData.gradeAverage}%</p>
-                        {(() => { const g = getCambridgeGrade(studentFullData.gradeAverage, selectedStudent.class_name); return <span className="text-xs font-bold px-2 py-0.5 rounded mt-1 inline-block" style={{ color: g.color, backgroundColor: g.color + '15' }}>{g.display}</span>; })()}
+                        {(() => { const g = getGradeFromConfig(studentFullData.gradeAverage, selectedStudent.class_name, gradingConfig); return <span className="text-xs font-bold px-2 py-0.5 rounded mt-1 inline-block" style={{ color: g.color, backgroundColor: g.color + '15' }}>{g.display}</span>; })()}
                       </div>
                       <div className="bg-blue-50 rounded-xl p-3.5 border border-blue-200"><p className="text-xs font-medium text-blue-700 mb-0.5">Attendance</p><p className="text-xl font-bold text-blue-700">{studentFullData.attendanceStats.rate}%</p></div>
                       <div className="bg-purple-50 rounded-xl p-3.5 border border-purple-200"><p className="text-xs font-medium text-purple-700 mb-0.5">Grades</p><p className="text-xl font-bold text-purple-700">{studentFullData.grades.length}</p></div>
@@ -513,7 +514,7 @@ const DailyOverviewPage = () => {
                           <h4 className="font-bold text-gray-900 mb-2 text-sm">{item.label}</h4>
                           {studentFullData.subjectAverages.length > 0 ? (() => {
                             const sa = studentFullData.subjectAverages[item.idx];
-                            const g = getCambridgeGrade(sa.average, selectedStudent.class_name);
+                            const g = getGradeFromConfig(sa.average, selectedStudent.class_name, gradingConfig);
                             return (
                               <div className={`p-2.5 bg-${item.bgCard}-50 rounded-lg border border-${item.bgCard}-200`}>
                                 <p className={`font-semibold text-${item.bgCard}-900 text-sm`}>{sa.subject}</p>
