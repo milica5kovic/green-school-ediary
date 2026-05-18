@@ -46,8 +46,8 @@ class TenantQueryBuilder {
     this.shouldFilter = TENANT_TABLES.includes(table);
   }
 
-  select(columns = '*') {
-    let q = this.query.select(columns);
+  select(columns = '*', options = {}) {
+    let q = this.query.select(columns, options);
     if (this.shouldFilter && currentSchoolId) {
       q = q.eq('school_id', currentSchoolId);
     }

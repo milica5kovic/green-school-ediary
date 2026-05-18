@@ -4,6 +4,7 @@ import {
   Clock, ClipboardList, XCircle, AlertTriangle, BarChart3
 } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
+import { useBranding } from '../../../../core/context/BrandingContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
 
@@ -15,6 +16,7 @@ import { TermBanner, NoTermWarning, TermFooter } from '../../../../shared/compon
 
 const AdminDashboard = () => {
   const { supabase, schoolId } = useApp();
+  const { name: schoolName } = useBranding();
   const { activeTerm, allTerms } = useActiveTerm();
   const theme = useTermTheme();
 
@@ -221,11 +223,25 @@ const AdminDashboard = () => {
 
   return (
     <div className="space-y-5">
+      {/* ═══ PAGE TITLE ═══ */}
+      <div className="flex items-center gap-3">
+        <div
+          className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: theme.withAlpha(0.12) }}
+        >
+          <BarChart3 size={22} style={{ color: theme.color }} />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{schoolName} Overview</h1>
+          <p className="text-sm text-gray-500">School-wide stats and activity</p>
+        </div>
+      </div>
+
       {/* ═══ TERM BANNER (uses dynamic colors from useTermTheme) ═══ */}
-      <TermBanner 
-        showRefresh 
-        onRefresh={() => loadDashboard(true)} 
-        refreshing={refreshing} 
+      <TermBanner
+        showRefresh
+        onRefresh={() => loadDashboard(true)}
+        refreshing={refreshing}
       />
       
       {/* No term warning */}
