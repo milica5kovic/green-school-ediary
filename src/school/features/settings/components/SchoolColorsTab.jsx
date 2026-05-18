@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { 
   Palette, Snowflake, Flower2, Sun, Save, RotateCcw, Eye, Info, 
   Sparkles, Check
@@ -88,8 +88,6 @@ const SchoolColorsTab = () => {
     try {
       setSaving(true);
       
-      console.log('💾 Saving colors:', { schoolId, useTermColors: settings.useTermColors });
-      
       const { data, error } = await supabase
         .from('schools')
         .update({
@@ -110,8 +108,6 @@ const SchoolColorsTab = () => {
         console.error('❌ Save error:', error);
         throw error;
       }
-      
-      console.log('✅ Saved:', data);
 
       setSaved(true);
       

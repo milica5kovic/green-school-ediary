@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+﻿import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 
 const AuthContext = createContext(null);
 
@@ -76,8 +76,6 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
         console.error('❌ Profile load error:', profileError);
         return null;
       }
-
-      console.log('✅ Profile loaded:', data?.role);
       return data;
     } catch (err) {
       console.error('❌ Error loading profile:', err);
@@ -102,7 +100,6 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
       // Ovo sprečava da teacher iz škole A vidi podatke škole B
       // ═══════════════════════════════════════════════════════════════════════
       if (schoolId) {
-        console.log('🔒 Filtering teacher by school_id:', schoolId);
         query = query.eq('school_id', schoolId);
       }
       
@@ -111,14 +108,11 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
       if (teacherError) {
         if (teacherError.code === 'PGRST116') {
           // No rows returned - teacher doesn't exist for this school
-          console.log('ℹ️ No teacher profile for user in this school');
         } else {
           console.error('❌ Teacher load error:', teacherError);
         }
         return null;
       }
-
-      console.log('✅ Teacher loaded for school:', data.school_id);
       return data;
     } catch (err) {
       console.error('❌ Error loading teacher:', err);
@@ -140,7 +134,6 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
       
       // 🔒 SIGURNOSNA PROVERA
       if (schoolId) {
-        console.log('🔒 Filtering parent by school_id:', schoolId);
         query = query.eq('school_id', schoolId);
       }
       
@@ -148,14 +141,11 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
 
       if (parentError) {
         if (parentError.code === 'PGRST116') {
-          console.log('ℹ️ No parent profile for user in this school');
         } else {
           console.error('❌ Parent load error:', parentError);
         }
         return null;
       }
-
-      console.log('✅ Parent loaded for school:', data.school_id);
       return data;
     } catch (err) {
       console.error('❌ Error loading parent:', err);
@@ -164,7 +154,6 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
   }, [supabase, schoolId]);
 
   const clearAuthState = useCallback(() => {
-    console.log('🔒 Clearing auth state');
     if (!isMounted.current) return;
     
     setUser(null);
@@ -181,20 +170,16 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
     
     // Update subdomain ref on mount
     initialSubdomain.current = getSubdomain();
-    console.log('🏫 Stored subdomain:', initialSubdomain.current);
-    console.log('🏫 School ID for auth:', schoolId);
 
     const initAuth = async () => {
       try {
         setLoading(true);
-        console.log('🔐 Initializing auth...');
         
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) throw sessionError;
 
         if (session?.user && mounted && !isSigningOut.current) {
-          console.log('✅ Session found');
           hasLoadedInitialUser.current = true;
           setUser(session.user);
           
@@ -225,7 +210,6 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
             }
           }
         } else {
-          console.log('ℹ️ No session');
           if (mounted) clearAuthState();
         }
       } catch (err) {
@@ -242,17 +226,14 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔔 Auth event:', event);
       
       if (!mounted) return;
 
       if (isLoadingAuth.current && event !== 'SIGNED_OUT') {
-        console.log('⚠️ Auth already loading, skipping');
         return;
       }
 
       if (isSigningOut.current || event === 'SIGNED_OUT') {
-        console.log('👋 Signed out');
         clearAuthState();
         setLoading(false);
         isSigningOut.current = false;
@@ -263,7 +244,6 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
 
       if (event === 'SIGNED_IN') {
         if (hasLoadedInitialUser.current) {
-          console.log('⚠️ Already loaded user, skipping duplicate SIGNED_IN event');
           return;
         }
         
@@ -271,7 +251,6 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
         isLoadingAuth.current = true;
         
         if (session?.user) {
-          console.log('🔐 Loading user data after SIGNED_IN (first time)');
           setUser(session.user);
           
           const profileData = await loadProfile(session.user.id);
@@ -313,7 +292,6 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
       }
       
       if (event === 'TOKEN_REFRESHED') {
-        console.log('🔄 Token refreshed (keeping existing data, no reload)');
         if (session?.user && mounted) {
           setUser(session.user);
         }
@@ -323,7 +301,6 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
     });
 
     return () => {
-      console.log('🧹 Cleanup auth subscription');
       mounted = false;
       isMounted.current = false;
       subscription?.unsubscribe();
@@ -340,9 +317,6 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
       isSigningOut.current = false;
       hasLoadedInitialUser.current = false;
 
-      console.log('🔐 Signing in...');
-      console.log('🔐 School ID:', schoolId);
-
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
@@ -355,7 +329,6 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
       // Proveri da li user pripada OVOJ školi pre nego što ga pustiš!
       // ═══════════════════════════════════════════════════════════════════════
       if (schoolId && data.user) {
-        console.log('🔒 Verifying user belongs to school:', schoolId);
         
         // Prvo proveri profil da vidimo ulogu
         const { data: profileData } = await supabase
@@ -376,7 +349,6 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
             .single();
           
           belongsToSchool = !!teacherData;
-          console.log('🔒 Teacher check:', belongsToSchool ? '✅ Found' : '❌ Not found');
         } else if (profileData?.role === 'parent') {
           // Proveri parents tabelu
           const { data: parentData } = await supabase
@@ -387,7 +359,6 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
             .single();
           
           belongsToSchool = !!parentData;
-          console.log('🔒 Parent check:', belongsToSchool ? '✅ Found' : '❌ Not found');
         } else {
           // Nepoznata uloga - ne puštaj
           console.error('❌ Unknown role:', profileData?.role);
@@ -403,11 +374,7 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
           await supabase.auth.signOut();
           throw new Error("You don't have access to this school.");
         }
-        
-        console.log('✅ User verified for school:', schoolId);
       }
-
-      console.log('✅ Sign in successful');
       return { success: true };
     } catch (error) {
       console.error('❌ Sign in error:', error);

@@ -1,4 +1,4 @@
-import Grade from "../entities/grade";
+﻿import Grade from "../entities/grade";
 
 // ============================================================================
 // GRADING SERVICE - Tenant-aware version
@@ -9,7 +9,6 @@ class GradingService {
     // Accept supabase client from constructor (tenantSupabase)
     this.supabase = supabaseClient;
     this.gradesData = {}; // cache: { studentId: [Grade, ...] }
-    console.log('✅ GradingService initialized (tenant-aware)');
   }
 
   _cacheStudent(studentId) {
@@ -202,7 +201,6 @@ class GradingService {
   // Clear cache (useful when switching schools)
   clearCache() {
     this.gradesData = {};
-    console.log('🧹 GradingService cache cleared');
   }
 }
 

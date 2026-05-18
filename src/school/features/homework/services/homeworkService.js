@@ -1,11 +1,10 @@
-// services/HomeworkService.js
+﻿// services/HomeworkService.js
 export class HomeworkService {
   constructor(supabase) {
     if (!supabase) {
       throw new Error('Supabase client is required for HomeworkService');
     }
     this.supabase = supabase;
-    console.log('HomeworkService initialized');
   }
 
   // Generate unique homework ID
@@ -16,7 +15,6 @@ export class HomeworkService {
   // Get all homework
   async getAllHomework() {
     try {
-      console.log('Fetching all homework...');
       const { data, error } = await this.supabase
         .from('homework')
         .select('*')
@@ -26,8 +24,6 @@ export class HomeworkService {
         console.error('Supabase error:', error);
         throw error;
       }
-      
-      console.log('Homework fetched:', data?.length || 0);
       return data || [];
     } catch (error) {
       console.error('Error fetching homework:', error);
@@ -38,7 +34,6 @@ export class HomeworkService {
   // Get homework by class
   async getHomeworkByClass(className) {
     try {
-      console.log('Fetching homework for class:', className);
       const { data, error } = await this.supabase
         .from('homework')
         .select('*')
@@ -49,8 +44,6 @@ export class HomeworkService {
         console.error('Supabase error:', error);
         throw error;
       }
-      
-      console.log('Homework fetched for class:', data?.length || 0);
       return data || [];
     } catch (error) {
       console.error('Error fetching homework by class:', error);
@@ -78,7 +71,6 @@ export class HomeworkService {
   // Add new homework
   async addHomework(homeworkData) {
     try {
-      console.log('Adding homework:', homeworkData);
       
       const homeworkId = this.generateHomeworkId();
       
@@ -102,8 +94,6 @@ export class HomeworkService {
         console.error('Supabase error:', error);
         throw error;
       }
-      
-      console.log('Homework added successfully:', data);
       return data;
     } catch (error) {
       console.error('Error adding homework:', error);
@@ -114,7 +104,6 @@ export class HomeworkService {
   // Update homework
   async updateHomework(homeworkId, homeworkData) {
     try {
-      console.log('Updating homework:', homeworkId, homeworkData);
       
       const { data, error } = await this.supabase
         .from('homework')
@@ -135,8 +124,6 @@ export class HomeworkService {
         console.error('Supabase error:', error);
         throw error;
       }
-      
-      console.log('Homework updated successfully:', data);
       return data;
     } catch (error) {
       console.error('Error updating homework:', error);
@@ -147,7 +134,6 @@ export class HomeworkService {
   // Delete homework
   async deleteHomework(homeworkId) {
     try {
-      console.log('Deleting homework:', homeworkId);
       
       const { error } = await this.supabase
         .from('homework')
@@ -158,8 +144,6 @@ export class HomeworkService {
         console.error('Supabase error:', error);
         throw error;
       }
-      
-      console.log('Homework deleted successfully');
       return true;
     } catch (error) {
       console.error('Error deleting homework:', error);

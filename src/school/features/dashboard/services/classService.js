@@ -1,10 +1,9 @@
-export class ClassService {
+﻿export class ClassService {
   constructor(supabase) {
     if (!supabase) {
       throw new Error('Supabase client is required for ClassService');
     }
     this.supabase = supabase;
-    console.log('ClassService initialized');
   }
 
   /**
@@ -13,7 +12,6 @@ export class ClassService {
    */
   async getClassesByDate(dateKey, teacherId = null) {
     try {
-      console.log('🔐 Fetching classes for date:', dateKey, '| teacherId:', teacherId);
       
       let query = this.supabase
         .from('classes')
@@ -26,7 +24,6 @@ export class ClassService {
         query = query.eq('teacher_id', teacherId);
       } else {
         // No teacherId = no classes
-        console.log('⚠️ No teacherId provided, returning empty');
         return [];
       }
 
@@ -36,8 +33,6 @@ export class ClassService {
         console.error('Supabase error:', error);
         throw error;
       }
-
-      console.log('✅ Classes fetched:', data?.length || 0);
       return data || [];
     } catch (error) {
       console.error('Error fetching classes:', error);
@@ -54,8 +49,6 @@ export class ClassService {
       if (!teacherId) {
         throw new Error('🔒 SECURITY: teacher_id is required');
       }
-
-      console.log('🔐 Adding class for teacher:', teacherId);
 
       const classId = `${className}-${subject}-${time}-${Date.now()}`;
 
@@ -76,8 +69,6 @@ export class ClassService {
         .single();
 
       if (error) throw error;
-
-      console.log('✅ Class added:', data);
       return data;
     } catch (error) {
       console.error('❌ Error adding class:', error);
@@ -90,7 +81,6 @@ export class ClassService {
    */
   async deleteClass(classId) {
     try {
-      console.log('🔐 Deleting class:', classId);
 
       const { error } = await this.supabase
         .from('classes')
@@ -98,8 +88,6 @@ export class ClassService {
         .eq('class_id', classId);
 
       if (error) throw error;
-
-      console.log('✅ Class deleted');
       return true;
     } catch (error) {
       console.error('❌ Error deleting class:', error);

@@ -1,4 +1,4 @@
-// services/ScheduleService.js
+﻿// services/ScheduleService.js
 // FIXED: Added school_id filtering for multi-tenant support
 
 export class ScheduleService {
@@ -8,7 +8,6 @@ export class ScheduleService {
     }
     this.supabase = supabase;
     this.schoolId = schoolId;
-    console.log('ScheduleService initialized | schoolId:', schoolId);
   }
 
   /**
@@ -24,11 +23,9 @@ export class ScheduleService {
    */
   async getScheduleByDay(dayOfWeek, teacherId = null) {
     try {
-      console.log('🔐 Fetching schedule for:', dayOfWeek, '| teacherId:', teacherId, '| schoolId:', this.schoolId);
       
       // SECURITY: Must have both teacherId and schoolId
       if (!teacherId || !this.schoolId) {
-        console.log('⚠️ Missing teacherId or schoolId, returning empty');
         return [];
       }
 
@@ -52,8 +49,6 @@ export class ScheduleService {
         throw error;
       }
       
-      console.log('✅ Schedule fetched:', data?.length || 0, 'entries');
-      
       return (data || []).map(item => ({
         id: item.id,
         time: item.time_slot,
@@ -76,7 +71,6 @@ export class ScheduleService {
    */
   async getWeekSchedule(teacherId = null) {
     try {
-      console.log('🔐 Fetching full week schedule | teacherId:', teacherId, '| schoolId:', this.schoolId);
       
       const emptySchedule = {
         Monday: [],
@@ -88,7 +82,6 @@ export class ScheduleService {
 
       // SECURITY: Must have both teacherId and schoolId
       if (!teacherId || !this.schoolId) {
-        console.log('⚠️ Missing teacherId or schoolId, returning empty');
         return emptySchedule;
       }
 
@@ -124,8 +117,6 @@ export class ScheduleService {
           });
         }
       });
-
-      console.log('✅ Week schedule fetched for school:', this.schoolId);
       return schedule;
     } catch (error) {
       console.error('Error fetching week schedule:', error);
@@ -147,8 +138,6 @@ export class ScheduleService {
         throw new Error('🔒 SECURITY: school_id is required');
       }
 
-      console.log('🔐 Adding schedule entry | teacher:', teacherId, '| school:', this.schoolId);
-
       const { data, error } = await this.supabase
         .from('teacher_schedule')
         .insert([{
@@ -165,8 +154,6 @@ export class ScheduleService {
         .single();
 
       if (error) throw error;
-
-      console.log(`✅ Added ${type} to schedule:`, data);
       return data;
     } catch (error) {
       console.error('❌ Error adding schedule entry:', error);
@@ -184,8 +171,6 @@ export class ScheduleService {
         throw new Error('🔒 SECURITY: school_id is required');
       }
 
-      console.log('🔐 Updating schedule entry:', scheduleId, '| school:', this.schoolId);
-
       const { data, error } = await this.supabase
         .from('teacher_schedule')
         .update({
@@ -201,8 +186,6 @@ export class ScheduleService {
         .single();
 
       if (error) throw error;
-
-      console.log('✅ Updated schedule entry:', data);
       return data;
     } catch (error) {
       console.error('❌ Error updating schedule entry:', error);
@@ -220,8 +203,6 @@ export class ScheduleService {
         throw new Error('🔒 SECURITY: school_id is required');
       }
 
-      console.log('🔐 Deleting schedule entry:', scheduleId, '| school:', this.schoolId);
-
       const { error } = await this.supabase
         .from('teacher_schedule')
         .delete()
@@ -229,8 +210,6 @@ export class ScheduleService {
         .eq('school_id', this.schoolId);  // TENANT FILTER
 
       if (error) throw error;
-
-      console.log('✅ Deleted schedule entry:', scheduleId);
       return true;
     } catch (error) {
       console.error('❌ Error deleting schedule entry:', error);
@@ -244,7 +223,6 @@ export class ScheduleService {
    */
   async getScheduleStats(teacherId = null) {
     try {
-      console.log('🔐 Getting schedule stats | teacherId:', teacherId, '| schoolId:', this.schoolId);
 
       if (!teacherId || !this.schoolId) {
         return {
@@ -276,8 +254,6 @@ export class ScheduleService {
         else if (type === 'duty') stats.duties++;
         else if (type === 'extracurricular') stats.extracurriculars++;
       });
-
-      console.log('✅ Schedule stats:', stats);
       return stats;
     } catch (error) {
       console.error('❌ Error getting schedule stats:', error);

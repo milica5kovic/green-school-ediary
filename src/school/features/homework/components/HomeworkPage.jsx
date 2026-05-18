@@ -18,7 +18,7 @@ const STATUS_CONFIG = {
 };
 
 const HomeworkPage = () => {
-  const { supabase } = useApp();
+  const { supabase, schoolId } = useApp();
   const { teacher } = useAuth();
   const { activeTerm, allTerms, loading: termsLoading } = useActiveTerm();
   const branding = useBranding();
@@ -195,12 +195,22 @@ const HomeworkPage = () => {
     try {
       const existing = studentHomework[homeworkId]?.[studentId];
       if (existing) {
-        await supabase.from('student_homework').update({ status, submitted_at: status === 'done' ? new Date().toISOString() : null }).eq('id', existing.id);
+        const { error } = await supabase
+          .from('student_homework')
+          .update({ status, submitted_at: status === 'done' ? new Date().toISOString() : null })
+          .eq('id', existing.id);
+        if (error) throw error;
       } else {
-        await supabase.from('student_homework').insert([{
-          homework_id: homeworkId, student_id: studentId, status,
-          submitted_at: status === 'done' ? new Date().toISOString() : null
-        }]);
+        const { error } = await supabase
+          .from('student_homework')
+          .insert([{
+            homework_id: homeworkId,
+            student_id: studentId,
+            status,
+            school_id: schoolId,
+            submitted_at: status === 'done' ? new Date().toISOString() : null
+          }]);
+        if (error) throw error;
       }
       await loadHomework();
     } catch (err) { showError('Failed to update status: ' + err.message); }

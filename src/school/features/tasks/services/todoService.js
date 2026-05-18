@@ -1,11 +1,10 @@
-// services/TodoService.js
+﻿// services/TodoService.js
 export class TodoService {
   constructor(supabase) {
     if (!supabase) {
       throw new Error('Supabase client is required for TodoService');
     }
     this.supabase = supabase;
-    console.log('TodoService initialized');
   }
 
   /**
@@ -47,7 +46,6 @@ export class TodoService {
         .single();
 
       if (error) throw error;
-      console.log('Todo added:', data);
       return data;
     } catch (error) {
       console.error('Error adding todo:', error);
@@ -71,7 +69,6 @@ export class TodoService {
         .single();
 
       if (error) throw error;
-      console.log('Todo toggled:', data);
       return data;
     } catch (error) {
       console.error('Error toggling todo:', error);
@@ -90,7 +87,6 @@ export class TodoService {
         .eq('id', todoId);
 
       if (error) throw error;
-      console.log('Todo deleted:', todoId);
       return true;
     } catch (error) {
       console.error('Error deleting todo:', error);
@@ -111,7 +107,6 @@ export class TodoService {
         .single();
 
       if (error) throw error;
-      console.log('Todo updated:', data);
       return data;
     } catch (error) {
       console.error('Error updating todo:', error);

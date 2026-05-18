@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+﻿import React, { useState, useEffect, useCallback } from "react";
 import { MessageSquare, X } from "lucide-react";
 import { useApp } from "../../../../core/context/AppContext";
 import { supabase } from "../../../../core/infrastructure/supabaseClient";
@@ -22,9 +22,6 @@ const ClassCard = ({ cls, onRemove }) => {
   // ✅ FIX: Load students with proper dependencies and NO school_year filter
   const loadData = useCallback(async () => {
     try {
-      console.log("📚 ClassCard - Loading students for class:", cls.class);
-      console.log("  Class ID:", cls.id);
-      console.log("  Date Key:", dateKey);
 
       // ✅ FIX: Don't filter by school_year - it might be null!
       const { data: classStudents, error } = await supabase
@@ -40,15 +37,8 @@ const ClassCard = ({ cls, onRemove }) => {
         return;
       }
 
-      console.log(
-        "✅ ClassCard - Students loaded:",
-        classStudents?.length || 0,
-      );
-
       if (classStudents && classStudents.length > 0) {
-        console.log("  Students:");
         classStudents.forEach((s) => {
-          console.log(`    ${s.student_no}. ${s.name} (${s.class_name})`);
         });
       }
 
@@ -78,7 +68,6 @@ const ClassCard = ({ cls, onRemove }) => {
 
   // ✅ FIX: Re-run when dependencies change
   useEffect(() => {
-    console.log("🔄 ClassCard - useEffect triggered");
     loadData();
   }, [loadData]); // ✅ Include callback
 
@@ -104,7 +93,6 @@ const ClassCard = ({ cls, onRemove }) => {
 
   const handleMarkAttendance = async (studentId, status) => {
     try {
-      console.log(`✏️ Marking attendance: ${status} for student ${studentId}`);
 
       // Optimistic update - update UI immediately
       const updatedRecord = await attendanceService.markAttendance(
@@ -126,8 +114,6 @@ const ClassCard = ({ cls, onRemove }) => {
         [studentId]: updatedRecord,
       };
       updateStats(students, newAttendance);
-
-      console.log("✅ Attendance marked successfully");
     } catch (error) {
       console.error("❌ Error marking attendance:", error);
       alert("Failed to mark attendance. Please try again.");
@@ -154,7 +140,6 @@ const ClassCard = ({ cls, onRemove }) => {
 
   const saveBehaviorComment = async () => {
     try {
-      console.log("💬 Saving behavior comment for student:", selectedStudent);
 
       await attendanceService.updateComment(
         dateKey,
@@ -177,8 +162,6 @@ const ClassCard = ({ cls, onRemove }) => {
       setShowBehaviorModal(false);
       setBehaviorComment("");
       setSelectedStudent(null);
-
-      console.log("✅ Comment saved successfully");
     } catch (error) {
       console.error("❌ Error saving comment:", error);
       alert("Failed to save comment. Please try again.");

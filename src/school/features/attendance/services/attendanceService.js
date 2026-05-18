@@ -1,4 +1,4 @@
-// services/AttendanceService.js
+﻿// services/AttendanceService.js
 
 // AttendanceRecord class to handle individual student attendance
 class AttendanceRecord {
@@ -30,7 +30,6 @@ export class AttendanceService {
     }
     this.supabase = supabase;
     this.cache = {}; // In-memory cache for attendance records
-    console.log('AttendanceService initialized');
   }
 
   getCacheKey(dateKey, classId, studentId = null) {
@@ -44,7 +43,6 @@ export class AttendanceService {
    */
   async loadClassAttendance(dateKey, classId) {
     try {
-      console.log('Loading attendance for:', { dateKey, classId });
       
       const { data, error } = await this.supabase
         .from('attendance')
@@ -61,8 +59,6 @@ export class AttendanceService {
           this.cache[key] = new AttendanceRecord(record);
         });
       }
-
-      console.log('Attendance loaded:', data?.length || 0, 'records');
       return data || [];
     } catch (error) {
       console.error('Error loading class attendance:', error);
@@ -87,7 +83,6 @@ export class AttendanceService {
    */
   async markAttendance(dateKey, classId, studentId, status) {
     try {
-      console.log('Marking attendance:', { dateKey, classId, studentId, status });
       
       const { data, error } = await this.supabase
         .from('attendance')
@@ -112,8 +107,6 @@ export class AttendanceService {
       const record = new AttendanceRecord(data);
       const key = this.getCacheKey(dateKey, classId, studentId);
       this.cache[key] = record;
-
-      console.log('Attendance marked successfully');
       return record;
     } catch (error) {
       console.error('Error marking attendance:', error);
@@ -125,7 +118,6 @@ export class AttendanceService {
    * Update behavior comment for a student
    */
   async updateComment(dateKey, classId, studentId, comment) {
-  console.log('Updating comment:', { dateKey, classId, studentId });
   
   try {
     // First, check if record exists
@@ -149,7 +141,6 @@ export class AttendanceService {
         .single();
 
       if (error) throw error;
-      console.log('Comment updated:', data);
       return data;
     } else {
       // Create new record with 'present' as default status
@@ -166,7 +157,6 @@ export class AttendanceService {
         .single();
 
       if (error) throw error;
-      console.log('Comment added with new record:', data);
       return data;
     }
   } catch (error) {
