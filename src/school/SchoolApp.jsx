@@ -231,9 +231,9 @@ const SchoolAppContent = () => {
     }
   };
 
-  const handleSignOut = async () => {
-    setProfileMenuOpen(false);
-    await signOut();
+  const handleSignOut = () => {
+    console.log('🚪 handleSignOut called');
+    signOut();
   };
 
   const getUserRole = () => {

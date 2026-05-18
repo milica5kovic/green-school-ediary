@@ -421,21 +421,13 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
   // SIGN OUT
   // ============================================================================
   const signOut = () => {
-    isSigningOut.current = true;
-    hasLoadedInitialUser.current = false;
-    clearAuthState();
+    // 1. Wipe the entire localStorage (clears Supabase session tokens)
+    try { localStorage.clear(); } catch (_) {}
 
-    // Tell Supabase to invalidate the server session (fire & forget — don't await)
-    try { supabase.auth.signOut().catch(() => {}); } catch (_) {}
+    // 2. Tell Supabase server to invalidate the session (fire & forget)
+    try { supabase.auth.signOut(); } catch (_) {}
 
-    // Clear session from localStorage immediately so the next page load sees no session
-    try {
-      Object.keys(localStorage)
-        .filter(k => k.startsWith('sb-'))
-        .forEach(k => localStorage.removeItem(k));
-    } catch (_) {}
-
-    // Reload the page — localStorage is now clear so it will show the login screen
+    // 3. Hard reload — fresh page will find no session and show login
     window.location.reload();
   };
 
