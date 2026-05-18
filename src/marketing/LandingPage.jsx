@@ -1,7 +1,7 @@
 import React from 'react';
 import { GraduationCap, ChevronRight } from 'lucide-react';
 
-const DEMO_URL = 'http://localhost:5173/?school=greenschool';
+const DEMO_URL = '/?school=greenschool';
 
 const LandingPage = () => (
   <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4">
