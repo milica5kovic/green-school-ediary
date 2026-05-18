@@ -61,15 +61,6 @@ const useTermTheme = () => {
   const branding = useBranding();
   const { activeTerm } = useActiveTerm();
 
-  // ═══ DEBUG ═══
-  console.log('🎨 useTermTheme input:', { 
-    useTermColors: branding.useTermColors, 
-    termNumber: activeTerm?.term_number,
-    primaryColor: branding.primaryColor,
-    term1Color: branding.term1Color,
-    term2Color: branding.term2Color,
-  });
-
   const theme = useMemo(() => {
     const termNumber = activeTerm?.term_number || 1;
     

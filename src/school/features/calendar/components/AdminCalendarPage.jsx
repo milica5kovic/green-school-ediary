@@ -26,6 +26,7 @@ const EVENT_TYPES = {
   break: { label: 'School Break', color: 'bg-gray-200 text-gray-700', dotColor: 'bg-gray-500' },
   holiday: { label: 'Public Holiday', color: 'bg-gray-200 text-gray-700', dotColor: 'bg-gray-400' },
   exam_period: { label: 'Exam Period', color: 'bg-orange-100 text-orange-700', dotColor: 'bg-orange-500' },
+  outing: { label: 'Outing', color: 'bg-teal-100 text-teal-700', dotColor: 'bg-teal-500' },
 };
 
 const AdminCalendarPage = () => {
@@ -89,7 +90,6 @@ const AdminCalendarPage = () => {
 
       setAllTests(tests || []);
       
-      console.log('📅 Calendar loaded:', { events: events?.length, tests: tests?.length });
     } catch (error) {
       console.error("Error loading calendar data:", error);
     } finally {

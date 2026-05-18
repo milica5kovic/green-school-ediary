@@ -52,16 +52,11 @@ const AdminDashboard = () => {
   // ══════════════════════════════════════════════════════════════════════════
 
   const loadDashboard = useCallback(async (isRefresh = false) => {
-    if (!supabase || !schoolId) {
-      console.log('⏳ Waiting for schoolId...');
-      return;
-    }
-    
+    if (!supabase || !schoolId) return;
+
     try {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
-
-      console.log('📊 Loading dashboard for school:', schoolId);
 
       // Parallel counts
       const [

@@ -231,7 +231,6 @@ const SchoolAppContent = () => {
   };
 
   const handleSignOut = () => {
-    console.log('🚪 handleSignOut called');
     signOut();
   };
 
