@@ -9,6 +9,7 @@ import LoginPage from './auth/LoginPage';
 import ResetPasswordPage from './auth/ResetPasswordPage';
 import Privacy from './marketing/Privacy';
 import Terms from './marketing/Terms';
+import LandingPage from './marketing/LandingPage';
 
 function App() {
   return (
@@ -231,20 +232,6 @@ const AccessDenied = ({ error }) => {
 // ══════════════════════════════════════════════════════════
 // PLATFORM PAGE — shown on main domain (not a school subdomain)
 // ══════════════════════════════════════════════════════════
-const PlatformPage = () => (
-  <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-violet-50 to-purple-50">
-    <div className="text-center max-w-md mx-auto p-8">
-      <div className="w-20 h-20 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-violet-200">
-        <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
-        </svg>
-      </div>
-      <h1 className="text-3xl font-bold text-gray-900 mb-3">E-Diary</h1>
-      <p className="text-gray-500 mb-6">School Management Platform</p>
-      <p className="text-sm text-gray-400">Please access your school's portal using your school's address.</p>
-    </div>
-  </div>
-);
+const PlatformPage = () => <LandingPage />;
 
 export default App;
