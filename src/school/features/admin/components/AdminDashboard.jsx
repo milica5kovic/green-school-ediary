@@ -11,6 +11,21 @@ import useTermTheme from '../../../../shared/hooks/useTermTheme';
 import { TermBanner, NoTermWarning, TermFooter } from '../../../../shared/components/TermBanner';
 
 // ════════════════════════════════════════════════════════════════════════════
+// EVENT TYPE LABELS
+// ════════════════════════════════════════════════════════════════════════════
+
+const EVENT_TYPE_LABELS = {
+  event: 'School Event',
+  term_start: 'School Starts',
+  break: 'School Break',
+  holiday: 'Public Holiday',
+  exam_period: 'Exam Period',
+  outing: 'Outing',
+};
+
+const getEventTypeLabel = (type) => EVENT_TYPE_LABELS[type] || type;
+
+// ════════════════════════════════════════════════════════════════════════════
 // ADMIN DASHBOARD - Using centralized term theming
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -393,7 +408,7 @@ const AdminDashboard = () => {
                   key={event.id}
                   date={event.start_date}
                   title={event.title}
-                  subtitle={`${event.event_type}${event.location ? ` • ${event.location}` : ''}`}
+                  subtitle={`${getEventTypeLabel(event.event_type)}${event.location ? ` • ${event.location}` : ''}`}
                   daysText={daysUntil(event.start_date)}
                   color={event.color || theme.color}
                 />

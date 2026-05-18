@@ -25,6 +25,17 @@ const EVENT_COLORS = {
 
 const getEventStyle = (type) => EVENT_COLORS[type] || { bg: 'bg-blue-100', text: 'text-blue-700', dot: 'bg-blue-500' };
 
+const EVENT_TYPE_LABELS = {
+  event: 'School Event',
+  term_start: 'School Starts',
+  break: 'School Break',
+  holiday: 'Public Holiday',
+  Holiday: 'Public Holiday',
+  exam_period: 'Exam Period',
+  outing: 'Outing',
+};
+const getEventTypeLabel = (type) => EVENT_TYPE_LABELS[type] || type;
+
 const ParentCalendarPage = () => {
   const { supabase } = useApp();
   const theme = useTermTheme();
@@ -375,7 +386,7 @@ const ParentCalendarPage = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-gray-800 truncate">{e.title}</p>
-                      <p className="text-[10px] text-gray-500">{e.event_type}{e.location ? ` · ${e.location}` : ''}</p>
+                      <p className="text-[10px] text-gray-500">{getEventTypeLabel(e.event_type)}{e.location ? ` · ${e.location}` : ''}</p>
                     </div>
                     <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0"
                       style={{ backgroundColor: theme.withAlpha(0.1), color: theme.color }}>
@@ -457,7 +468,7 @@ const ParentCalendarPage = () => {
                       <div key={i} className="p-3 rounded-xl border"
                         style={{ backgroundColor: theme.withAlpha(0.05), borderColor: theme.withAlpha(0.2) }}>
                         <p className="font-semibold text-gray-800 text-sm">{e.title}</p>
-                        <p className="text-xs mt-0.5" style={theme.textStyle}>{e.event_type}{e.location ? ` · ${e.location}` : ''}</p>
+                        <p className="text-xs mt-0.5" style={theme.textStyle}>{getEventTypeLabel(e.event_type)}{e.location ? ` · ${e.location}` : ''}</p>
                         {e.description && <p className="text-xs text-gray-600 mt-1.5">{e.description}</p>}
                       </div>
                     ))}
