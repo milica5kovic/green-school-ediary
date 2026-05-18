@@ -144,13 +144,14 @@ const HomePage = () => {
     }
   };
 
-  // Sort: latest time at top, earliest at bottom
-  const parseTime = (t) => {
-    if (!t) return 0;
-    const [h, m] = t.replace(/[APap][Mm]/, '').trim().split(':').map(Number);
-    return (h || 0) * 60 + (m || 0);
-  };
-  const sortedClasses = [...dailyClasses].sort((a, b) => parseTime(b.time) - parseTime(a.time));
+  // Sort by period number: period 1 at bottom, highest period at top.
+  // If a class has no period number, fall back to time string comparison.
+  const sortedClasses = [...dailyClasses].sort((a, b) => {
+    const pa = periodMap[a.time] ?? 0;
+    const pb = periodMap[b.time] ?? 0;
+    if (pa !== pb) return pb - pa; // descending → P1 at bottom
+    return (b.time || '').localeCompare(a.time || '');
+  });
 
   const hasSchedule = todaySchedule.length > 0;
   const showAdminMessage = profile?.role === 'admin' && !teacher?.user_id;
