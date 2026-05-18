@@ -520,9 +520,6 @@ const SchoolAppContent = () => {
         </main>
       </div>
 
-      {profileMenuOpen && (
-        <div className="fixed inset-0 z-40" onClick={() => setProfileMenuOpen(false)} />
-      )}
     </div>
   );
 };
