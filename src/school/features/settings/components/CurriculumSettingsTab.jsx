@@ -18,12 +18,18 @@ import useTermTheme from '../../../../shared/hooks/useTermTheme';
 const DEFAULT_PRIMARY_BANDS = {
   usePercentage: true,
   grades: [
-    { id: '6', label: 'Band 6', description: 'Exceptional', min: 85, max: 100, color: '#10b981' },
-    { id: '5', label: 'Band 5', description: 'Strong',      min: 70, max: 84,  color: '#22c55e' },
-    { id: '4', label: 'Band 4', description: 'Secure',      min: 55, max: 69,  color: '#84cc16' },
-    { id: '3', label: 'Band 3', description: 'Developing',  min: 40, max: 54,  color: '#eab308' },
-    { id: '2', label: 'Band 2', description: 'Beginning',   min: 25, max: 39,  color: '#f97316' },
-    { id: '1', label: 'Band 1', description: 'Below expectations', min: 0, max: 24, color: '#ef4444' },
+    { id: '1',  label: 'A+', min: 95, max: 100, color: '#059669' },
+    { id: '2',  label: 'A',  min: 90, max: 94,  color: '#10b981' },
+    { id: '3',  label: 'A-', min: 85, max: 89,  color: '#34d399' },
+    { id: '4',  label: 'B+', min: 80, max: 84,  color: '#22c55e' },
+    { id: '5',  label: 'B',  min: 75, max: 79,  color: '#84cc16' },
+    { id: '6',  label: 'B-', min: 70, max: 74,  color: '#a3e635' },
+    { id: '7',  label: 'C+', min: 65, max: 69,  color: '#eab308' },
+    { id: '8',  label: 'C',  min: 60, max: 64,  color: '#f59e0b' },
+    { id: '9',  label: 'C-', min: 55, max: 59,  color: '#f97316' },
+    { id: '10', label: 'D+', min: 50, max: 54,  color: '#fb923c' },
+    { id: '11', label: 'D',  min: 45, max: 49,  color: '#ef4444' },
+    { id: '12', label: 'D-', min: 40, max: 44,  color: '#dc2626' },
   ]
 };
 
