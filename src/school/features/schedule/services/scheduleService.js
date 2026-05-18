@@ -226,11 +226,13 @@ export class ScheduleService {
     try {
       if (!this.schoolId) return {};
 
+      // Only 'class' type entries count as periods — duties/breaks excluded
       const { data, error } = await this.supabase
         .from('teacher_schedule')
         .select('time_slot')
         .eq('day_of_week', dayOfWeek)
         .eq('school_id', this.schoolId)
+        .eq('schedule_type', 'class')
         .order('time_slot', { ascending: true });
 
       if (error) throw error;
