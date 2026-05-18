@@ -210,29 +210,35 @@ const HomeworkPage = () => {
   };
 
   const handleUpdateStudentStatus = async (homeworkId, studentId, status) => {
+    const submittedAt = status === 'done' ? new Date().toISOString() : null;
+
+    // Optimistic update — change UI immediately, no waiting for reload
+    setStudentHomework(prev => ({
+      ...prev,
+      [homeworkId]: {
+        ...prev[homeworkId],
+        [studentId]: {
+          ...(prev[homeworkId]?.[studentId] || {}),
+          status,
+          submitted_at: submittedAt,
+        },
+      },
+    }));
+
     try {
-      const existing = studentHomework[homeworkId]?.[studentId];
-      if (existing) {
-        const { error } = await supabase
-          .from('student_homework')
-          .update({ status, submitted_at: status === 'done' ? new Date().toISOString() : null })
-          .eq('id', existing.id);
-        if (error) throw error;
-      } else {
-        // Fallback insert (pre-seed should have covered this, but just in case)
-        const { error } = await supabase
-          .from('student_homework')
-          .insert([{
-            homework_id: homeworkId,
-            student_id: studentId,
-            status,
-            school_id: schoolId,
-            submitted_at: status === 'done' ? new Date().toISOString() : null
-          }]);
-        if (error) throw new Error('Cannot save — contact admin to check database permissions.');
-      }
+      const { error } = await supabase.rpc('upsert_student_homework', {
+        p_homework_id:  homeworkId,
+        p_student_id:   studentId,
+        p_school_id:    schoolId,
+        p_status:       status,
+        p_submitted_at: submittedAt,
+      });
+      if (error) throw error;
+    } catch (err) {
+      // Revert optimistic update on failure
+      showError('Failed to save: ' + err.message);
       await loadHomework();
-    } catch (err) { showError('Failed to update status: ' + err.message); }
+    }
   };
 
   const filteredHomework = selectedSubject === 'all' ? homework : homework.filter(h => h.subject === selectedSubject);
