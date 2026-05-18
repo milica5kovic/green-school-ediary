@@ -37,12 +37,6 @@ const SettingsPage = () => {
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
 
-  useEffect(() => {
-    console.log('🔄 SettingsPage - Auth data updated');
-    console.log('  User:', user?.email);
-    console.log('  Profile:', profile?.role);
-    console.log('  Teacher:', teacher?.full_name);
-  }, [user, profile, teacher]);
 
   const handlePasswordUpdate = async (e) => {
     e.preventDefault();
