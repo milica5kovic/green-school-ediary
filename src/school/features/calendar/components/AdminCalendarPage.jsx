@@ -241,6 +241,7 @@ const AdminCalendarPage = () => {
         affected_classes: formData.scope === "all" ? null : formData.affected_classes,
         school_id: schoolId,
         created_by: user.id,
+        academic_year: activeTerm?.academic_year ?? new Date().getFullYear() + '-' + (new Date().getFullYear() + 1),
       };
 
       if (editingEvent) {
