@@ -17,7 +17,6 @@ const HomePage = () => {
   const [dailyClasses, setDailyClasses] = useState([]);
   const [showAddClass, setShowAddClass] = useState(false);
   const [todaySchedule, setTodaySchedule] = useState([]);
-  const [periodMap, setPeriodMap] = useState({});
   const [localLoading, setLocalLoading] = useState(false);
   const { teacher, profile } = useAuth();
   
@@ -44,15 +43,13 @@ const HomePage = () => {
         const dateKey = getDateKey(selectedDate);
         const teacherId = teacher?.user_id || null;
 
-        const [schedule, classes, periods] = await Promise.all([
+        const [schedule, classes] = await Promise.all([
           scheduleService.getScheduleByDay(dayName, teacherId),
           classService.getClassesByDate(dateKey, teacherId),
-          scheduleService.getSchoolPeriodsForDay(dayName),
         ]);
 
         if (isMounted) {
           setTodaySchedule(schedule || []);
-          setPeriodMap(periods || {});
           const formattedClasses = (classes || []).map((cls) => ({
             id: cls.class_id,
             class: cls.class_name,
@@ -234,7 +231,7 @@ const HomePage = () => {
       ) : (
         <div className="flex flex-col gap-3">
           {sortedClasses.map((cls, idx) => (
-            <ClassCard key={cls.id} cls={cls} onRemove={removeClass} periodNumber={periodMap[cls.time]} stackIndex={idx} total={sortedClasses.length} />
+            <ClassCard key={cls.id} cls={cls} onRemove={removeClass} stackIndex={idx} total={sortedClasses.length} />
           ))}
         </div>
       )}

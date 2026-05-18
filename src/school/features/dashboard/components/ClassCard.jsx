@@ -4,7 +4,19 @@ import { useApp } from "../../../../core/context/AppContext";
 import { supabase } from "../../../../core/infrastructure/supabaseClient";
 import { useBranding } from "../../../../core/context/BrandingContext";
 
-const ClassCard = ({ cls, onRemove, periodNumber, stackIndex = 0, total = 1 }) => {
+// School period schedule — start time → period number (breaks excluded)
+const SCHOOL_PERIODS = {
+  '09:00': 1,
+  '09:45': 2,
+  '11:00': 3,
+  '11:50': 4,
+  '13:30': 5,
+  '14:20': 6,
+  '15:05': 7,
+};
+
+const ClassCard = ({ cls, onRemove, stackIndex = 0, total = 1 }) => {
+  const periodNumber = SCHOOL_PERIODS[cls.time] ?? null;
   const { attendanceService, getDateKey, selectedDate } = useApp();
   const branding = useBranding();
   const primaryColor = branding?.primaryColor || '#10b981';
