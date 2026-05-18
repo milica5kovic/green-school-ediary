@@ -4,7 +4,7 @@ import { useApp } from "../../../../core/context/AppContext";
 import { supabase } from "../../../../core/infrastructure/supabaseClient";
 import { useBranding } from "../../../../core/context/BrandingContext";
 
-const ClassCard = ({ cls, onRemove, stackIndex = 0, total = 1 }) => {
+const ClassCard = ({ cls, onRemove, periodNumber, stackIndex = 0, total = 1 }) => {
   const { attendanceService, getDateKey, selectedDate } = useApp();
   const branding = useBranding();
   const primaryColor = branding?.primaryColor || '#10b981';
@@ -196,16 +196,16 @@ const ClassCard = ({ cls, onRemove, stackIndex = 0, total = 1 }) => {
         >
           {/* Left: time badge + class info */}
           <div className="flex items-center gap-3 min-w-0">
-            {/* Time bubble */}
+            {/* Period number bubble */}
             <div
-              className="flex-shrink-0 rounded-xl px-3 py-2 text-center min-w-[52px]"
+              className="flex-shrink-0 w-11 h-11 rounded-xl flex flex-col items-center justify-center"
               style={{ backgroundColor: `${primaryColor}12` }}
             >
-              <p className="text-xs font-bold leading-none" style={{ color: primaryColor }}>
-                {cls.time?.split(':')[0] || ''}
+              <p className="text-lg font-black leading-none" style={{ color: primaryColor }}>
+                {periodNumber ?? '·'}
               </p>
-              <p className="text-[10px] leading-none mt-0.5" style={{ color: `${primaryColor}99` }}>
-                {cls.time?.includes(':') ? `:${cls.time.split(':')[1]}` : cls.time}
+              <p className="text-[9px] font-medium leading-none mt-0.5" style={{ color: `${primaryColor}80` }}>
+                period
               </p>
             </div>
 

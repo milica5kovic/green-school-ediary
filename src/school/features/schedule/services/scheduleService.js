@@ -218,6 +218,33 @@ export class ScheduleService {
   }
 
   /**
+   * Get all unique time slots for a day across ALL teachers (school-wide).
+   * Returns an ordered map: { '09:00': 1, '09:45': 2, '11:00': 3, ... }
+   * Used to derive period numbers for class cards.
+   */
+  async getSchoolPeriodsForDay(dayOfWeek) {
+    try {
+      if (!this.schoolId) return {};
+
+      const { data, error } = await this.supabase
+        .from('teacher_schedule')
+        .select('time_slot')
+        .eq('day_of_week', dayOfWeek)
+        .eq('school_id', this.schoolId)
+        .order('time_slot', { ascending: true });
+
+      if (error) throw error;
+
+      const unique = [...new Set((data || []).map(r => r.time_slot))];
+      const map = {};
+      unique.forEach((t, i) => { map[t] = i + 1; });
+      return map;
+    } catch {
+      return {};
+    }
+  }
+
+  /**
    * Get statistics about schedule
    * SECURITY: Filters by teacher_id AND school_id
    */
