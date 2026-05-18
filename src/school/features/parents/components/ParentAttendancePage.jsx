@@ -1,350 +1,463 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown,
-  CheckCircle, XCircle, Clock, AlertCircle, TrendingUp, UserCheck
+  ChevronDown, CheckCircle, XCircle, Clock, AlertCircle,
+  Flame, MessageSquare, Users, BarChart3, Filter, TrendingUp, AlertTriangle
 } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
 import useParentChildren from '../../../../shared/hooks/useParentChildren';
 
 // ════════════════════════════════════════════════════════════════════════════
-// PARENT ATTENDANCE PAGE - Uses useTermTheme for dynamic colors
+// PARENT ATTENDANCE PAGE — no calendar, heatmap + gauge + history list
 // ════════════════════════════════════════════════════════════════════════════
 
 const STATUS_CONFIG = {
-  present: { color: 'bg-emerald-500', light: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', label: 'Present', icon: CheckCircle },
-  late: { color: 'bg-orange-500', light: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', label: 'Late', icon: Clock },
-  absent: { color: 'bg-red-500', light: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', label: 'Absent', icon: XCircle },
-  sent_out: { color: 'bg-purple-500', light: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', label: 'Sent Out', icon: AlertCircle },
+  present:  { label: 'Present',  icon: CheckCircle,  color: '#10b981' },
+  late:     { label: 'Late',     icon: Clock,        color: '#f97316' },
+  absent:   { label: 'Absent',   icon: XCircle,      color: '#ef4444' },
+  sent_out: { label: 'Sent Out', icon: AlertCircle,  color: '#a855f7' },
 };
+
+// ── Circular gauge ─────────────────────────────────────────────────────────
+const RateGauge = ({ rate, color }) => {
+  const R = 54;
+  const C = 2 * Math.PI * R;
+  const offset = C * (1 - Math.min(rate, 100) / 100);
+  return (
+    <svg width="144" height="144" className="transform -rotate-90">
+      <circle cx="72" cy="72" r={R} fill="none" stroke="#e5e7eb" strokeWidth="14" />
+      <circle cx="72" cy="72" r={R} fill="none" stroke={color} strokeWidth="14"
+        strokeDasharray={C} strokeDashoffset={offset} strokeLinecap="round"
+        style={{ transition: 'stroke-dashoffset 0.9s ease' }} />
+    </svg>
+  );
+};
+
+// ── Today's date key ───────────────────────────────────────────────────────
+const todayKey = () => new Date().toISOString().split('T')[0];
 
 const ParentAttendancePage = () => {
   const { supabase } = useApp();
   const theme = useTermTheme();
   const TermIcon = theme.icon;
-
   const { children, selectedChild, setSelectedChild, loading } = useParentChildren();
-  const [attendance, setAttendance] = useState([]);
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [stats, setStats] = useState({ total: 0, present: 0, absent: 0, late: 0, sentOut: 0, rate: 0 });
-  const [termStats, setTermStats] = useState(null);
 
-  // ─── Load attendance ──────────────────────────────────
+  const [attendance, setAttendance] = useState([]);
+  const [filter, setFilter]         = useState('all');   // all | present | late | absent | sent_out
+  const [scope,  setScope]          = useState('term');  // term | all
+
+  // ─── Load ─────────────────────────────────────────────────────────────
   const loadAttendance = useCallback(async () => {
     if (!supabase || !selectedChild) return;
     try {
-      const { data } = await supabase.from('attendance').select('*')
-        .eq('student_id', selectedChild.id).order('date_key', { ascending: true });
+      const { data } = await supabase
+        .from('attendance').select('*')
+        .eq('student_id', selectedChild.id)
+        .order('date_key', { ascending: false });
       setAttendance(data || []);
-
-      // Total stats
-      const total = data?.length || 0;
-      const present = data?.filter(a => a.status === 'present').length || 0;
-      const absent = data?.filter(a => a.status === 'absent').length || 0;
-      const late = data?.filter(a => a.status === 'late').length || 0;
-      const sentOut = data?.filter(a => a.status === 'sent_out').length || 0;
-      const rate = total > 0 ? Math.round((present / total) * 100) : 0;
-      setStats({ total, present, absent, late, sentOut, rate });
-
-      // Term-specific stats
-      if (theme.activeTerm) {
-        const termData = (data || []).filter(a => a.date_key >= theme.activeTerm.start_date && a.date_key <= theme.activeTerm.end_date);
-        const tTotal = termData.length;
-        const tPresent = termData.filter(a => a.status === 'present').length;
-        const tAbsent = termData.filter(a => a.status === 'absent').length;
-        const tLate = termData.filter(a => a.status === 'late').length;
-        const tSentOut = termData.filter(a => a.status === 'sent_out').length;
-        const tRate = tTotal > 0 ? Math.round((tPresent / tTotal) * 100) : 0;
-        setTermStats({ total: tTotal, present: tPresent, absent: tAbsent, late: tLate, sentOut: tSentOut, rate: tRate });
-      }
     } catch (err) { console.error(err); }
-  }, [supabase, selectedChild, theme.activeTerm]);
+  }, [supabase, selectedChild]);
 
   useEffect(() => { if (selectedChild) loadAttendance(); }, [selectedChild, loadAttendance]);
 
-  // ─── Calendar helpers ─────────────────────────────────
-  const getDaysInMonth = (date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const days = [];
-    let startPadding = firstDay.getDay() - 1;
-    if (startPadding === -1) startPadding = 6;
-    for (let i = 0; i < startPadding; i++) days.push(null);
-    for (let day = 1; day <= lastDay.getDate(); day++) days.push(new Date(year, month, day));
-    return days;
-  };
+  // ─── Scoped data ──────────────────────────────────────────────────────
+  const scoped = useMemo(() => {
+    if (scope === 'term' && theme.activeTerm) {
+      return attendance.filter(
+        a => a.date_key >= theme.activeTerm.start_date && a.date_key <= theme.activeTerm.end_date
+      );
+    }
+    return attendance;
+  }, [attendance, scope, theme.activeTerm]);
 
-  const getAttForDate = (date) => {
-    if (!date) return null;
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return attendance.find(a => a.date_key === `${y}-${m}-${d}`);
-  };
+  // ─── Stats ────────────────────────────────────────────────────────────
+  const stats = useMemo(() => {
+    const total   = scoped.length;
+    const present = scoped.filter(a => a.status === 'present').length;
+    const late    = scoped.filter(a => a.status === 'late').length;
+    const absent  = scoped.filter(a => a.status === 'absent').length;
+    const sentOut = scoped.filter(a => a.status === 'sent_out').length;
+    const rate    = total > 0 ? Math.round((present / total) * 100) : 0;
+    return { total, present, late, absent, sentOut, rate };
+  }, [scoped]);
 
-  const isToday = (date) => {
-    if (!date) return false;
-    const t = new Date();
-    return date.getDate() === t.getDate() && date.getMonth() === t.getMonth() && date.getFullYear() === t.getFullYear();
-  };
+  // ─── Streak (consecutive present days up to today, all time) ──────────
+  const streak = useMemo(() => {
+    const sorted = [...attendance].sort((a, b) => b.date_key.localeCompare(a.date_key));
+    let count = 0;
+    for (const rec of sorted) {
+      if (rec.status === 'present') count++;
+      else break;
+    }
+    return count;
+  }, [attendance]);
 
-  const isWeekend = (date) => {
-    if (!date) return false;
-    const day = date.getDay();
-    return day === 0 || day === 6;
-  };
+  // ─── Weekly heatmap (last 10 weeks, Mon–Fri) ──────────────────────────
+  const weeklyGrid = useMemo(() => {
+    const map = {};
+    scoped.forEach(a => { map[a.date_key] = a.status; });
 
-  const prevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));
-  const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1));
+    const today  = new Date();
+    const dow    = today.getDay(); // 0=Sun … 6=Sat
+    const offset = dow === 0 ? 6 : dow - 1; // days since Monday
+    const thisMonday = new Date(today);
+    thisMonday.setDate(today.getDate() - offset);
 
-  // ─── Loading / Empty ──────────────────────────────────
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-12 h-12 border-4 rounded-full animate-spin"
-          style={{ borderColor: theme.withAlpha(0.3), borderTopColor: 'transparent' }} />
-      </div>
-    );
-  }
+    const weeks = [];
+    for (let w = 9; w >= 0; w--) {
+      const monday = new Date(thisMonday);
+      monday.setDate(thisMonday.getDate() - w * 7);
+      const days = Array.from({ length: 5 }, (_, d) => {
+        const day = new Date(monday);
+        day.setDate(monday.getDate() + d);
+        const key = day.toISOString().split('T')[0];
+        return { date: day, key, status: map[key] || null };
+      });
+      weeks.push({
+        label: monday.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+        days,
+      });
+    }
+    return weeks;
+  }, [scoped]);
 
-  if (children.length === 0) {
-    return (
-      <div className="bg-white rounded-2xl shadow-lg p-12 text-center border border-gray-200">
-        <CalendarIcon size={48} className="mx-auto text-gray-300 mb-4" />
-        <p className="text-gray-600 text-lg font-medium">No student data available</p>
-        <p className="text-gray-400 text-sm mt-2">Please contact the school administration.</p>
-      </div>
-    );
-  }
+  // ─── Filtered + grouped history ───────────────────────────────────────
+  const groupedHistory = useMemo(() => {
+    const filtered = filter === 'all' ? scoped : scoped.filter(a => a.status === filter);
+    const groups = {};
+    filtered.forEach(rec => {
+      const label = new Date(rec.date_key + 'T00:00:00')
+        .toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+      if (!groups[label]) groups[label] = [];
+      groups[label].push(rec);
+    });
+    return Object.entries(groups);
+  }, [scoped, filter]);
 
-  const daysInMonth = getDaysInMonth(currentMonth);
-  const monthName = currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-  const displayStats = termStats || stats;
+  // ─── Render helpers ───────────────────────────────────────────────────
+  if (loading) return (
+    <div className="flex items-center justify-center min-h-[400px]">
+      <div className="w-12 h-12 border-4 rounded-full animate-spin"
+        style={{ borderColor: theme.withAlpha(0.3), borderTopColor: 'transparent' }} />
+    </div>
+  );
+
+  if (children.length === 0) return (
+    <div className="bg-white rounded-2xl shadow-lg p-12 text-center border border-gray-200">
+      <Users size={48} className="mx-auto text-gray-300 mb-4" />
+      <p className="text-gray-600 text-lg font-medium">No student data available</p>
+      <p className="text-gray-400 text-sm mt-2">Please contact the school administration.</p>
+    </div>
+  );
+
+  const today = todayKey();
+  const gaugeColor =
+    stats.rate >= 90 ? '#10b981' :
+    stats.rate >= 80 ? '#f97316' : '#ef4444';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
 
-      {/* ═══ HEADER - Dynamic Gradient ═══════════════════════ */}
-      <div className="rounded-2xl shadow-lg p-6 md:p-8 text-white relative overflow-hidden"
+      {/* ═══ HEADER ══════════════════════════════════════════════════════ */}
+      <div className="rounded-2xl shadow-lg p-6 text-white relative overflow-hidden"
         style={theme.gradientStyle}>
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-5 rounded-full -ml-24 -mb-24" />
-
-        <div className="relative z-10">
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur">
-                <CalendarIcon size={24} />
-              </div>
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold">Attendance</h1>
-                <p className="text-white/70 text-sm">Daily attendance records & statistics</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              {theme.hasActiveTerm && (
-                <div className="hidden sm:flex bg-white/15 backdrop-blur px-3 py-1.5 rounded-lg items-center gap-1.5">
-                  <TermIcon size={14} />
-                  <span className="text-xs font-medium">{theme.name} Term</span>
-                </div>
-              )}
-              {children.length > 1 && (
-                <div className="relative">
-                  <select value={selectedChild?.id || ''}
-                    onChange={(e) => setSelectedChild(children.find(c => c.id === e.target.value))}
-                    className="appearance-none bg-white/20 backdrop-blur border border-white/30 rounded-xl px-4 py-2.5 pr-10 text-sm font-medium text-white focus:outline-none cursor-pointer">
-                    {children.map(c => <option key={c.id} value={c.id} className="text-gray-900">{c.name} — {c.class_name}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none" size={14} />
-                </div>
-              )}
-            </div>
+        <div className="relative z-10 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold">Attendance</h1>
+            <p className="text-white/70 text-sm mt-0.5">
+              {selectedChild?.name} · Class {selectedChild?.class_name}
+            </p>
           </div>
-
-          {/* Stats row */}
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-            {[
-              { label: 'Total Days', value: displayStats.total, icon: CalendarIcon },
-              { label: 'Present', value: displayStats.present, icon: CheckCircle },
-              { label: 'Late', value: displayStats.late, icon: Clock },
-              { label: 'Absent', value: displayStats.absent, icon: XCircle },
-              { label: 'Sent Out', value: displayStats.sentOut, icon: AlertCircle },
-              { label: 'Rate', value: `${displayStats.rate}%`, icon: TrendingUp },
-            ].map((s, i) => (
-              <div key={i} className="bg-white/15 backdrop-blur rounded-xl p-3 border border-white/20">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-white/70 text-[10px] font-medium">{s.label}</p>
-                  <s.icon size={12} className="text-white/50" />
-                </div>
-                <p className="text-2xl md:text-3xl font-bold">{s.value}</p>
+          <div className="flex items-center gap-3">
+            {theme.hasActiveTerm && (
+              <div className="hidden sm:flex bg-white/15 backdrop-blur px-3 py-1.5 rounded-lg items-center gap-1.5">
+                <TermIcon size={14} />
+                <span className="text-xs font-medium">{theme.name} Term</span>
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ═══ CALENDAR + SIDEBAR ══════════════════════════ */}
-      <div className="grid lg:grid-cols-3 gap-6">
-
-        {/* Calendar */}
-        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
-          <div className="flex justify-between items-center mb-5">
-            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <CalendarIcon size={20} style={theme.textStyle} />
-              {monthName}
-            </h3>
-            <div className="flex gap-1.5">
-              <button onClick={prevMonth} className="p-2 rounded-xl transition-colors"
-                style={{ backgroundColor: theme.withAlpha(0.1) }}>
-                <ChevronLeft size={18} style={theme.textStyle} />
-              </button>
-              <button onClick={nextMonth} className="p-2 rounded-xl transition-colors"
-                style={{ backgroundColor: theme.withAlpha(0.1) }}>
-                <ChevronRight size={18} style={theme.textStyle} />
-              </button>
-            </div>
-          </div>
-
-          {/* Weekday headers */}
-          <div className="grid grid-cols-7 gap-1.5 mb-2">
-            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-              <div key={day} className="text-center text-xs font-bold text-gray-500 py-1">{day}</div>
-            ))}
-          </div>
-
-          {/* Days grid */}
-          <div className="grid grid-cols-7 gap-1.5">
-            {daysInMonth.map((date, idx) => {
-              if (!date) return <div key={'e-' + idx} className="aspect-square" />;
-
-              const record = getAttForDate(date);
-              const today = isToday(date);
-              const weekend = isWeekend(date);
-              const cfg = record ? STATUS_CONFIG[record.status] : null;
-
-              return (
-                <div key={idx} className={`aspect-square rounded-xl border flex flex-col items-center justify-center relative group transition-all
-                  ${weekend ? 'border-gray-100 bg-gray-50' : 'border-gray-200 hover:border-gray-300'}
-                `} style={today ? { borderColor: theme.color, backgroundColor: theme.withAlpha(0.05) } : {}}>
-                  <span className={`text-sm font-semibold ${weekend ? 'text-gray-400' : 'text-gray-700'}`}
-                    style={today ? theme.textStyle : {}}>
-                    {date.getDate()}
-                  </span>
-                  {record && (
-                    <div className={`w-2.5 h-2.5 rounded-full mt-0.5 ${cfg.color}`} />
-                  )}
-
-                  {/* Tooltip */}
-                  {record && (
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block z-20 pointer-events-none">
-                      <div className="bg-gray-900 text-white text-[10px] rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg">
-                        <span className="font-semibold">{cfg.label}</span>
-                        {record.comment && <p className="text-gray-300 mt-0.5 max-w-[160px] whitespace-normal">{record.comment}</p>}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Legend */}
-          <div className="flex flex-wrap justify-center gap-4 mt-5 pt-4 border-t border-gray-100">
-            {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
-              <div key={key} className="flex items-center gap-1.5">
-                <div className={`w-2.5 h-2.5 rounded-full ${cfg.color}`} />
-                <span className="text-xs text-gray-600">{cfg.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Term Summary */}
-          {theme.hasActiveTerm && termStats && (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
-              <h3 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
-                <UserCheck size={16} style={theme.textStyle} />
-                {theme.name} Term Summary
-              </h3>
-              <div className={`p-4 rounded-xl border mb-3 ${
-                termStats.rate >= 90 ? 'bg-emerald-50 border-emerald-200' : termStats.rate >= 80 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'
-              }`}>
-                <p className="text-xs text-gray-500 mb-0.5">Present Rate</p>
-                <p className={`text-3xl font-bold ${
-                  termStats.rate >= 90 ? 'text-emerald-600' : termStats.rate >= 80 ? 'text-amber-600' : 'text-red-600'
-                }`}>{termStats.rate}%</p>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { ...STATUS_CONFIG.present, val: termStats.present },
-                  { ...STATUS_CONFIG.late, val: termStats.late },
-                  { ...STATUS_CONFIG.absent, val: termStats.absent },
-                  { ...STATUS_CONFIG.sent_out, val: termStats.sentOut },
-                ].map((s, i) => (
-                  <div key={i} className={`${s.light} border ${s.border} rounded-xl p-3 text-center`}>
-                    <p className={`text-xl font-bold ${s.text}`}>{s.val}</p>
-                    <p className={`text-[10px] ${s.text} font-medium mt-0.5`}>{s.label}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Recent Records */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
-            <h3 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
-              <Clock size={16} style={theme.textStyle} />
-              Recent Records
-            </h3>
-
-            {attendance.length === 0 ? (
-              <div className="text-center py-6 bg-gray-50 rounded-xl">
-                <p className="text-xs text-gray-400">No records yet</p>
-              </div>
-            ) : (
-              <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
-                {[...attendance].reverse().slice(0, 15).map((record) => {
-                  const cfg = STATUS_CONFIG[record.status] || STATUS_CONFIG.present;
-                  const RecIcon = cfg.icon;
-                  return (
-                    <div key={record.id} className={`flex items-center gap-3 p-2.5 rounded-xl border ${cfg.light} ${cfg.border}`}>
-                      <RecIcon size={14} className={cfg.text} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-gray-800">
-                          {new Date(record.date_key + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
-                        </p>
-                        {record.comment && <p className="text-[10px] text-gray-500 truncate">{record.comment}</p>}
-                      </div>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cfg.light} ${cfg.text}`}>{cfg.label}</span>
-                    </div>
-                  );
-                })}
+            )}
+            {children.length > 1 && (
+              <div className="relative">
+                <select value={selectedChild?.id || ''}
+                  onChange={(e) => setSelectedChild(children.find(c => c.id === e.target.value))}
+                  className="appearance-none bg-white/20 backdrop-blur border border-white/30 rounded-xl px-4 py-2.5 pr-10 text-sm font-medium text-white focus:outline-none cursor-pointer">
+                  {children.map(c => (
+                    <option key={c.id} value={c.id} className="text-gray-900">{c.name}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none" size={14} />
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* ═══ TERM FOOTER ═════════════════════════════════ */}
+      {/* ═══ SCOPE TOGGLE ════════════════════════════════════════════════ */}
+      {theme.hasActiveTerm && (
+        <div className="flex gap-2">
+          {[
+            { key: 'term', label: `${theme.name} Term` },
+            { key: 'all',  label: 'All Time' },
+          ].map(opt => (
+            <button key={opt.key} onClick={() => setScope(opt.key)}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all
+                ${scope === opt.key
+                  ? 'text-white shadow-md'
+                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+              style={scope === opt.key ? { backgroundColor: theme.color } : {}}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ═══ GAUGE + STAT CARDS ══════════════════════════════════════════ */}
+      <div className="grid md:grid-cols-5 gap-4">
+
+        {/* Circular gauge */}
+        <div className="md:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col items-center justify-center gap-3">
+          <div className="relative">
+            <RateGauge rate={stats.rate} color={gaugeColor} />
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-3xl font-bold" style={{ color: gaugeColor }}>{stats.rate}%</span>
+              <span className="text-xs text-gray-400 font-medium">attendance</span>
+            </div>
+          </div>
+
+          {stats.rate < 85 && stats.total > 0 && (
+            <div className="w-full px-3 py-2 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2">
+              <AlertTriangle size={14} className="text-red-500 flex-shrink-0" />
+              <p className="text-xs font-semibold text-red-700">Below 85% threshold</p>
+            </div>
+          )}
+
+          {streak >= 3 && (
+            <div className="w-full px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2">
+              <Flame size={14} className="text-amber-500 flex-shrink-0" />
+              <p className="text-xs font-semibold text-amber-700">{streak} days present in a row 🔥</p>
+            </div>
+          )}
+
+          <p className="text-xs text-gray-400 mt-1">{stats.total} total sessions recorded</p>
+        </div>
+
+        {/* 4 stat cards */}
+        <div className="md:col-span-3 grid grid-cols-2 gap-3">
+          {[
+            { key: 'present',  val: stats.present  },
+            { key: 'late',     val: stats.late      },
+            { key: 'absent',   val: stats.absent    },
+            { key: 'sent_out', val: stats.sentOut   },
+          ].map(({ key, val }) => {
+            const cfg  = STATUS_CONFIG[key];
+            const Icon = cfg.icon;
+            const pct  = stats.total > 0 ? Math.round((val / stats.total) * 100) : 0;
+            return (
+              <div key={key} className="rounded-2xl p-4 border"
+                style={{ backgroundColor: cfg.color + '12', borderColor: cfg.color + '30' }}>
+                <div className="flex items-center justify-between mb-2">
+                  <Icon size={18} style={{ color: cfg.color }} />
+                  <span className="text-[10px] font-bold" style={{ color: cfg.color, opacity: 0.7 }}>
+                    {pct}%
+                  </span>
+                </div>
+                <p className="text-3xl font-bold" style={{ color: cfg.color }}>{val}</p>
+                <p className="text-xs font-semibold mt-0.5" style={{ color: cfg.color, opacity: 0.8 }}>
+                  {cfg.label}
+                </p>
+                <div className="mt-2.5 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: cfg.color + '25' }}>
+                  <div className="h-1.5 rounded-full transition-all"
+                    style={{ width: `${pct}%`, backgroundColor: cfg.color }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ═══ WEEKLY HEATMAP ══════════════════════════════════════════════ */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+        <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2 text-sm">
+          <BarChart3 size={16} style={theme.textStyle} />
+          Last 10 Weeks
+        </h3>
+
+        {/* Day column headers */}
+        <div className="flex items-center gap-2 mb-1.5">
+          <div className="w-14 flex-shrink-0" />
+          <div className="flex-1 grid grid-cols-5 gap-1.5">
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map(d => (
+              <div key={d} className="text-center text-[10px] font-bold text-gray-400">{d}</div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          {weeklyGrid.map((week, wi) => (
+            <div key={wi} className="flex items-center gap-2">
+              <div className="w-14 flex-shrink-0 text-[10px] text-gray-400 font-medium text-right pr-1">
+                {week.label}
+              </div>
+              <div className="flex-1 grid grid-cols-5 gap-1.5">
+                {week.days.map((day, di) => {
+                  const isToday  = day.key === today;
+                  const isFuture = day.key > today;
+                  const cfg      = day.status ? STATUS_CONFIG[day.status] : null;
+
+                  return (
+                    <div key={di}
+                      title={cfg ? `${day.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}: ${cfg.label}` : ''}
+                      className={`aspect-square rounded-lg flex items-center justify-center transition-all
+                        ${isFuture ? 'bg-gray-50 border border-dashed border-gray-200' : !cfg ? 'bg-gray-100' : ''}`}
+                      style={cfg ? {
+                        backgroundColor: cfg.color + '22',
+                        border: `1.5px solid ${cfg.color}50`
+                      } : isToday ? {
+                        border: `1.5px solid ${theme.color}`,
+                        backgroundColor: theme.withAlpha(0.06)
+                      } : {}}>
+                      {cfg && (
+                        <div className="w-2.5 h-2.5 rounded-full shadow-sm"
+                          style={{ backgroundColor: cfg.color }} />
+                      )}
+                      {isToday && !cfg && (
+                        <div className="w-2 h-2 rounded-full border-2"
+                          style={{ borderColor: theme.color }} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Legend */}
+        <div className="flex flex-wrap gap-4 mt-4 pt-4 border-t border-gray-100">
+          {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
+            <div key={key} className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cfg.color }} />
+              <span className="text-[10px] text-gray-500">{cfg.label}</span>
+            </div>
+          ))}
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-gray-200" />
+            <span className="text-[10px] text-gray-400">No record</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ HISTORY LIST ════════════════════════════════════════════════ */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+          <h3 className="font-bold text-gray-900 flex items-center gap-2 text-sm">
+            <Filter size={15} style={theme.textStyle} />
+            Attendance History
+          </h3>
+          <div className="flex gap-1.5 flex-wrap">
+            {[
+              { key: 'all',      label: 'All'      },
+              { key: 'late',     label: 'Late'     },
+              { key: 'absent',   label: 'Absent'   },
+              { key: 'sent_out', label: 'Sent Out' },
+            ].map(f => (
+              <button key={f.key} onClick={() => setFilter(f.key)}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all
+                  ${filter === f.key ? 'text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                style={filter === f.key ? { backgroundColor: theme.color } : {}}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {groupedHistory.length === 0 ? (
+          <div className="text-center py-14 bg-gray-50 rounded-2xl">
+            <CheckCircle size={40} className="mx-auto text-gray-300 mb-3" />
+            <p className="text-gray-500 text-sm font-medium">
+              {filter === 'all' ? 'No attendance records yet' : `No ${STATUS_CONFIG[filter]?.label.toLowerCase()} records`}
+            </p>
+            <p className="text-gray-400 text-xs mt-1">Records appear once teachers mark attendance</p>
+          </div>
+        ) : (
+          <div className="space-y-6 max-h-[520px] overflow-y-auto pr-0.5">
+            {groupedHistory.map(([monthLabel, records]) => (
+              <div key={monthLabel}>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">
+                  {monthLabel}
+                </p>
+                <div className="space-y-1.5">
+                  {records.map(rec => {
+                    const cfg  = STATUS_CONFIG[rec.status] || STATUS_CONFIG.present;
+                    const Icon = cfg.icon;
+                    const d    = new Date(rec.date_key + 'T00:00:00');
+                    return (
+                      <div key={rec.id}
+                        className="flex items-center gap-3 p-3 rounded-xl border transition-all hover:shadow-sm"
+                        style={{ backgroundColor: cfg.color + '0d', borderColor: cfg.color + '30' }}>
+                        {/* Date badge */}
+                        <div className="w-11 h-11 rounded-xl flex flex-col items-center justify-center flex-shrink-0"
+                          style={{ backgroundColor: cfg.color + '18' }}>
+                          <span className="text-[9px] font-bold uppercase leading-none"
+                            style={{ color: cfg.color }}>
+                            {d.toLocaleDateString('en-GB', { weekday: 'short' })}
+                          </span>
+                          <span className="text-lg font-bold leading-tight"
+                            style={{ color: cfg.color }}>
+                            {d.getDate()}
+                          </span>
+                        </div>
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5">
+                              <Icon size={12} style={{ color: cfg.color }} />
+                              <span className="text-sm font-bold" style={{ color: cfg.color }}>
+                                {cfg.label}
+                              </span>
+                            </div>
+                            <span className="text-xs text-gray-400">
+                              {d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                            </span>
+                          </div>
+                          {rec.comment && (
+                            <div className="flex items-start gap-1.5 mt-1">
+                              <MessageSquare size={10} className="text-gray-400 mt-0.5 flex-shrink-0" />
+                              <p className="text-xs text-gray-600 italic leading-relaxed">{rec.comment}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ═══ TERM FOOTER ═════════════════════════════════════════════════ */}
       {theme.hasActiveTerm && (
         <div className="rounded-xl px-4 py-3 flex items-center justify-between"
           style={{ backgroundColor: theme.withAlpha(0.1), borderWidth: '1px', borderColor: theme.withAlpha(0.2) }}>
           <div className="flex items-center gap-2">
             <TermIcon size={14} style={theme.textStyle} />
-            <span className="text-xs font-semibold" style={theme.textStyle}>{theme.name} Term {theme.activeTerm.academic_year}</span>
+            <span className="text-xs font-semibold" style={theme.textStyle}>
+              {theme.name} Term {theme.activeTerm?.academic_year}
+            </span>
             <span className="text-[10px] text-gray-500 hidden sm:inline">
-              {new Date(theme.activeTerm.start_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              {new Date(theme.activeTerm?.start_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
               {' – '}
-              {new Date(theme.activeTerm.end_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              {new Date(theme.activeTerm?.end_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-24 rounded-full h-1.5 hidden sm:block" style={{ backgroundColor: theme.withAlpha(0.2) }}>
-              <div className="h-1.5 rounded-full" style={{ width: `${theme.progress}%`, backgroundColor: theme.color }} />
+            <div className="w-24 rounded-full h-1.5 hidden sm:block"
+              style={{ backgroundColor: theme.withAlpha(0.2) }}>
+              <div className="h-1.5 rounded-full"
+                style={{ width: `${theme.progress}%`, backgroundColor: theme.color }} />
             </div>
             <span className="text-[10px] font-medium" style={theme.textStyle}>
               {theme.daysRemaining}d left
