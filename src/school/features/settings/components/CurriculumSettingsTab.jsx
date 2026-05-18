@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, BookOpen, Award, Edit2, Trash2, Check, X, Plus,
-  AlertCircle, CheckCircle, ChevronDown, ChevronUp, RefreshCw
+  AlertCircle, CheckCircle, ChevronDown, ChevronUp, RefreshCw, Percent
 } from 'lucide-react';
 import { supabase } from '../../../../core/infrastructure/supabaseClient';
 import { useTenant } from '../../../../core/context/TenantContext';
