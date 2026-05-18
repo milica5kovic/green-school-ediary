@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Calendar,
   FileText,
@@ -99,15 +99,32 @@ const SchoolAppContent = () => {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // ── Page transition ──────────────────────────────────────────────────────
+  // Keeps a "displayed" page key that lags slightly behind currentPage so we
+  // can fade out → swap → fade in instead of instantly flashing new content.
+  const [displayedPage, setDisplayedPage] = useState(currentPage);
+  const [pageVisible, setPageVisible] = useState(true);
+  const prevPageRef = useRef(currentPage);
+
+  useEffect(() => {
+    if (currentPage === prevPageRef.current) return;
+    prevPageRef.current = currentPage;
+
+    // Fade out
+    setPageVisible(false);
+
+    const t = setTimeout(() => {
+      // Swap content while invisible
+      setDisplayedPage(currentPage);
+      // Fade back in
+      setPageVisible(true);
+    }, 120);
+
+    return () => clearTimeout(t);
+  }, [currentPage]);
+
   if (authLoading || brandingLoading) {
-    return (
-      <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ background: `linear-gradient(to bottom right, ${primaryColor}10, ${primaryColor}05)` }}
-      >
-        <LoadingSpinner message="Loading..." />
-      </div>
-    );
+    return <LoadingSpinner message="Loading..." fullPage />;
   }
 
   const isSuperAdmin = profile?.role === "admin" && teacher !== null;
@@ -124,7 +141,7 @@ const SchoolAppContent = () => {
     return features[key] === true;
   };
 
-  // ── Page renderer ──────────────────────────────────────────────────────────
+  // ── Page renderer — uses displayedPage (lagged) to avoid flash ────────────
 
   const renderPage = () => {
     if (loading) return <LoadingSpinner message="Loading..." />;
@@ -144,7 +161,7 @@ const SchoolAppContent = () => {
         );
       }
 
-      switch (currentPage) {
+      switch (displayedPage) {
         case "home":              return <ParentDashboard />;
         case "my-child":          return <ParentMyChildPage />;
         case "grading":
@@ -160,7 +177,7 @@ const SchoolAppContent = () => {
     }
 
     // ── TEACHER / ADMIN ROUTES ───────────────────────────────────────────────
-    switch (currentPage) {
+    switch (displayedPage) {
       case "home":
         if (!hasFeature(isPureAdmin ? "admin_dashboard" : "home"))
           return <FeatureDisabled feature="Home" />;
@@ -514,7 +531,11 @@ const SchoolAppContent = () => {
         </aside>
 
         {/* ── MAIN CONTENT ── */}
-        <main className="flex-1 min-w-0 overflow-hidden">
+        <main
+          key={displayedPage}
+          className="flex-1 min-w-0 overflow-hidden transition-opacity duration-150 ease-in-out"
+          style={{ opacity: pageVisible ? 1 : 0 }}
+        >
           {renderPage()}
         </main>
       </div>
