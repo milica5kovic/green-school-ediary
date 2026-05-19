@@ -13,34 +13,13 @@ import {
   getCurrentSchoolId,
 } from "../../../../core/infrastructure/supabaseClient";
 import { createTeacher, generateTempPassword } from "../../../../core/infrastructure/adminApi";
+import { toast } from "../../../../core/components/Toast";
 
 import AddParentModal from "../../parents/modals/AddParentModal";
 import EditParentModal from "../../parents/modals/EditParentModal";
 import ManageChildrenModal from "../../parents/modals/ManageChildrenModal";
 import DeleteParentModal from "../../parents/modals/DeleteParentModal";
 import ExportEmailsModal from "../../parents/modals/ExportEmailsModal";
-
-// ════════════════════════════════════════════════════════════
-// TOAST NOTIFICATION
-// ════════════════════════════════════════════════════════════
-
-const Toast = ({ toast }) => {
-  if (!toast) return null;
-  const isError = toast.type === 'error';
-  return (
-    <div className={`fixed top-5 right-5 z-[100] flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium border transition-all animate-fade-in max-w-sm ${
-      isError
-        ? 'bg-red-50 border-red-200 text-red-700'
-        : 'bg-emerald-50 border-emerald-200 text-emerald-700'
-    }`}>
-      {isError
-        ? <AlertTriangle size={16} className="flex-shrink-0" />
-        : <CheckCircle size={16} className="flex-shrink-0" />
-      }
-      <span>{toast.message}</span>
-    </div>
-  );
-};
 
 // ════════════════════════════════════════════════════════════
 // CONFIRM MODAL
@@ -112,17 +91,11 @@ const ProfileManagementPage = () => {
   const [selectedParent, setSelectedParent] = useState(null);
   const [activeTab, setActiveTab] = useState("teachers");
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
 
   const [parentFilters, setParentFilters] = useState({ status: "all", search: "" });
   const [teacherFilters, setTeacherFilters] = useState({ role: 'all', search: '' });
-
-  const showToast = useCallback((message, type = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
-  }, []);
 
   // ════════════════════════════════════════════════════════════
   // DATA LOADING
@@ -167,7 +140,7 @@ const ProfileManagementPage = () => {
 
       setTeachers(combined);
     } catch (error) {
-      showToast('Failed to load staff: ' + error.message, 'error');
+      toast.error('Failed to load staff: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -194,7 +167,7 @@ const ProfileManagementPage = () => {
 
       setParents(parentsWithStudents);
     } catch (error) {
-      showToast('Failed to load parents: ' + error.message, 'error');
+      toast.error('Failed to load parents: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -254,7 +227,7 @@ const ProfileManagementPage = () => {
 
   const handleDeleteTeacher = (teacher) => {
     if (teacher.role === 'owner') {
-      showToast('Cannot delete the school owner account.', 'error');
+      toast.error('Cannot delete the school owner account.');
       return;
     }
     setConfirm({
@@ -274,11 +247,11 @@ const ProfileManagementPage = () => {
           } else if (teacher.teacher_id) {
             await supabase.from("teachers").delete().eq("id", teacher.teacher_id);
           }
-          showToast(`${teacher.full_name} has been removed.`);
+          toast.success(`${teacher.full_name} has been removed.`);
           setConfirm(null);
           await loadTeachers();
         } catch (error) {
-          showToast('Failed to delete: ' + error.message, 'error');
+          toast.error('Failed to delete: ' + error.message);
           setConfirm(null);
         } finally {
           setConfirmLoading(false);
@@ -316,7 +289,7 @@ const ProfileManagementPage = () => {
     e.target.value = '';
     const text = await file.text();
     const { rows } = parseCsvRows(text);
-    if (!rows.length) { showToast('No data rows found in CSV.', 'error'); return; }
+    if (!rows.length) { toast.error('No data rows found in CSV.'); return; }
 
     const schoolId = getCurrentSchoolId();
     const inserts = rows
@@ -330,11 +303,11 @@ const ProfileManagementPage = () => {
         class_teacher_for: r.class_teacher_for || null,
       }));
 
-    if (!inserts.length) { showToast('No valid rows found (full_name + email required).', 'error'); return; }
+    if (!inserts.length) { toast.error('No valid rows found (full_name + email required).'); return; }
 
     const { error } = await supabase.from('teachers').insert(inserts);
-    if (error) { showToast(`Import failed: ${error.message}`, 'error'); return; }
-    showToast(`${inserts.length} staff member${inserts.length !== 1 ? 's' : ''} imported.`);
+    if (error) { toast.error(`Import failed: ${error.message}`); return; }
+    toast.success(`${inserts.length} staff member${inserts.length !== 1 ? 's' : ''} imported.`);
     loadTeachers();
   };
 
@@ -344,7 +317,7 @@ const ProfileManagementPage = () => {
     e.target.value = '';
     const text = await file.text();
     const { rows } = parseCsvRows(text);
-    if (!rows.length) { showToast('No data rows found in CSV.', 'error'); return; }
+    if (!rows.length) { toast.error('No data rows found in CSV.'); return; }
 
     const schoolId = getCurrentSchoolId();
     let imported = 0, failed = 0;
@@ -371,7 +344,7 @@ const ProfileManagementPage = () => {
       imported++;
     }
 
-    showToast(`${imported} parent${imported !== 1 ? 's' : ''} imported.${failed ? ` ${failed} rows skipped.` : ''}`);
+    toast.success(`${imported} parent${imported !== 1 ? 's' : ''} imported.${failed ? ` ${failed} rows skipped.` : ''}`);
     loadParents();
   };
 
@@ -399,7 +372,6 @@ const ProfileManagementPage = () => {
 
   return (
     <div className="space-y-6">
-      <Toast toast={toast} />
       <ConfirmModal
         config={confirm ? { ...confirm, loading: confirmLoading } : null}
         onCancel={() => setConfirm(null)}
@@ -749,7 +721,6 @@ const ProfileManagementPage = () => {
           supabase={supabase}
           onClose={() => { setShowAddModal(false); setEditingTeacher(null); }}
           onRefresh={loadAllData}
-          showToast={showToast}
         />
       )}
 
@@ -757,7 +728,6 @@ const ProfileManagementPage = () => {
         <ChangePasswordModal
           teacher={changePwTeacher}
           onClose={() => setChangePwTeacher(null)}
-          showToast={showToast}
         />
       )}
 
@@ -765,7 +735,6 @@ const ProfileManagementPage = () => {
         <ChangePasswordModal
           teacher={changePwParent}
           onClose={() => setChangePwParent(null)}
-          showToast={showToast}
         />
       )}
 
@@ -796,7 +765,7 @@ const ProfileManagementPage = () => {
         <DeleteParentModal
           parent={selectedParent}
           onClose={() => { setShowDeleteParentModal(false); setSelectedParent(null); }}
-          onDelete={async () => { await loadAllData(); setShowDeleteParentModal(false); showToast(`${selectedParent?.full_name} has been removed.`); setSelectedParent(null); }}
+          onDelete={async () => { await loadAllData(); setShowDeleteParentModal(false); toast.success(`${selectedParent?.full_name} has been removed.`); setSelectedParent(null); }}
         />
       )}
 
@@ -833,7 +802,7 @@ const colorMap = {
   purple: { border: 'border-purple-400', bg: 'bg-purple-50', text: 'text-purple-600', dot: 'bg-purple-400' },
 };
 
-const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onRefresh, showToast }) => {
+const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onRefresh }) => {
   const { schoolId } = useTenant();
   const { name: schoolName } = useBranding();
 
@@ -899,7 +868,7 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onRefresh, 
           .update({ full_name: formData.full_name, role: formData.role })
           .eq('id', teacher.user_id);
 
-        showToast(`${formData.full_name} updated successfully.`);
+        toast.success(`${formData.full_name} updated successfully.`);
         await onRefresh();
         onClose();
       } else {
@@ -1190,7 +1159,7 @@ const AddTeacherModal = ({ teacher, primaryColor, supabase, onClose, onRefresh, 
 // CHANGE PASSWORD MODAL
 // ════════════════════════════════════════════════════════════
 
-const ChangePasswordModal = ({ teacher, onClose, showToast }) => {
+const ChangePasswordModal = ({ teacher, onClose }) => {
   const [password, setPassword] = useState('');
   const [showPw, setShowPw]     = useState(false);
   const [saving, setSaving]     = useState(false);
@@ -1198,7 +1167,7 @@ const ChangePasswordModal = ({ teacher, onClose, showToast }) => {
   const handleSave = async (e) => {
     e.preventDefault();
     if (password.length < 6) {
-      showToast('Password must be at least 6 characters.', 'error');
+      toast.error('Password must be at least 6 characters.');
       return;
     }
     try {
@@ -1212,10 +1181,10 @@ const ChangePasswordModal = ({ teacher, onClose, showToast }) => {
         },
       });
       if (error || data?.error) throw new Error(error?.message || data?.error || 'Failed');
-      showToast(`Password updated for ${teacher.full_name}.`);
+      toast.success(`Password updated for ${teacher.full_name}.`);
       onClose();
     } catch (err) {
-      showToast(err.message || 'Failed to update password.', 'error');
+      toast.error(err.message || 'Failed to update password.');
     } finally {
       setSaving(false);
     }
