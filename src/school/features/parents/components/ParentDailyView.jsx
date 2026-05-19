@@ -9,69 +9,48 @@ import { useApp } from '../../../../core/context/AppContext';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
 import { useParentChildrenCtx } from '../context/ParentChildrenContext';
 
-// ════════════════════════════════════════════════════════════════════════════
-// CONFIG
-// ════════════════════════════════════════════════════════════════════════════
+// ─── attendance config ────────────────────────────────────────────────────────
 
 const ATT = {
-  present:  { label: 'Present',      Icon: CheckCircle,  color: '#10b981', bg: '#f0fdf4', border: '#bbf7d0', badgeBg: '#dcfce7', badgeText: '#15803d', dot: '#22c55e' },
-  late:     { label: 'Late',         Icon: Clock,        color: '#f97316', bg: '#fff7ed', border: '#fed7aa', badgeBg: '#ffedd5', badgeText: '#c2410c', dot: '#fb923c' },
-  absent:   { label: 'Absent',       Icon: XCircle,      color: '#ef4444', bg: '#fff1f2', border: '#fecdd3', badgeBg: '#ffe4e6', badgeText: '#b91c1c', dot: '#f87171' },
-  sent_out: { label: 'Sent Out',     Icon: AlertCircle,  color: '#a855f7', bg: '#faf5ff', border: '#ddd6fe', badgeBg: '#ede9fe', badgeText: '#6d28d9', dot: '#c084fc' },
-  default:  { label: 'Not Recorded', Icon: Clock,        color: '#9ca3af', bg: '#f9fafb', border: '#e5e7eb', badgeBg: '#f3f4f6', badgeText: '#6b7280', dot: '#d1d5db' },
+  present:  { label: 'Present',      Icon: CheckCircle,  badgeBg: '#dcfce7', badgeText: '#15803d', dot: '#22c55e', cardBg: '#f0fdf4', cardBorder: '#bbf7d0', noteColor: '#16a34a' },
+  late:     { label: 'Late',         Icon: Clock,        badgeBg: '#fef9c3', badgeText: '#a16207', dot: '#fbbf24', cardBg: '#fefce8', cardBorder: '#fde68a', noteColor: '#ca8a04' },
+  absent:   { label: 'Absent',       Icon: XCircle,      badgeBg: '#fee2e2', badgeText: '#b91c1c', dot: '#f87171', cardBg: '#fff1f2', cardBorder: '#fecdd3', noteColor: '#dc2626' },
+  sent_out: { label: 'Sent Out',     Icon: AlertCircle,  badgeBg: '#ede9fe', badgeText: '#6d28d9', dot: '#c084fc', cardBg: '#faf5ff', cardBorder: '#ddd6fe', noteColor: '#7c3aed' },
+  default:  { label: 'Not Recorded', Icon: Clock,        badgeBg: '#f1f5f9', badgeText: '#64748b', dot: '#cbd5e1', cardBg: '#f8fafc', cardBorder: '#e2e8f0', noteColor: '#94a3b8' },
 };
 
-const COMMENT_CFG = {
+const COMMENT = {
   positive:        { label: 'Positive',   color: '#10b981', bg: '#f0fdf4', border: '#bbf7d0' },
   neutral:         { label: 'Neutral',    color: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe' },
   needs_attention: { label: 'Needs Work', color: '#ef4444', bg: '#fff1f2', border: '#fecdd3' },
 };
 
-// ════════════════════════════════════════════════════════════════════════════
-// MICRO COMPONENTS
-// ════════════════════════════════════════════════════════════════════════════
+const CARD_SHADOW = '0 1px 2px rgba(15,23,42,.04), 0 4px 16px rgba(15,23,42,.06)';
 
-const Card = ({ children, className = '' }) => (
-  <div className={`bg-white rounded-2xl shadow-sm border border-gray-200 ${className}`}>
-    {children}
-  </div>
-);
+// ─── primitives ───────────────────────────────────────────────────────────────
 
-const CardHead = ({ icon: Icon, title, count, color }) => (
-  <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
-    <Icon size={16} style={{ color }} />
-    <h3 className="font-bold text-gray-800 text-sm flex-1">{title}</h3>
-    {count !== undefined && count > 0 && (
-      <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-        style={{ backgroundColor: `${color}15`, color }}>
-        {count}
-      </span>
-    )}
-  </div>
-);
+const SectionLabel = ({ children }) =>
+  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 px-6 pt-5 pb-3">{children}</p>;
 
-const EmptyState = ({ icon: Icon, message }) => (
-  <div className="flex flex-col items-center justify-center py-10 gap-3">
-    <Icon size={28} className="text-gray-300" />
-    <p className="text-gray-400 text-sm text-center">{message}</p>
+const Empty = ({ icon: Icon, text }) => (
+  <div className="flex flex-col items-center justify-center py-10 gap-2">
+    <Icon size={24} className="text-slate-200" />
+    <p className="text-sm text-slate-400">{text}</p>
   </div>
 );
 
 const StatusPill = ({ status }) => {
   const cfg = ATT[status] || ATT.default;
-  const AttIcon = cfg.Icon;
+  const I   = cfg.Icon;
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold flex-shrink-0"
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0"
       style={{ backgroundColor: cfg.badgeBg, color: cfg.badgeText }}>
-      <AttIcon size={10} />
-      {cfg.label}
+      <I size={10} />{cfg.label}
     </span>
   );
 };
 
-// ════════════════════════════════════════════════════════════════════════════
-// MAIN COMPONENT
-// ════════════════════════════════════════════════════════════════════════════
+// ─── main ─────────────────────────────────────────────────────────────────────
 
 const ParentDailyViewPage = () => {
   const { supabase, setCurrentPage } = useApp();
@@ -79,453 +58,412 @@ const ParentDailyViewPage = () => {
   const TermIcon = theme.icon;
   const { children, selectedChild, setSelectedChild, loading: childLoading } = useParentChildrenCtx();
 
-  const [selectedDate, setSelectedDate]           = useState(new Date());
-  const [dailyClasses, setDailyClasses]           = useState([]);
-  const [attendanceRecords, setAttendanceRecords] = useState({});
-  const [homeworkDueToday, setHomeworkDueToday]   = useState([]);
-  const [studentHomeworkStatus, setStudentHomeworkStatus] = useState({});
-  const [todayGrades, setTodayGrades]             = useState([]);
-  const [teacherComments, setTeacherComments]     = useState([]);
-  const [announcements, setAnnouncements]         = useState([]);
-  const [dataLoading, setDataLoading]             = useState(false);
+  const [date,      setDate]      = useState(new Date());
+  const [classes,   setClasses]   = useState([]);
+  const [attMap,    setAttMap]    = useState({});
+  const [homework,  setHomework]  = useState([]);
+  const [hwStatus,  setHwStatus]  = useState({});
+  const [grades,    setGrades]    = useState([]);
+  const [comments,  setComments]  = useState([]);
+  const [notices,   setNotices]   = useState([]);
+  const [busy,      setBusy]      = useState(false);
 
-  // ── Data loading ──────────────────────────────────────────────────────────
+  // ── load ─────────────────────────────────────────────────────────────────
 
-  const loadDailyData = useCallback(async () => {
+  const load = useCallback(async () => {
     if (!selectedChild) return;
-    setDataLoading(true);
+    setBusy(true);
     try {
-      const dateKey   = selectedDate.toISOString().split('T')[0];
-      const dateStart = `${dateKey}T00:00:00`;
-      const dateEnd   = `${dateKey}T23:59:59`;
+      const key   = date.toISOString().split('T')[0];
+      const start = `${key}T00:00:00`;
+      const end   = `${key}T23:59:59`;
 
       const [
-        { data: classesData },
-        { data: attendanceData },
-        { data: homeworkData },
-        { data: gradesData },
-        { data: commentsData },
+        { data: cls  },
+        { data: att  },
+        { data: hw   },
+        { data: gr   },
+        { data: comm },
       ] = await Promise.all([
-        supabase.from('classes').select('*').eq('date_key', dateKey).eq('class_name', selectedChild.class_name).order('time'),
-        supabase.from('attendance').select('*').eq('date_key', dateKey).eq('student_id', selectedChild.id),
-        supabase.from('homework').select('*').eq('class_name', selectedChild.class_name).eq('due_date', dateKey).order('subject'),
-        supabase.from('grades').select('*').eq('student_id', selectedChild.id).eq('date', dateKey),
+        supabase.from('classes').select('*').eq('date_key', key).eq('class_name', selectedChild.class_name).order('time'),
+        supabase.from('attendance').select('*').eq('date_key', key).eq('student_id', selectedChild.id),
+        supabase.from('homework').select('*').eq('class_name', selectedChild.class_name).eq('due_date', key).order('subject'),
+        supabase.from('grades').select('*').eq('student_id', selectedChild.id).eq('date', key),
         supabase.from('teacher_comments')
-          .select('*, teachers(full_name, subjects)')
+          .select('*, teachers(full_name,subjects)')
           .eq('student_id', selectedChild.id)
           .eq('is_visible_to_parent', true)
-          .gte('created_at', dateStart)
-          .lte('created_at', dateEnd),
+          .gte('created_at', start).lte('created_at', end),
       ]);
 
-      setDailyClasses(classesData || []);
+      setClasses(cls || []);
+      const map = {};
+      (att || []).forEach(a => { map[a.class_id] = a; });
+      setAttMap(map);
+      setHomework(hw || []);
+      setGrades(gr   || []);
+      setComments(comm || []);
 
-      const attMap = {};
-      attendanceData?.forEach(a => { attMap[a.class_id] = a; });
-      setAttendanceRecords(attMap);
+      if (hw?.length) {
+        const { data: sh } = await supabase.from('student_homework').select('*')
+          .eq('student_id', selectedChild.id).in('homework_id', hw.map(h => h.id));
+        const sm = {};
+        (sh || []).forEach(s => { sm[s.homework_id] = s; });
+        setHwStatus(sm);
+      } else setHwStatus({});
 
-      setHomeworkDueToday(homeworkData || []);
-      setTodayGrades(gradesData || []);
-      setTeacherComments(commentsData || []);
-
-      if (homeworkData?.length > 0) {
-        const { data: studentHw } = await supabase
-          .from('student_homework').select('*')
-          .eq('student_id', selectedChild.id)
-          .in('homework_id', homeworkData.map(h => h.id));
-        const statusMap = {};
-        studentHw?.forEach(sh => { statusMap[sh.homework_id] = sh; });
-        setStudentHomeworkStatus(statusMap);
-      } else {
-        setStudentHomeworkStatus({});
-      }
-
-      // Announcements (graceful)
       try {
-        const { data: annData } = await supabase
-          .from('announcements').select('*')
-          .eq('is_active', true)
-          .lte('created_at', dateEnd)
-          .order('created_at', { ascending: false })
-          .limit(3);
-        setAnnouncements(annData || []);
-      } catch { setAnnouncements([]); }
+        const { data: ann } = await supabase.from('announcements').select('*')
+          .eq('is_active', true).lte('created_at', end)
+          .order('created_at', { ascending: false }).limit(3);
+        setNotices(ann || []);
+      } catch { setNotices([]); }
 
-    } catch (err) {
-      console.error('ParentDailyView error:', err);
-    } finally {
-      setDataLoading(false);
-    }
-  }, [selectedChild, selectedDate, supabase]);
+    } catch (e) { console.error('DailyView error:', e); }
+    finally { setBusy(false); }
+  }, [selectedChild, date, supabase]);
 
-  useEffect(() => {
-    if (selectedChild) loadDailyData();
-  }, [selectedChild, selectedDate, loadDailyData]);
+  useEffect(() => { if (selectedChild) load(); }, [selectedChild, date, load]);
 
-  // ── Computed ──────────────────────────────────────────────────────────────
+  // ── computed ─────────────────────────────────────────────────────────────
 
-  const isToday      = selectedDate.toDateString() === new Date().toDateString();
-  const attList      = Object.values(attendanceRecords);
+  const isToday      = date.toDateString() === new Date().toDateString();
+  const attList      = Object.values(attMap);
   const presentCount = attList.filter(a => a.status === 'present').length;
   const lateCount    = attList.filter(a => a.status === 'late').length;
   const absentCount  = attList.filter(a => a.status === 'absent').length;
 
-  const getHwStatus = (hwId) => {
-    const s = studentHomeworkStatus[hwId];
-    if (!s) return { text: 'Pending', style: { backgroundColor: '#f3f4f6', color: '#6b7280' } };
+  const hwLabel = (id) => {
+    const s = hwStatus[id];
+    if (!s) return { text: 'Pending',      style: { backgroundColor: '#f1f5f9', color: '#64748b' } };
     switch (s.status) {
       case 'done':           return { text: '✓ Submitted',   style: { backgroundColor: '#dcfce7', color: '#15803d' } };
-      case 'partially_done': return { text: '◐ In Progress', style: { backgroundColor: '#ffedd5', color: '#c2410c' } };
-      case 'not_done':       return { text: '✗ Not Done',    style: { backgroundColor: '#ffe4e6', color: '#b91c1c' } };
-      default:               return { text: 'Pending',       style: { backgroundColor: '#f3f4f6', color: '#6b7280' } };
+      case 'partially_done': return { text: '◐ In Progress', style: { backgroundColor: '#fef9c3', color: '#a16207' } };
+      case 'not_done':       return { text: '✗ Not Done',    style: { backgroundColor: '#fee2e2', color: '#b91c1c' } };
+      default:               return { text: 'Pending',       style: { backgroundColor: '#f1f5f9', color: '#64748b' } };
     }
   };
 
-  const prevDay = () => { const d = new Date(selectedDate); d.setDate(d.getDate() - 1); setSelectedDate(d); };
-  const nextDay = () => { const d = new Date(selectedDate); d.setDate(d.getDate() + 1); setSelectedDate(d); };
+  const prev = () => { const d = new Date(date); d.setDate(d.getDate()-1); setDate(d); };
+  const next = () => { const d = new Date(date); d.setDate(d.getDate()+1); setDate(d); };
 
-  const formatDateFull = (d) => d.toLocaleDateString('en-GB', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  });
+  const fmt  = (d) => d.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
 
-  // ── Guards ────────────────────────────────────────────────────────────────
+  // ── guards ───────────────────────────────────────────────────────────────
 
   if (childLoading) return (
     <div className="flex items-center justify-center min-h-[400px]">
       <div className="w-12 h-12 border-4 rounded-full animate-spin"
-        style={{ borderColor: theme.withAlpha(0.3), borderTopColor: 'transparent' }} />
+        style={{ borderColor: theme.withAlpha(.2), borderTopColor: 'transparent' }} />
     </div>
   );
 
-  if (children.length === 0) return (
-    <div className="bg-white rounded-2xl shadow-lg p-12 text-center border border-gray-200">
-      <Users size={48} className="mx-auto text-gray-300 mb-4" />
-      <p className="text-gray-600 text-lg font-medium">No student data available</p>
-      <p className="text-gray-400 text-sm mt-2">Please contact the school administration.</p>
+  if (!children.length) return (
+    <div className="bg-white rounded-2xl border border-slate-100 p-16 text-center" style={{ boxShadow: CARD_SHADOW }}>
+      <Users size={40} className="mx-auto text-slate-200 mb-4" />
+      <p className="text-slate-700 font-semibold">No student linked to your account</p>
+      <p className="text-slate-400 text-sm mt-1">Please contact the school administration.</p>
     </div>
   );
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-5">
 
-      {/* ══ GRADIENT HEADER ════════════════════════════════════════════════ */}
-      <div className="rounded-2xl shadow-lg p-6 md:p-8 text-white relative overflow-hidden"
-        style={theme.gradientStyle}>
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32 pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-5 rounded-full -ml-24 -mb-24 pointer-events-none" />
+      {/* ── HEADER ─────────────────────────────────────────────────────────── */}
+      <div className="rounded-2xl p-6 md:p-8 text-white relative overflow-hidden"
+        style={{ ...theme.gradientStyle, boxShadow: '0 4px 24px rgba(15,23,42,.14), 0 1px 4px rgba(15,23,42,.06)' }}>
+        <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/[.06] pointer-events-none" />
+        <div className="absolute -bottom-20 -left-12 w-56 h-56 rounded-full bg-black/[.04] pointer-events-none" />
 
         <div className="relative z-10">
-          {/* Title row */}
-          <div className="flex items-start justify-between mb-5 gap-4">
+          {/* title row */}
+          <div className="flex items-start justify-between gap-4 mb-5">
             <div>
-              <p className="text-white/70 text-sm font-medium">Parent Portal</p>
-              <h1 className="text-2xl md:text-3xl font-bold mt-0.5">Daily View</h1>
-              <p className="text-white/80 text-sm mt-1">
-                {selectedChild?.name} · Class {selectedChild?.class_name}
-              </p>
+              <p className="text-white/60 text-xs font-medium mb-1">Parent Portal</p>
+              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Daily View</h1>
+              <p className="text-white/75 text-sm mt-1">{selectedChild?.name} · Class {selectedChild?.class_name}</p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               {theme.hasActiveTerm && (
-                <div className="hidden sm:flex bg-white/15 backdrop-blur px-3 py-1.5 rounded-lg items-center gap-1.5">
-                  <TermIcon size={14} />
-                  <span className="text-xs font-medium">{theme.name} Term</span>
+                <div className="hidden sm:flex bg-white/[.12] backdrop-blur-sm border border-white/[.15] px-3 py-1.5 rounded-xl items-center gap-1.5">
+                  <TermIcon size={13} className="opacity-80" />
+                  <span className="text-xs font-medium opacity-90">{theme.name} Term</span>
                 </div>
               )}
               {children.length > 1 && (
                 <div className="relative">
-                  <select
-                    value={selectedChild?.id || ''}
+                  <select value={selectedChild?.id || ''}
                     onChange={e => setSelectedChild(children.find(c => c.id === e.target.value))}
-                    className="appearance-none bg-white/20 backdrop-blur border border-white/30 rounded-xl px-3 py-2 pr-8 text-sm font-medium text-white focus:outline-none cursor-pointer"
-                  >
-                    {children.map(c => (
-                      <option key={c.id} value={c.id} className="text-gray-900">{c.name} — {c.class_name}</option>
-                    ))}
+                    className="appearance-none bg-white/[.12] backdrop-blur-sm border border-white/[.2] rounded-xl px-3 py-2 pr-8 text-xs font-medium text-white focus:outline-none cursor-pointer">
+                    {children.map(c => <option key={c.id} value={c.id} className="text-slate-900">{c.name} — {c.class_name}</option>)}
                   </select>
-                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-white/70" size={14} />
+                  <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-70" />
                 </div>
               )}
             </div>
           </div>
 
-          {/* Date navigation */}
+          {/* date nav */}
           <div className="flex items-center gap-3 mb-4">
-            <button onClick={prevDay}
-              className="w-9 h-9 bg-white/15 hover:bg-white/25 backdrop-blur rounded-xl flex items-center justify-center transition-colors flex-shrink-0">
-              <ChevronLeft size={18} />
+            <button onClick={prev}
+              className="w-9 h-9 bg-white/[.12] hover:bg-white/[.2] border border-white/[.15] rounded-xl flex items-center justify-center transition-colors flex-shrink-0">
+              <ChevronLeft size={17} />
             </button>
             <div className="flex-1 text-center">
-              <p className="font-bold capitalize text-sm md:text-base">{formatDateFull(selectedDate)}</p>
-              {isToday ? (
-                <span className="inline-flex items-center gap-1.5 mt-1 text-xs font-semibold px-3 py-0.5 rounded-full bg-white/20">
-                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                  Today
-                </span>
-              ) : (
-                <button onClick={() => setSelectedDate(new Date())}
-                  className="mt-1 text-xs text-white/70 hover:text-white transition-colors underline underline-offset-2">
-                  ← Back to today
-                </button>
-              )}
+              <p className="font-semibold tracking-tight capitalize text-sm md:text-base">{fmt(date)}</p>
+              {isToday
+                ? <span className="inline-flex items-center gap-1.5 mt-1 text-xs font-medium px-3 py-0.5 rounded-full bg-white/[.15]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse" />Today
+                  </span>
+                : <button onClick={() => setDate(new Date())}
+                    className="mt-1 text-xs text-white/60 hover:text-white/90 transition-colors underline underline-offset-2">
+                    ← Back to today
+                  </button>
+              }
             </div>
-            <button onClick={nextDay}
-              className="w-9 h-9 bg-white/15 hover:bg-white/25 backdrop-blur rounded-xl flex items-center justify-center transition-colors flex-shrink-0">
-              <ChevronRight size={18} />
+            <button onClick={next}
+              className="w-9 h-9 bg-white/[.12] hover:bg-white/[.2] border border-white/[.15] rounded-xl flex items-center justify-center transition-colors flex-shrink-0">
+              <ChevronRight size={17} />
             </button>
           </div>
 
-          {/* Daily stats */}
+          {/* daily stats */}
           <div className="grid grid-cols-4 gap-2">
             {[
-              { label: 'Classes',  value: dailyClasses.length },
-              { label: 'Present',  value: presentCount },
-              { label: 'Late',     value: lateCount },
-              { label: 'Absent',   value: absentCount },
-            ].map((s, i) => (
-              <div key={i} className="bg-white/10 backdrop-blur rounded-xl p-2.5 text-center border border-white/20">
-                <p className="text-xl font-bold leading-none">{s.value}</p>
-                <p className="text-[10px] text-white/70 mt-1 font-medium uppercase tracking-wide">{s.label}</p>
+              { l:'Classes',  v: classes.length },
+              { l:'Present',  v: presentCount   },
+              { l:'Late',     v: lateCount       },
+              { l:'Absent',   v: absentCount     },
+            ].map(({ l, v }, i) => (
+              <div key={i} className="bg-white/[.10] backdrop-blur-sm border border-white/[.12] rounded-xl px-2 py-3 text-center">
+                <p className="text-xl font-bold leading-none">{v}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wide opacity-60 mt-1.5">{l}</p>
               </div>
             ))}
           </div>
-
-          {dataLoading && (
-            <div className="absolute bottom-4 right-4">
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            </div>
-          )}
         </div>
+        {busy && <div className="absolute bottom-4 right-4 w-4 h-4 border-2 border-white/25 border-t-white rounded-full animate-spin" />}
       </div>
 
-      {/* ══ MAIN CONTENT ════════════════════════════════════════════════════ */}
-      {!dataLoading && (
+      {/* ── CONTENT ────────────────────────────────────────────────────────── */}
+      {!busy && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
 
-          {/* ═══ LEFT: SCHEDULE + ANNOUNCEMENTS ════════════════════════════ */}
+          {/* ── LEFT: SCHEDULE + NOTICES ─────────────────────────────────── */}
           <div className="lg:col-span-3 space-y-5">
 
-            {/* Schedule & Attendance */}
-            <Card>
-              <CardHead icon={BookOpen} title="Today's Schedule" count={dailyClasses.length} color={theme.color} />
+            {/* Schedule */}
+            <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden" style={{ boxShadow: CARD_SHADOW }}>
+              <SectionLabel>Today's schedule{classes.length > 0 && ` · ${classes.length} classes`}</SectionLabel>
 
-              {dailyClasses.length === 0 ? (
-                <EmptyState icon={Calendar} message="No classes scheduled for this day" />
-              ) : (
-                <div className="px-5 py-4">
-                  <div className="relative">
-                    {dailyClasses.length > 1 && (
-                      <div className="absolute top-6 bottom-6 w-px bg-gray-100" style={{ left: '62px' }} />
-                    )}
-                    <div className="space-y-3">
-                      {dailyClasses.map((cls) => {
-                        const att = attendanceRecords[cls.class_id];
-                        const cfg = ATT[att?.status] || ATT.default;
-                        return (
-                          <div key={cls.id} className="flex items-start gap-3">
-                            <div className="w-12 flex-shrink-0 text-right pt-3">
-                              <span className="text-[11px] font-bold text-gray-400 tabular-nums">{cls.time || '—'}</span>
-                            </div>
-                            <div className="flex-shrink-0 pt-2.5 z-10">
-                              <div className="w-4 h-4 rounded-full border-2 border-white shadow-sm"
-                                style={{ backgroundColor: cfg.dot }} />
-                            </div>
-                            <div className="flex-1 min-w-0 rounded-xl border p-3.5 transition-all hover:shadow-sm"
-                              style={{ backgroundColor: cfg.bg, borderColor: cfg.border }}>
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-bold text-gray-900 text-sm leading-tight">{cls.subject}</p>
-                                  {cls.title && cls.title !== cls.subject && (
-                                    <p className="text-[11px] text-gray-400 mt-0.5">{cls.title}</p>
-                                  )}
-                                </div>
-                                <StatusPill status={att?.status} />
+              {classes.length === 0
+                ? <div className="pb-10"><Empty icon={Calendar} text="No classes scheduled for this day" /></div>
+                : (
+                  <div className="px-6 pb-6">
+                    <div className="relative">
+                      {classes.length > 1 && (
+                        <div className="absolute top-5 bottom-5 w-px bg-slate-100" style={{ left: '60px' }} />
+                      )}
+                      <div className="space-y-3">
+                        {classes.map(cls => {
+                          const a   = attMap[cls.class_id];
+                          const cfg = ATT[a?.status] || ATT.default;
+                          return (
+                            <div key={cls.id} className="flex items-start gap-3">
+                              {/* time */}
+                              <div className="w-12 flex-shrink-0 text-right pt-3.5">
+                                <span className="text-[11px] font-semibold text-slate-400 tabular-nums">{cls.time || '—'}</span>
                               </div>
-                              {att?.comment && (
-                                <div className="mt-2.5 pt-2.5 border-t flex items-start gap-1.5"
-                                  style={{ borderColor: `${cfg.dot}30` }}>
-                                  <MessageSquare size={11} style={{ color: cfg.color }} className="flex-shrink-0 mt-0.5" />
-                                  <p className="text-xs text-gray-600 leading-snug">{att.comment}</p>
+                              {/* dot */}
+                              <div className="flex-shrink-0 pt-3 z-10">
+                                <div className="w-4 h-4 rounded-full border-2 border-white shadow-sm"
+                                  style={{ backgroundColor: cfg.dot }} />
+                              </div>
+                              {/* card */}
+                              <div className="flex-1 min-w-0 rounded-xl border p-4 transition-all"
+                                style={{ backgroundColor: cfg.cardBg, borderColor: cfg.cardBorder }}>
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="font-semibold text-slate-900 text-sm leading-snug">{cls.subject}</p>
+                                    {cls.title && cls.title !== cls.subject && (
+                                      <p className="text-xs text-slate-400 mt-0.5">{cls.title}</p>
+                                    )}
+                                  </div>
+                                  <StatusPill status={a?.status} />
                                 </div>
-                              )}
+                                {a?.comment && (
+                                  <div className="mt-3 pt-3 border-t flex items-start gap-2"
+                                    style={{ borderColor: `${cfg.dot}25` }}>
+                                    <MessageSquare size={11} style={{ color: cfg.noteColor }} className="flex-shrink-0 mt-0.5" />
+                                    <p className="text-xs text-slate-600 leading-snug">{a.comment}</p>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </Card>
+                )
+              }
+            </div>
 
-            {/* Announcements — only when data exists */}
-            {announcements.length > 0 && (
-              <Card>
-                <CardHead icon={Bell} title="School Announcements" count={announcements.length} color="#0ea5e9" />
-                <div className="p-4 space-y-3">
-                  {announcements.map(ann => (
-                    <div key={ann.id} className="p-3.5 rounded-xl bg-sky-50 border border-sky-100">
-                      <p className="font-semibold text-gray-900 text-sm">{ann.title}</p>
-                      {ann.content && <p className="text-xs text-gray-500 mt-1 leading-relaxed">{ann.content}</p>}
-                      {ann.created_at && (
-                        <p className="text-[10px] text-gray-400 mt-2">
-                          {new Date(ann.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                        </p>
-                      )}
+            {/* Notices */}
+            {notices.length > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden" style={{ boxShadow: CARD_SHADOW }}>
+                <SectionLabel>Announcements</SectionLabel>
+                <div className="px-6 pb-6 space-y-3">
+                  {notices.map(n => (
+                    <div key={n.id} className="p-4 rounded-xl bg-sky-50 border border-sky-100">
+                      <p className="font-semibold text-slate-800 text-sm">{n.title}</p>
+                      {n.content && <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">{n.content}</p>}
                     </div>
                   ))}
                 </div>
-              </Card>
+              </div>
             )}
           </div>
 
-          {/* ═══ RIGHT: HOMEWORK · GRADES · COMMENTS · ACTIONS ══════════════ */}
+          {/* ── RIGHT: HOMEWORK · GRADES · COMMENTS · ACTIONS ────────────── */}
           <div className="lg:col-span-2 space-y-5">
 
-            {/* Homework due */}
-            <Card>
-              <CardHead icon={ClipboardList} title="Homework Due" count={homeworkDueToday.length} color="#f97316" />
-              {homeworkDueToday.length === 0 ? (
-                <EmptyState icon={FileText} message="No homework due today" />
-              ) : (
-                <div className="p-4 space-y-2.5">
-                  {homeworkDueToday.map(hw => {
-                    const hwStatus = getHwStatus(hw.id);
-                    return (
-                      <div key={hw.id} className="rounded-xl border border-orange-100 bg-orange-50 p-3.5">
-                        <div className="flex items-center justify-between gap-2 mb-1">
-                          <span className="text-[10px] font-bold text-orange-600 uppercase tracking-wide">{hw.subject}</span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={hwStatus.style}>
-                            {hwStatus.text}
-                          </span>
+            {/* Homework */}
+            <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden" style={{ boxShadow: CARD_SHADOW }}>
+              <SectionLabel>Homework due{homework.length > 0 && ` · ${homework.length}`}</SectionLabel>
+              {homework.length === 0
+                ? <div className="pb-10"><Empty icon={FileText} text="No homework due today" /></div>
+                : (
+                  <div className="px-6 pb-6 space-y-2.5">
+                    {homework.map(h => {
+                      const s = hwLabel(h.id);
+                      return (
+                        <div key={h.id} className="rounded-xl bg-amber-50 border border-amber-100 p-4">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wide">{h.subject}</span>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0" style={s.style}>{s.text}</span>
+                          </div>
+                          <p className="text-sm font-medium text-slate-800 leading-snug">{h.title}</p>
+                          {h.description && <p className="text-xs text-slate-400 mt-1 line-clamp-2">{h.description}</p>}
                         </div>
-                        <p className="text-sm font-semibold text-gray-800 leading-snug">{hw.title}</p>
-                        {hw.description && (
-                          <p className="text-xs text-gray-400 mt-0.5 leading-snug line-clamp-2">{hw.description}</p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Card>
+                      );
+                    })}
+                  </div>
+                )
+              }
+            </div>
 
-            {/* Today's grades — only when data exists */}
-            {todayGrades.length > 0 && (
-              <Card>
-                <CardHead icon={Award} title="Today's Grades" count={todayGrades.length} color="#8b5cf6" />
-                <div className="p-4 space-y-2.5">
-                  {todayGrades.map(grade => {
-                    const pct = Math.round((grade.grade / grade.max_grade) * 100);
-                    const gc  = pct >= 80 ? '#15803d' : pct >= 60 ? '#c2410c' : '#b91c1c';
-                    const gbg = pct >= 80 ? '#dcfce7' : pct >= 60 ? '#ffedd5' : '#ffe4e6';
+            {/* Grades */}
+            {grades.length > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden" style={{ boxShadow: CARD_SHADOW }}>
+                <SectionLabel>Today's grades · {grades.length}</SectionLabel>
+                <div className="px-6 pb-6 space-y-2.5">
+                  {grades.map(g => {
+                    const pct = Math.round((g.grade / g.max_grade) * 100);
+                    const [gc, gbg] = pct >= 80 ? ['#15803d','#dcfce7'] : pct >= 60 ? ['#a16207','#fef9c3'] : ['#b91c1c','#fee2e2'];
                     return (
-                      <div key={grade.id} className="flex items-center gap-3 p-3.5 rounded-xl bg-violet-50 border border-violet-100">
+                      <div key={g.id} className="flex items-center gap-3 p-4 rounded-xl bg-violet-50 border border-violet-100">
                         <div className="flex-1 min-w-0">
-                          <span className="text-[10px] font-bold text-violet-600 uppercase tracking-wide block">
-                            {grade.subject}
-                            {grade.assessment_type && <span className="font-normal text-gray-400 normal-case tracking-normal ml-1">· {grade.assessment_type}</span>}
+                          <span className="text-[10px] font-bold text-violet-600 uppercase tracking-wide">
+                            {g.subject}{g.assessment_type && <span className="font-normal text-slate-400 normal-case ml-1">· {g.assessment_type}</span>}
                           </span>
-                          <p className="text-sm font-semibold text-gray-800 truncate mt-0.5">{grade.assessment_title}</p>
+                          <p className="text-sm font-medium text-slate-800 truncate mt-0.5">{g.assessment_title}</p>
                         </div>
                         <div className="text-center px-3 py-2 rounded-xl flex-shrink-0" style={{ backgroundColor: gbg }}>
                           <p className="text-base font-bold leading-none" style={{ color: gc }}>
-                            {grade.grade}<span className="text-[10px] font-normal opacity-50">/{grade.max_grade}</span>
+                            {g.grade}<span className="text-[10px] font-normal opacity-40">/{g.max_grade}</span>
                           </p>
-                          <p className="text-[10px] font-bold mt-0.5" style={{ color: gc }}>{pct}%</p>
+                          <p className="text-[10px] font-semibold mt-0.5" style={{ color: gc }}>{pct}%</p>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              </Card>
+              </div>
             )}
 
             {/* Teacher comments */}
-            <Card>
-              <CardHead icon={MessageSquare} title="Teacher Comments" count={teacherComments.length} color="#7c3aed" />
-              {teacherComments.length === 0 ? (
-                <EmptyState icon={MessageSquare} message="No comments for this day" />
-              ) : (
-                <div className="p-4 space-y-3">
-                  {teacherComments.map(comment => {
-                    const cfg         = COMMENT_CFG[comment.comment_type] || COMMENT_CFG.neutral;
-                    const teacherName = comment.teachers?.full_name || 'Teacher';
-                    const subject     = comment.teachers?.subjects?.[0] || '';
-                    return (
-                      <div key={comment.id} className="p-3.5 rounded-xl border"
-                        style={{ backgroundColor: cfg.bg, borderColor: cfg.border }}>
-                        <div className="flex items-center gap-2.5 mb-2.5">
-                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
-                            style={{ backgroundColor: cfg.color }}>
-                            {teacherName.split(' ').map(n => n[0]).join('').slice(0, 2)}
+            <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden" style={{ boxShadow: CARD_SHADOW }}>
+              <SectionLabel>Teacher comments{comments.length > 0 && ` · ${comments.length}`}</SectionLabel>
+              {comments.length === 0
+                ? <div className="pb-10"><Empty icon={MessageSquare} text="No comments for this day" /></div>
+                : (
+                  <div className="px-6 pb-6 space-y-3">
+                    {comments.map(c => {
+                      const cfg  = COMMENT[c.comment_type] || COMMENT.neutral;
+                      const name = c.teachers?.full_name || 'Teacher';
+                      const subj = c.teachers?.subjects?.[0] || '';
+                      return (
+                        <div key={c.id} className="p-4 rounded-xl border"
+                          style={{ backgroundColor: cfg.bg, borderColor: cfg.border }}>
+                          <div className="flex items-center gap-2.5 mb-3">
+                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                              style={{ backgroundColor: cfg.color }}>
+                              {name.split(' ').map(n => n[0]).join('').slice(0,2)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-slate-900 truncate">{name}</p>
+                              {subj && <p className="text-[10px] text-slate-400">{subj}</p>}
+                            </div>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0"
+                              style={{ backgroundColor: `${cfg.color}18`, color: cfg.color }}>
+                              {cfg.label}
+                            </span>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-gray-900 leading-none truncate">{teacherName}</p>
-                            {subject && <p className="text-[10px] text-gray-400 leading-none mt-0.5">{subject}</p>}
-                          </div>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0"
-                            style={{ backgroundColor: `${cfg.color}18`, color: cfg.color }}>
-                            {cfg.label}
-                          </span>
+                          <p className="text-sm text-slate-700 leading-relaxed">{c.comment}</p>
                         </div>
-                        <p className="text-sm text-gray-700 leading-relaxed">{comment.comment}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Card>
+                      );
+                    })}
+                  </div>
+                )
+              }
+            </div>
 
-            {/* Quick Actions */}
-            <Card>
-              <CardHead icon={Zap} title="Quick Actions" color="#9ca3af" />
-              <div className="p-4 grid grid-cols-2 gap-2.5">
+            {/* Quick actions */}
+            <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden" style={{ boxShadow: CARD_SHADOW }}>
+              <SectionLabel>Quick actions</SectionLabel>
+              <div className="px-6 pb-6 grid grid-cols-2 gap-2">
                 {[
-                  { icon: LayoutDashboard, label: 'Overview',     page: 'home',            color: theme.color },
-                  { icon: TrendingUp,      label: 'Grades',       page: 'parent-grades',   color: '#8b5cf6'  },
-                  { icon: Calendar,        label: 'Calendar',     page: 'parent-calendar', color: '#0ea5e9'  },
-                  { icon: ClipboardList,   label: 'All Homework', page: 'parent-homework', color: '#f97316'  },
-                ].map(({ icon: Icon, label, page, color }) => (
-                  <button key={page}
-                    onClick={() => setCurrentPage?.(page)}
-                    className="flex flex-col items-center gap-2 py-4 rounded-xl border border-gray-100 hover:border-gray-200 bg-gray-50 hover:bg-white hover:shadow-sm transition-all group">
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${color}12` }}>
-                      <Icon size={16} style={{ color }} />
+                  { Icon: LayoutDashboard, label: 'Overview',     page: 'home',            color: theme.color },
+                  { Icon: TrendingUp,      label: 'Grades',       page: 'parent-grades',   color: '#7c3aed'  },
+                  { Icon: Calendar,        label: 'Calendar',     page: 'parent-calendar', color: '#0891b2'  },
+                  { Icon: ClipboardList,   label: 'All Homework', page: 'parent-homework', color: '#ea580c'  },
+                ].map(({ Icon, label, page, color }) => (
+                  <button key={page} onClick={() => setCurrentPage?.(page)}
+                    className="flex flex-col items-center gap-2 py-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-white hover:shadow-sm transition-all group">
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${color}10` }}>
+                      <Icon size={15} style={{ color }} />
                     </div>
-                    <span className="text-xs font-semibold text-gray-500 group-hover:text-gray-800 transition-colors text-center leading-tight">
-                      {label}
-                    </span>
+                    <span className="text-[11px] font-semibold text-slate-500 group-hover:text-slate-700 transition-colors">{label}</span>
                   </button>
                 ))}
               </div>
-            </Card>
+            </div>
 
           </div>
         </div>
       )}
 
-      {/* ══ TERM FOOTER ═══════════════════════════════════════════════════════ */}
+      {/* ── TERM FOOTER ─────────────────────────────────────────────────────── */}
       {theme.hasActiveTerm && (
-        <div className="rounded-xl px-4 py-3 flex items-center justify-between"
-          style={{ backgroundColor: theme.withAlpha(0.1), borderWidth: '1px', borderColor: theme.withAlpha(0.2) }}>
+        <div className="flex items-center justify-between rounded-xl px-4 py-3"
+          style={{ backgroundColor: theme.withAlpha(.08), border: `1px solid ${theme.withAlpha(.15)}` }}>
           <div className="flex items-center gap-2">
-            <TermIcon size={14} style={theme.textStyle} />
-            <span className="text-xs font-semibold" style={theme.textStyle}>
-              {theme.name} Term {theme.activeTerm?.academic_year}
-            </span>
-            <span className="text-[10px] text-gray-500 hidden sm:inline">
-              {new Date(theme.activeTerm?.start_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+            <TermIcon size={13} style={theme.textStyle} />
+            <span className="text-xs font-semibold" style={theme.textStyle}>{theme.name} Term {theme.activeTerm?.academic_year}</span>
+            <span className="text-[10px] text-slate-400 hidden sm:inline">
+              {new Date(theme.activeTerm?.start_date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
               {' – '}
-              {new Date(theme.activeTerm?.end_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              {new Date(theme.activeTerm?.end_date  +'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-24 rounded-full h-1.5 hidden sm:block" style={{ backgroundColor: theme.withAlpha(0.2) }}>
-              <div className="h-1.5 rounded-full" style={{ width: `${theme.progress}%`, backgroundColor: theme.color }} />
+            <div className="w-24 h-1 rounded-full hidden sm:block" style={{ backgroundColor: theme.withAlpha(.15) }}>
+              <div className="h-1 rounded-full" style={{ width:`${theme.progress}%`, backgroundColor: theme.color }} />
             </div>
-            <span className="text-[10px] font-medium" style={theme.textStyle}>{theme.daysRemaining}d left</span>
+            <span className="text-[10px] font-semibold" style={theme.textStyle}>{theme.daysRemaining}d left</span>
           </div>
         </div>
       )}

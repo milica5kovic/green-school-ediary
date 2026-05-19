@@ -1,13 +1,23 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ChevronDown, ArrowLeft, ClipboardList, CheckCircle, Clock, XCircle,
-  AlertTriangle, Calendar, BookOpen
+  AlertTriangle, BookOpen
 } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
 import { useParentChildrenCtx } from '../context/ParentChildrenContext';
 import { useBranding } from '../../../../core/context/BrandingContext';
+
+// ═══════════════════════════════════════════════════════════════
+// DESIGN TOKENS
+// ═══════════════════════════════════════════════════════════════
+const CARD_SHADOW = '0 1px 2px rgba(15,23,42,.04), 0 4px 16px rgba(15,23,42,.06)';
+const HEADER_SHADOW = '0 4px 24px rgba(15,23,42,.14), 0 1px 4px rgba(15,23,42,.06)';
+
+const SectionLabel = ({ children, className = '' }) => (
+  <p className={`text-[10px] font-semibold uppercase tracking-widest text-slate-400 ${className}`}>{children}</p>
+);
 
 // ═══════════════════════════════════════════════════════════════
 // PARENT HOMEWORK PAGE - Uses useTermTheme for dynamic colors
@@ -19,9 +29,9 @@ const ChildSelector = ({ children, selectedChild, setSelectedChild }) => {
     <div className="relative">
       <select value={selectedChild?.id || ''}
         onChange={(e) => setSelectedChild(children.find(c => c.id === e.target.value))}
-        className="appearance-none bg-white/20 backdrop-blur border border-white/30 rounded-xl text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-white/50 cursor-pointer px-4 py-2.5 pr-10">
+        className="appearance-none bg-white/20 backdrop-blur-sm border border-white/30 rounded-xl text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-white/50 cursor-pointer px-4 py-2.5 pr-10">
         {children.map(c => (
-          <option key={c.id} value={c.id} className="text-gray-900">{c.name} — {c.class_name}</option>
+          <option key={c.id} value={c.id} className="text-slate-900">{c.name} — {c.class_name}</option>
         ))}
       </select>
       <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none" size={14} />
@@ -30,9 +40,9 @@ const ChildSelector = ({ children, selectedChild, setSelectedChild }) => {
 };
 
 const STATUS_CONFIG = {
-  done: { label: 'Done', icon: CheckCircle, color: 'emerald', bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', badge: 'bg-emerald-100 text-emerald-700' },
-  partially_done: { label: 'Partial', icon: Clock, color: 'amber', bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-700' },
-  not_done: { label: 'Not Done', icon: XCircle, color: 'red', bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', badge: 'bg-red-100 text-red-700' },
+  done:           { label: 'Done',     Icon: CheckCircle, cardBg: '#f0fdf4', cardBorder: '#bbf7d0', iconBg: '#dcfce7', iconColor: '#16a34a', badgeBg: '#dcfce7', badgeText: '#15803d' },
+  partially_done: { label: 'Partial',  Icon: Clock,       cardBg: '#fefce8', cardBorder: '#fde68a', iconBg: '#fef9c3', iconColor: '#ca8a04', badgeBg: '#fef9c3', badgeText: '#a16207' },
+  not_done:       { label: 'Not Done', Icon: XCircle,     cardBg: '#fff1f2', cardBorder: '#fecdd3', iconBg: '#fee2e2', iconColor: '#dc2626', badgeBg: '#fee2e2', badgeText: '#b91c1c' },
 };
 
 const ParentHomeworkPage = () => {
@@ -42,7 +52,6 @@ const ParentHomeworkPage = () => {
   const theme = useTermTheme();
   const TermIcon = theme.icon;
 
-  // Helper to get term info (not a hook)
   const getTermInfo = (termNumber) => {
     const colorKey = `term${termNumber}Color`;
     const nameKey = `term${termNumber}Name`;
@@ -71,14 +80,12 @@ const ParentHomeworkPage = () => {
       const childId = selectedChild.id;
       const termNum = selectedTerm.term_number;
 
-      // Fetch homework for this class and term
       let query = supabase.from('homework').select('*').eq('class_name', className);
       query = query.eq('term_number', termNum);
       const { data: hw } = await query.order('due_date', { ascending: false });
 
       if (!hw || hw.length === 0) { setHomework([]); return; }
 
-      // Fetch student's completion status
       const hwIds = hw.map(h => h.id);
       const { data: sh } = await supabase.from('student_homework')
         .select('homework_id, status')
@@ -138,28 +145,28 @@ const ParentHomeworkPage = () => {
   return (
     <div className="space-y-6">
 
-      {/* ═══ HEADER - Dynamic gradient ═══════════════════════ */}
-      <div className="rounded-2xl shadow-lg p-6 md:p-8 text-white relative overflow-hidden"
-        style={theme.gradientStyle}>
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-5 rounded-full -ml-24 -mb-24" />
+      {/* ═══ HEADER ══════════════════════════════════════════ */}
+      <div className="rounded-2xl p-6 md:p-8 text-white relative overflow-hidden"
+        style={{ ...theme.gradientStyle, boxShadow: HEADER_SHADOW }}>
+        <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/[.06] pointer-events-none" />
+        <div className="absolute -bottom-20 -left-12 w-56 h-56 rounded-full bg-black/[.04] pointer-events-none" />
 
         <div className="relative z-10">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-3">
               <button onClick={() => setCurrentPage && setCurrentPage('home')}
-                className="bg-white/15 hover:bg-white/25 backdrop-blur p-2 rounded-lg transition-colors">
+                className="bg-white/15 hover:bg-white/25 backdrop-blur-sm p-2 rounded-xl transition-colors">
                 <ArrowLeft size={18} />
               </button>
               <div>
-                <p className="text-white/70 text-sm">Homework Tracker</p>
-                <h1 className="text-2xl md:text-3xl font-bold">All Homework</h1>
+                <p className="text-white/60 text-xs font-medium uppercase tracking-wide">Homework Tracker</p>
+                <h1 className="text-2xl md:text-3xl font-semibold tracking-tight mt-0.5">All Homework</h1>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
               {theme.hasActiveTerm && (
-                <div className="hidden sm:flex bg-white/15 backdrop-blur px-3 py-1.5 rounded-lg items-center gap-1.5">
+                <div className="hidden sm:flex bg-white/[.12] backdrop-blur-sm px-3 py-1.5 rounded-lg items-center gap-1.5 border border-white/[.12]">
                   <TermIcon size={14} />
                   <span className="text-xs font-medium">{theme.name} Term</span>
                 </div>
@@ -168,29 +175,26 @@ const ParentHomeworkPage = () => {
             </div>
           </div>
 
-          {/* Stats in header */}
+          {/* Stats tiles */}
           <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
             {[
-              { label: 'Total', value: stats.total, icon: ClipboardList },
-              { label: 'Done', value: stats.done, icon: CheckCircle },
-              { label: 'Partial', value: stats.partial, icon: Clock },
-              { label: 'Not Done', value: stats.notDone, icon: XCircle },
-              { label: 'Rate', value: `${stats.rate}%`, icon: BookOpen },
-            ].map(s => {
-              const I = s.icon;
-              return (
-                <div key={s.label} className="bg-white/10 backdrop-blur rounded-xl p-3 border border-white/20 text-center">
-                  <I size={14} className="mx-auto text-white/60 mb-1" />
-                  <p className="text-xl font-bold">{s.value}</p>
-                  <p className="text-[10px] text-white/70">{s.label}</p>
-                </div>
-              );
-            })}
+              { label: 'Total', value: stats.total, Icon: ClipboardList },
+              { label: 'Done', value: stats.done, Icon: CheckCircle },
+              { label: 'Partial', value: stats.partial, Icon: Clock },
+              { label: 'Not Done', value: stats.notDone, Icon: XCircle },
+              { label: 'Rate', value: `${stats.rate}%`, Icon: BookOpen },
+            ].map(s => (
+              <div key={s.label} className="bg-white/[.10] backdrop-blur-sm rounded-xl p-3 border border-white/[.12] text-center">
+                <s.Icon size={14} className="mx-auto text-white/60 mb-1" />
+                <p className="text-xl font-bold tracking-tight">{s.value}</p>
+                <p className="text-[10px] text-white/60 font-medium uppercase tracking-wide mt-0.5">{s.label}</p>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* ═══ TERM TABS - Dynamic colors ═══════════════════════ */}
+      {/* ═══ TERM TABS ════════════════════════════════════════ */}
       {terms && terms.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-1">
           {terms.map(t => {
@@ -203,11 +207,12 @@ const ParentHomeworkPage = () => {
                 style={active ? {
                   background: `linear-gradient(135deg, ${termInfo.color} 0%, ${termInfo.color}dd 100%)`,
                   color: 'white',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                  boxShadow: '0 2px 8px rgba(15,23,42,.12)'
                 } : {
                   backgroundColor: 'white',
-                  border: '1px solid #e5e7eb',
-                  color: '#4b5563'
+                  border: '1px solid #e2e8f0',
+                  color: '#475569',
+                  boxShadow: CARD_SHADOW
                 }}>
                 {termInfo.name}
               </button>
@@ -218,13 +223,12 @@ const ParentHomeworkPage = () => {
 
       {/* ═══ FILTERS ══════════════════════════════════════════ */}
       <div className="flex flex-wrap gap-2">
-        {/* Status filters */}
         {[
-          { key: 'all', label: 'All', count: stats.total },
-          { key: 'done', label: 'Done', count: stats.done },
-          { key: 'partially_done', label: 'Partial', count: stats.partial },
-          { key: 'not_done', label: 'Not Done', count: stats.notDone },
-          { key: 'overdue', label: 'Overdue', count: stats.overdue },
+          { key: 'all',           label: 'All',      count: stats.total },
+          { key: 'done',          label: 'Done',     count: stats.done },
+          { key: 'partially_done',label: 'Partial',  count: stats.partial },
+          { key: 'not_done',      label: 'Not Done', count: stats.notDone },
+          { key: 'overdue',       label: 'Overdue',  count: stats.overdue },
         ].map(f => (
           <button key={f.key}
             onClick={() => setStatusFilter(f.key)}
@@ -232,20 +236,18 @@ const ParentHomeworkPage = () => {
             style={statusFilter === f.key ? {
               backgroundColor: f.key === 'overdue' ? '#ef4444' : theme.color,
               color: 'white',
-              boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+              boxShadow: '0 2px 8px rgba(15,23,42,.12)'
             } : {
               backgroundColor: 'white',
-              border: '1px solid #e5e7eb',
-              color: '#4b5563'
+              border: '1px solid #e2e8f0',
+              color: '#475569'
             }}>
-            {f.label} <span className="opacity-70">({f.count})</span>
+            {f.label} <span className="opacity-60">({f.count})</span>
           </button>
         ))}
 
-        {/* Subject divider */}
-        {subjects.length > 2 && <div className="w-px bg-gray-200 mx-1" />}
+        {subjects.length > 2 && <div className="w-px bg-slate-200 mx-1 self-stretch" />}
 
-        {/* Subject filters */}
         {subjects.length > 2 && subjects.map(s => (
           <button key={s}
             onClick={() => setSubjectFilter(s)}
@@ -253,11 +255,11 @@ const ParentHomeworkPage = () => {
             style={subjectFilter === s ? {
               backgroundColor: '#6366f1',
               color: 'white',
-              boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+              boxShadow: '0 2px 8px rgba(15,23,42,.12)'
             } : {
               backgroundColor: 'white',
-              border: '1px solid #e5e7eb',
-              color: '#4b5563'
+              border: '1px solid #e2e8f0',
+              color: '#475569'
             }}>
             {s === 'all' ? 'All Subjects' : s}
           </button>
@@ -266,27 +268,28 @@ const ParentHomeworkPage = () => {
 
       {/* ═══ OVERDUE ALERT ════════════════════════════════════ */}
       {stats.overdue > 0 && statusFilter === 'all' && (
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-2.5">
+        <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3.5 flex items-center gap-3"
+          style={{ boxShadow: '0 1px 2px rgba(239,68,68,.08)' }}>
           <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
           <span className="text-xs text-red-700 font-medium">
             {stats.overdue} assignment{stats.overdue > 1 ? 's' : ''} overdue — please check with your child
           </span>
           <button onClick={() => setStatusFilter('overdue')}
-            className="ml-auto text-xs font-semibold text-red-600 hover:text-red-800">
+            className="ml-auto text-xs font-semibold text-red-600 hover:text-red-800 whitespace-nowrap">
             Show overdue →
           </button>
         </div>
       )}
 
       {/* ═══ HOMEWORK LIST ════════════════════════════════════ */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
+      <div className="bg-white rounded-2xl p-6 border border-slate-100" style={{ boxShadow: CARD_SHADOW }}>
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center">
-              <ClipboardList size={16} className="text-orange-600" />
+              <ClipboardList size={15} className="text-orange-500" />
             </div>
-            <h3 className="text-sm font-bold text-gray-800">Assignments</h3>
-            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+            <p className="font-semibold tracking-tight text-slate-900">Assignments</p>
+            <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full font-medium">
               {filteredHomework.length}
             </span>
           </div>
@@ -294,12 +297,12 @@ const ParentHomeworkPage = () => {
           {/* Completion bar */}
           {homework.length > 0 && (
             <div className="hidden sm:flex items-center gap-2">
-              <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden flex">
-                {stats.done > 0 && <div className="bg-emerald-500" style={{ width: `${(stats.done / stats.total) * 100}%` }} />}
-                {stats.partial > 0 && <div className="bg-amber-400" style={{ width: `${(stats.partial / stats.total) * 100}%` }} />}
-                {stats.notDone > 0 && <div className="bg-red-400" style={{ width: `${(stats.notDone / stats.total) * 100}%` }} />}
+              <div className="w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden flex">
+                {stats.done > 0    && <div className="bg-emerald-500" style={{ width: `${(stats.done    / stats.total) * 100}%` }} />}
+                {stats.partial > 0 && <div className="bg-amber-400"   style={{ width: `${(stats.partial / stats.total) * 100}%` }} />}
+                {stats.notDone > 0 && <div className="bg-red-400"     style={{ width: `${(stats.notDone / stats.total) * 100}%` }} />}
               </div>
-              <span className="text-xs font-semibold text-gray-500">{stats.rate}%</span>
+              <span className="text-xs font-semibold text-slate-500">{stats.rate}%</span>
             </div>
           )}
         </div>
@@ -308,40 +311,48 @@ const ParentHomeworkPage = () => {
           <div className="space-y-2">
             {filteredHomework.map(h => {
               const sc = STATUS_CONFIG[h.status] || STATUS_CONFIG.not_done;
-              const StatusIcon = sc.icon;
+              const StatusIcon = sc.Icon;
               return (
-                <div key={h.id} className={`flex items-start gap-3 p-4 rounded-xl border transition-colors ${
-                  h.overdue ? 'bg-red-50/50 border-red-200' : 'bg-gray-50 border-transparent hover:bg-gray-100'
-                }`}>
+                <div key={h.id}
+                  className="flex items-start gap-3 p-4 rounded-xl border transition-colors"
+                  style={h.overdue ? {
+                    backgroundColor: '#fff1f2',
+                    borderColor: '#fecdd3'
+                  } : {
+                    backgroundColor: '#f8fafc',
+                    borderColor: 'transparent'
+                  }}>
                   {/* Status icon */}
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${sc.bg} ${sc.border} border`}>
-                    <StatusIcon size={18} className={sc.text} />
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 border"
+                    style={{ backgroundColor: sc.iconBg, borderColor: sc.cardBorder }}>
+                    <StatusIcon size={18} style={{ color: sc.iconColor }} />
                   </div>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-sm font-medium text-gray-800 truncate">{h.title}</p>
+                      <p className="text-sm font-semibold text-slate-900 truncate">{h.title}</p>
                       {h.overdue && (
                         <span className="text-[10px] font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full flex-shrink-0">
                           OVERDUE
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500">{h.subject} · {selectedChild?.class_name}</p>
+                    <p className="text-xs text-slate-500">{h.subject} · {selectedChild?.class_name}</p>
                     {h.description && (
-                      <p className="text-xs text-gray-400 mt-1 line-clamp-2">{h.description}</p>
+                      <p className="text-xs text-slate-400 mt-1.5 line-clamp-2">{h.description}</p>
                     )}
                   </div>
 
                   <div className="text-right flex-shrink-0">
-                    <span className={`text-[10px] font-semibold px-2 py-1 rounded-full ${sc.badge}`}>
+                    <span className="text-[10px] font-semibold px-2 py-1 rounded-full"
+                      style={{ backgroundColor: sc.badgeBg, color: sc.badgeText }}>
                       {sc.label}
                     </span>
-                    <p className="text-[10px] text-gray-400 mt-1.5">
+                    <p className="text-[10px] text-slate-400 mt-1.5">
                       Due {new Date(h.due_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                     </p>
                     {h.assigned_date && (
-                      <p className="text-[10px] text-gray-300">
+                      <p className="text-[10px] text-slate-300">
                         Set {new Date(h.assigned_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                       </p>
                     )}
@@ -351,10 +362,10 @@ const ParentHomeworkPage = () => {
             })}
           </div>
         ) : (
-          <div className="text-center py-12 bg-gray-50 rounded-xl">
-            <ClipboardList size={40} className="mx-auto text-gray-300 mb-3" />
-            <p className="text-sm text-gray-500 font-medium">No homework found</p>
-            <p className="text-xs text-gray-400 mt-1">
+          <div className="text-center py-14 bg-slate-50 rounded-xl">
+            <ClipboardList size={36} className="mx-auto text-slate-300 mb-3" />
+            <p className="text-sm font-semibold text-slate-600">No homework found</p>
+            <p className="text-xs text-slate-400 mt-1">
               {statusFilter !== 'all'
                 ? 'Try changing the filter above'
                 : 'Homework will appear here as teachers assign it'}
@@ -363,23 +374,25 @@ const ParentHomeworkPage = () => {
         )}
       </div>
 
-      {/* ═══ TERM FOOTER - Dynamic colors ═════════════════════ */}
+      {/* ═══ TERM FOOTER ══════════════════════════════════════ */}
       {selectedTerm && selectedTermInfo && (
         <div className="rounded-xl px-4 py-3 flex items-center justify-between"
-          style={{ backgroundColor: `${selectedTermInfo.color}15`, borderWidth: '1px', borderColor: `${selectedTermInfo.color}30` }}>
+          style={{ backgroundColor: `${selectedTermInfo.color}12`, border: `1px solid ${selectedTermInfo.color}25` }}>
           <div className="flex items-center gap-2">
             <TermIcon size={14} style={{ color: selectedTermInfo.color }} />
-            <span className="text-xs font-semibold" style={{ color: selectedTermInfo.color }}>{selectedTermInfo.name} Term {selectedTerm.academic_year}</span>
+            <span className="text-xs font-semibold" style={{ color: selectedTermInfo.color }}>
+              {selectedTermInfo.name} Term {selectedTerm.academic_year}
+            </span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-24 rounded-full h-1.5 hidden sm:block" style={{ backgroundColor: `${selectedTermInfo.color}30` }}>
+            <div className="w-24 rounded-full h-1.5 hidden sm:block" style={{ backgroundColor: `${selectedTermInfo.color}25` }}>
               <div className="h-1.5 rounded-full"
-                style={{ 
+                style={{
                   width: `${Math.min(100, Math.max(0, ((new Date() - new Date(selectedTerm.start_date)) / (new Date(selectedTerm.end_date) - new Date(selectedTerm.start_date))) * 100))}%`,
                   backgroundColor: selectedTermInfo.color
                 }} />
             </div>
-            <span className="text-[10px] font-medium" style={{ color: selectedTermInfo.color }}>
+            <span className="text-[10px] font-semibold" style={{ color: selectedTermInfo.color }}>
               {Math.max(0, Math.ceil((new Date(selectedTerm.end_date + 'T00:00:00') - new Date()) / 86400000))}d left
             </span>
           </div>
