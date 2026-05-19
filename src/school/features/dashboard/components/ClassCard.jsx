@@ -21,8 +21,15 @@ const ClassCard = ({ cls, onRemove, periodNumber = null, stackIndex = 0, total =
   const [showBehaviorModal, setShowBehaviorModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [behaviorComment, setBehaviorComment] = useState("");
-  const [shareWithParent, setShareWithParent] = useState(true);
+  const [commentType, setCommentType] = useState(null); // 'positive' | 'neutral' | 'needs_attention' | null
   const [localAttendance, setLocalAttendance] = useState({}); // Local state for instant updates
+
+  // Behavior type config
+  const BEHAVIOR_TYPES = [
+    { key: 'positive',         label: 'Positive',    color: '#10b981', bg: '#f0fdf4', border: '#86efac', activeBg: '#dcfce7' },
+    { key: 'neutral',          label: 'Neutral',     color: '#3b82f6', bg: '#eff6ff', border: '#93c5fd', activeBg: '#dbeafe' },
+    { key: 'needs_attention',  label: 'Needs Work',  color: '#f59e0b', bg: '#fffbeb', border: '#fde68a', activeBg: '#fef3c7' },
+  ];
 
   const dateKey = getDateKey(selectedDate);
 
@@ -142,13 +149,13 @@ const ClassCard = ({ cls, onRemove, periodNumber = null, stackIndex = 0, total =
     const record = localAttendance[studentId];
     setSelectedStudent(studentId);
     setBehaviorComment(record?.comment || "");
-    setShareWithParent(true);
+    setCommentType(null);
     setShowBehaviorModal(true);
   };
 
   const saveBehaviorComment = async () => {
     try {
-      // Always save to attendance record
+      // Always save text note to attendance record (teacher's private note)
       await attendanceService.updateComment(
         dateKey,
         cls.id,
@@ -156,8 +163,8 @@ const ClassCard = ({ cls, onRemove, periodNumber = null, stackIndex = 0, total =
         behaviorComment,
       );
 
-      // If "Share with parent" is on, also write to teacher_comments
-      if (shareWithParent && behaviorComment.trim()) {
+      // If a type is selected → write to teacher_comments (visible to parent)
+      if (commentType) {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           const { data: teacher } = await supabase
@@ -166,13 +173,19 @@ const ClassCard = ({ cls, onRemove, periodNumber = null, stackIndex = 0, total =
             .eq('user_id', user.id)
             .maybeSingle();
 
+          const defaultTexts = {
+            positive:        'Positive behavior observed today.',
+            neutral:         'Neutral behavior observed today.',
+            needs_attention: 'Behavior needs improvement.',
+          };
+
           await supabase.from('teacher_comments').insert({
-            student_id: selectedStudent,
-            teacher_id: teacher?.id || null,
-            comment: behaviorComment,
-            comment_type: 'neutral',
+            student_id:          selectedStudent,
+            teacher_id:          teacher?.id || null,
+            comment:             behaviorComment.trim() || defaultTexts[commentType],
+            comment_type:        commentType,
             is_visible_to_parent: true,
-            created_at: new Date().toISOString(),
+            created_at:          new Date().toISOString(),
           });
         }
       }
@@ -190,6 +203,7 @@ const ClassCard = ({ cls, onRemove, periodNumber = null, stackIndex = 0, total =
 
       setShowBehaviorModal(false);
       setBehaviorComment("");
+      setCommentType(null);
       setSelectedStudent(null);
     } catch (error) {
       console.error("❌ Error saving comment:", error);
@@ -402,56 +416,71 @@ const ClassCard = ({ cls, onRemove, periodNumber = null, stackIndex = 0, total =
       {showBehaviorModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <div className="flex items-center gap-3 mb-4">
+
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-5">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${primaryColor}18` }}>
                 <MessageSquare size={18} style={{ color: primaryColor }} />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Behavior Comment</h3>
+                <h3 className="text-lg font-bold text-gray-900">Behavior Note</h3>
                 <p className="text-xs text-gray-400">
                   {students.find(s => s.id === selectedStudent)?.name || 'Student'}
                 </p>
               </div>
             </div>
 
+            {/* Behavior type selector */}
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Behavior Type</p>
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {BEHAVIOR_TYPES.map(({ key, label, color, bg, border, activeBg }) => {
+                const isActive = commentType === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setCommentType(isActive ? null : key)}
+                    className="flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 font-semibold text-xs transition-all"
+                    style={{
+                      borderColor: isActive ? color : '#e5e7eb',
+                      backgroundColor: isActive ? activeBg : '#f9fafb',
+                      color: isActive ? color : '#6b7280',
+                    }}
+                  >
+                    <div
+                      className="w-7 h-7 rounded-full flex items-center justify-center"
+                      style={{ backgroundColor: isActive ? `${color}25` : '#e5e7eb' }}
+                    >
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                    </div>
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Optional text note */}
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              Additional Note <span className="normal-case font-normal text-gray-400">(optional)</span>
+            </p>
             <textarea
-              className="w-full border border-gray-200 rounded-xl p-3.5 text-sm focus:ring-2 focus:outline-none resize-none"
+              className="w-full border border-gray-200 rounded-xl p-3.5 text-sm focus:ring-2 focus:outline-none resize-none transition-colors"
               style={{ '--tw-ring-color': primaryColor }}
-              rows={4}
-              placeholder="Write a note about this student's behavior today..."
+              rows={3}
+              placeholder="Add details about today's behavior..."
               value={behaviorComment}
               onChange={(e) => setBehaviorComment(e.target.value)}
-              autoFocus
             />
 
-            {/* Share with parent toggle */}
-            <button
-              type="button"
-              onClick={() => setShareWithParent(prev => !prev)}
-              className="mt-3 w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all"
-              style={shareWithParent
-                ? { borderColor: primaryColor, backgroundColor: `${primaryColor}0d` }
-                : { borderColor: '#e5e7eb', backgroundColor: '#f9fafb' }
-              }>
-              <div className="flex items-center gap-2.5">
-                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all`}
-                  style={shareWithParent
-                    ? { borderColor: primaryColor, backgroundColor: primaryColor }
-                    : { borderColor: '#d1d5db', backgroundColor: 'white' }
-                  }>
-                  {shareWithParent && (
-                    <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                      <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  )}
-                </div>
-                <div className="text-left">
-                  <p className="text-sm font-semibold text-gray-800">Share with parent</p>
-                  <p className="text-[11px] text-gray-400">Parent will see this in their child's profile</p>
-                </div>
-              </div>
-            </button>
+            {/* Info */}
+            {commentType && (
+              <p className="mt-2 text-[11px] text-gray-400 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                This will be visible to the parent in their child's profile
+              </p>
+            )}
 
+            {/* Buttons */}
             <div className="flex gap-3 mt-4">
               <button
                 onClick={saveBehaviorComment}
@@ -464,6 +493,7 @@ const ClassCard = ({ cls, onRemove, periodNumber = null, stackIndex = 0, total =
                 onClick={() => {
                   setShowBehaviorModal(false);
                   setBehaviorComment("");
+                  setCommentType(null);
                   setSelectedStudent(null);
                 }}
                 className="flex-1 bg-gray-100 text-gray-600 py-2.5 rounded-xl font-semibold hover:bg-gray-200 transition-all text-sm"

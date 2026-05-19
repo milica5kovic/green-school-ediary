@@ -36,20 +36,10 @@ const ParentMyChildPage = () => {
       
       setTeacherComments(comments || []);
       
-      // Calculate behavior stats
-      const positive = comments?.filter(c => 
-        c.comment.toLowerCase().includes('excellent') || 
-        c.comment.toLowerCase().includes('great') ||
-        c.comment.toLowerCase().includes('good')
-      ).length || 0;
-      
-      const needsAttention = comments?.filter(c => 
-        c.comment.toLowerCase().includes('improve') || 
-        c.comment.toLowerCase().includes('concern') ||
-        c.comment.toLowerCase().includes('needs')
-      ).length || 0;
-      
-      const neutral = (comments?.length || 0) - positive - needsAttention;
+      // Calculate behavior stats using comment_type from DB
+      const positive       = comments?.filter(c => c.comment_type === 'positive').length || 0;
+      const needsAttention = comments?.filter(c => c.comment_type === 'needs_attention').length || 0;
+      const neutral        = comments?.filter(c => c.comment_type === 'neutral').length || 0;
       setBehaviorStats({ positive, neutral, needsAttention });
       
       // Load grades with Cambridge grading
@@ -283,29 +273,31 @@ const ParentMyChildPage = () => {
         ) : (
           <div className="grid md:grid-cols-2 gap-4">
             {teacherComments.map((comment) => {
-              const isPositive = comment.comment.toLowerCase().includes('excellent') || 
-                                comment.comment.toLowerCase().includes('great') ||
-                                comment.comment.toLowerCase().includes('good');
-              const isNegative = comment.comment.toLowerCase().includes('improve') || 
-                                comment.comment.toLowerCase().includes('concern') ||
-                                comment.comment.toLowerCase().includes('needs');
-              
-              const cardColor = isPositive 
-                ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-200' 
-                : isNegative 
-                ? 'bg-gradient-to-br from-orange-50 to-yellow-50 border-orange-200'
+              const cardColor =
+                comment.comment_type === 'positive'        ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-200'
+                : comment.comment_type === 'needs_attention' ? 'bg-gradient-to-br from-orange-50 to-yellow-50 border-orange-200'
                 : 'bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200';
+
+              const typeBadge =
+                comment.comment_type === 'positive'        ? { label: 'Positive',    cls: 'bg-green-100 text-green-700' }
+                : comment.comment_type === 'needs_attention' ? { label: 'Needs Work',  cls: 'bg-orange-100 text-orange-700' }
+                : { label: 'Neutral', cls: 'bg-blue-100 text-blue-700' };
               
               return (
                 <div key={comment.id} className={`p-4 rounded-xl border-2 hover:shadow-md transition-all ${cardColor}`}>
-                  <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-start justify-between mb-2">
                     <div>
                       <p className="font-bold text-gray-900">{comment.teachers?.full_name || 'Teacher'}</p>
                       <p className="text-xs text-gray-600">{comment.teachers?.subjects?.join(', ') || 'Subject'}</p>
                     </div>
-                    <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded-lg">
-                      {new Date(comment.created_at).toLocaleDateString('en-GB')}
-                    </span>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${typeBadge.cls}`}>
+                        {typeBadge.label}
+                      </span>
+                      <span className="text-xs text-gray-500 bg-white px-2 py-0.5 rounded-lg">
+                        {new Date(comment.created_at).toLocaleDateString('en-GB')}
+                      </span>
+                    </div>
                   </div>
                   <p className="text-sm text-gray-700 leading-relaxed">{comment.comment}</p>
                 </div>
