@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { supabase } from '../../../../core/infrastructure/supabaseClient';
+import { toast } from '../../../../core/components/Toast';
 
 const ScheduleModal = ({ onClose, onSave, existingSchedule, days, modalType = 'class' }) => {
   const [formData, setFormData] = useState({
@@ -55,7 +56,7 @@ const handleSubmit = (e) => {
   
   if (modalType === 'duty') {
     if (!formData.day || !formData.time || !formData.subject) {
-      alert('Please fill in all fields');
+      toast.warning('Please fill in all fields');
       return;
     }
     onSave({ 
@@ -67,7 +68,7 @@ const handleSubmit = (e) => {
     });
   } else if (modalType === 'extracurricular') {
     if (!formData.day || !formData.time || !formData.subject) {
-      alert('Please fill in all fields');
+      toast.warning('Please fill in all fields');
       return;
     }
     onSave({ 
@@ -79,7 +80,7 @@ const handleSubmit = (e) => {
     });
   } else {
     if (!formData.day || !formData.time || !formData.class || !formData.subject) {
-      alert('Please fill in all fields');
+      toast.warning('Please fill in all fields');
       return;
     }
     onSave({ ...formData, type: 'class' });

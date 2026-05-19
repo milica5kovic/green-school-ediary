@@ -7,6 +7,7 @@ import { useBranding } from '../../../../core/context/BrandingContext';
 import { useTenant } from '../../../../core/context/TenantContext';
 // ═══ USE RAW SUPABASE FOR SCHOOLS TABLE ═══
 import { supabase } from '../../../../core/infrastructure/supabaseClient';
+import { toast } from '../../../../core/components/Toast';
 
 // ============================================================================
 // SCHOOL COLORS TAB
@@ -81,7 +82,7 @@ const SchoolColorsTab = () => {
 
   const handleSave = async () => {
     if (!schoolId) {
-      alert('School context not loaded');
+      toast.warning('School context not loaded');
       return;
     }
 
@@ -117,7 +118,7 @@ const SchoolColorsTab = () => {
       }, 500);
     } catch (error) {
       console.error('Error saving colors:', error);
-      alert('Failed to save: ' + error.message);
+      toast.error('Failed to save: ' + error.message);
     } finally {
       setSaving(false);
     }

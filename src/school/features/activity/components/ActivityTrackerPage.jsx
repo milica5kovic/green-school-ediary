@@ -8,6 +8,7 @@ import { useApp } from '../../../../core/context/AppContext';
 import { useTenant } from '../../../../core/context/TenantContext';
 import { supabase as rawSupabase } from '../../../../core/infrastructure/supabaseClient';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
+import { toast } from '../../../../core/components/Toast';
 
 // ============================================================================
 // ACTIVITY TRACKER PAGE
@@ -320,7 +321,7 @@ const ActivityTrackerPage = () => {
       });
     } catch (err) {
       console.error('Failed:', err);
-      alert('Failed: ' + err.message);
+      toast.error('Failed: ' + err.message);
     } finally {
       setSaving(null);
     }

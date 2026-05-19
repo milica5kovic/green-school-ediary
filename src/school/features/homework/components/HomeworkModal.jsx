@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, File, Trash2, Loader } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
+import { toast } from '../../../../core/components/Toast';
 
 const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
   const { supabase } = useApp();
@@ -57,7 +58,7 @@ const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
     
     const invalidFiles = selectedFiles.filter(file => file.size > 10 * 1024 * 1024);
     if (invalidFiles.length > 0) {
-      alert('Some files exceed 10MB limit');
+      toast.warning('Some files exceed 10MB limit');
       return;
     }
 
@@ -83,7 +84,7 @@ const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
       );
     } catch (error) {
       console.error('Error deleting file:', error);
-      alert('Failed to delete file');
+      toast.error('Failed to delete file');
     }
   };
 
@@ -124,7 +125,7 @@ const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
       return uploadedAttachments;
     } catch (error) {
       console.error('Upload error:', error);
-      alert('Failed to upload files: ' + error.message);
+      toast.error('Failed to upload files: ' + error.message);
       return [];
     } finally {
       setUploading(false);
@@ -136,7 +137,7 @@ const HomeworkModal = ({ onClose, onSave, existingHomework }) => {
     e.preventDefault();
 
     if (!formData.class_name || !formData.subject || !formData.title || !formData.due_date) {
-      alert('Please fill in all required fields');
+      toast.warning('Please fill in all required fields');
       return;
     }
 

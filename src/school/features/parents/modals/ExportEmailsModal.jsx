@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Download, Copy, Check, X, Mail, Users, Filter, ChevronDown } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import { useBranding } from '../../../../core/context/BrandingContext';
+import { toast } from '../../../../core/components/Toast';
 
 const ExportEmailsModal = ({ onClose }) => {
   // ✅ Use tenant-aware supabase
@@ -100,7 +101,7 @@ const ExportEmailsModal = ({ onClose }) => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      alert('Failed to copy to clipboard');
+      toast.error('Failed to copy to clipboard');
     }
   };
 

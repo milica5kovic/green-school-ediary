@@ -27,6 +27,7 @@ import { useTenant } from "../../../../core/context/TenantContext";
 import { useBranding } from "../../../../core/context/BrandingContext";
 import useTermTheme from "../../../../shared/hooks/useTermTheme";
 import { generateTestBundle } from "../../../../core/utils/pdfGenerator";
+import { toast } from "../../../../core/components/Toast";
 
 // ============================================================================
 // TEST MAKER PAGE - Production Ready
@@ -167,7 +168,7 @@ const TestMakerPage = () => {
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !file.name.endsWith(".json")) {
-      alert("Please upload a JSON file");
+      toast.warning("Please upload a JSON file");
       return;
     }
 
@@ -176,7 +177,7 @@ const TestMakerPage = () => {
       const data = JSON.parse(text);
 
       if (!data.title || !data.questions) {
-        alert("Invalid test file format");
+        toast.warning("Invalid test file format");
         return;
       }
 
@@ -200,7 +201,7 @@ const TestMakerPage = () => {
 
       setUploadedFile(file.name);
     } catch (error) {
-      alert("Failed to load file: " + error.message);
+      toast.error("Failed to load file: " + error.message);
     }
 
     e.target.value = "";
@@ -208,11 +209,11 @@ const TestMakerPage = () => {
 
   const handleGeneratePDF = async (shuffle = false) => {
     if (!testInfo.title || !testInfo.subject || !testInfo.className) {
-      alert("Please fill in test title, subject, and class");
+      toast.warning("Please fill in test title, subject, and class");
       return;
     }
     if (questions.length === 0) {
-      alert("Please add at least one question");
+      toast.warning("Please add at least one question");
       return;
     }
 
@@ -231,10 +232,10 @@ const TestMakerPage = () => {
         showLogoInPdf: branding.showLogoInPdf !== false,
       }, shuffle);
 
-      alert("Test PDF generated successfully!");
+      toast.success("Test PDF generated successfully!");
     } catch (error) {
       console.error("PDF error:", error);
-      alert("Failed to generate PDF: " + error.message);
+      toast.error("Failed to generate PDF: " + error.message);
     } finally {
       setGenerating(false);
     }
@@ -646,7 +647,7 @@ const QuestionModal = ({ question, theme, onClose, onSave }) => {
 
   const handleSave = () => {
     if (!text.trim()) {
-      alert("Please enter a question");
+      toast.warning("Please enter a question");
       return;
     }
     onSave({

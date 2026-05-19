@@ -4,6 +4,7 @@ import { supabase } from '../../../../core/infrastructure/supabaseClient';
 import { useTenant } from '../../../../core/context/TenantContext';
 import { useAuth } from '../../../../core/context/AuthContext';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
+import { toast } from '../../../../core/components/Toast';
 
 // ============================================================================
 // TODO PAGE - Production Ready
@@ -81,7 +82,7 @@ const TodoPage = () => {
       await loadTodos();
     } catch (error) {
       console.error('Error completing todo:', error);
-      alert('Failed to complete task');
+      toast.error('Failed to complete task');
     }
   };
 
@@ -99,7 +100,7 @@ const TodoPage = () => {
       await loadTodos();
     } catch (error) {
       console.error('Error deleting todo:', error);
-      alert('Failed to delete task');
+      toast.error('Failed to delete task');
     }
   };
 
@@ -123,7 +124,7 @@ const TodoPage = () => {
       setShowAddModal(false);
     } catch (error) {
       console.error('Error adding todo:', error);
-      alert('Failed to add task');
+      toast.error('Failed to add task');
     }
   };
 
@@ -427,7 +428,7 @@ const AddTodoModal = ({ onClose, onAdd, theme }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!title.trim()) {
-      alert('Please enter a task title');
+      toast.warning('Please enter a task title');
       return;
     }
     setSaving(true);

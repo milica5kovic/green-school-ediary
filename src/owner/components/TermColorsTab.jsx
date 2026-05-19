@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Palette, Snowflake, Flower2, Sun, Check, RotateCcw, Eye, ToggleLeft, ToggleRight } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import { useBranding } from '../../../../core/context/BrandingContext';
+import { toast } from '../../../../core/components/Toast';
 
 // ════════════════════════════════════════════════════════════════════════════
 // TERM COLORS TAB v2 - With toggle for term colors vs primary color
@@ -127,7 +128,7 @@ const TermColorsTab = () => {
 
   const handleSave = async () => {
     if (!schoolId) {
-      alert('No school context');
+      toast.warning('No school context');
       return;
     }
 
@@ -153,7 +154,7 @@ const TermColorsTab = () => {
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
       console.error('Error saving term colors:', error);
-      alert('Failed to save: ' + error.message);
+      toast.error('Failed to save: ' + error.message);
     } finally {
       setSaving(false);
     }

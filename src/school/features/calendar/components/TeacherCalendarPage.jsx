@@ -18,6 +18,7 @@ import {
 import { useApp } from '../../../../core/context/AppContext';
 import { useAuth } from '../../../../core/context/AuthContext';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
+import { toast } from '../../../../core/components/Toast';
 
 // ════════════════════════════════════════════════════════════════════════════
 // TEACHER CALENDAR PAGE - Production Ready
@@ -211,7 +212,7 @@ const TeacherCalendarPage = () => {
 
   const openAddTestModal = (date) => {
     if (isDateBlocked(date)) {
-      alert('Cannot schedule tests on breaks or holidays');
+      toast.warning('Cannot schedule tests on breaks or holidays');
       return;
     }
     setSelectedDate(date);
@@ -256,7 +257,7 @@ const TeacherCalendarPage = () => {
       setSelectedDay(null);
     } catch (error) {
       console.error('Error deleting test:', error);
-      alert('Failed to delete test');
+      toast.error('Failed to delete test');
     }
   };
 
@@ -265,7 +266,7 @@ const TeacherCalendarPage = () => {
     
     if (!selectedDate || !teacherId) return;
     if (!formData.subject || !formData.class_name || !formData.title) {
-      alert('Please fill in all required fields');
+      toast.warning('Please fill in all required fields');
       return;
     }
 
@@ -319,7 +320,7 @@ const TeacherCalendarPage = () => {
       setEditingTest(null);
     } catch (error) {
       console.error('Error saving test:', error);
-      alert('Failed to save test: ' + error.message);
+      toast.error('Failed to save test: ' + error.message);
     } finally {
       setSaving(false);
     }

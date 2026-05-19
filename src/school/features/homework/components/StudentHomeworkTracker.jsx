@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, Circle, MinusCircle, X } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
+import { toast } from '../../../../core/components/Toast';
 
 const StudentHomeworkTracker = ({ homework, onClose }) => {
   const { supabase } = useApp();
@@ -86,7 +87,7 @@ const StudentHomeworkTracker = ({ homework, onClose }) => {
 
     } catch (error) {
       console.error('Error updating status:', error);
-      alert('Failed to update status');
+      toast.error('Failed to update status');
     }
   };
 

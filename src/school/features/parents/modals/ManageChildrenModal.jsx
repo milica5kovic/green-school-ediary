@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import { useTenant } from '../../../../core/context/TenantContext';
+import { toast } from '../../../../core/components/Toast';
 
 // ════════════════════════════════════════════════════════════════════════════
 // MANAGE CHILDREN MODAL - Links parents to students
@@ -51,7 +52,7 @@ const ManageChildrenModal = ({ parent, onClose, onSave }) => {
       setSelectedStudentIds(linkedIds);
     } catch (error) {
       console.error('Error loading data:', error);
-      alert('Failed to load students');
+      toast.error('Failed to load students');
     } finally {
       setLoading(false);
     }
@@ -67,7 +68,7 @@ const ManageChildrenModal = ({ parent, onClose, onSave }) => {
 
   const handleSave = async () => {
     if (!schoolId) {
-      alert('⚠️ School context not loaded. Please refresh the page.');
+      toast.warning('School context not loaded. Please refresh the page.');
       return;
     }
 
@@ -115,11 +116,11 @@ const ManageChildrenModal = ({ parent, onClose, onSave }) => {
         if (removeError) throw removeError;
       }
 
-      alert(`✅ Updated! Added: ${toAdd.length}, Removed: ${toRemove.length}`);
+      toast.success(`Updated! Added: ${toAdd.length}, Removed: ${toRemove.length}`);
       onSave();
     } catch (error) {
       console.error('Error saving links:', error);
-      alert('Failed to update student links: ' + error.message);
+      toast.error('Failed to update student links: ' + error.message);
     } finally {
       setSaving(false);
     }

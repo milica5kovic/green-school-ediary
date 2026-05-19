@@ -3,6 +3,7 @@ import { Plus, Edit2, Trash2, Download, Upload, Link as LinkIcon, Search, X, Pho
 import { useApp } from '../../../../core/context/AppContext';
 import { useBranding } from '../../../../core/context/BrandingContext';
 import DeleteStudentModal from './DeleteStudentModal';
+import { toast } from '../../../../core/components/Toast';
 
 const StudentsPage = () => {
   const { supabase, studentsService, loadAllStudents } = useApp();
@@ -547,9 +548,9 @@ const CSVUploadSection = ({ onUploadComplete, primaryColor }) => {
         currentNo++;
       }
 
-      alert(`Successfully imported ${dataLines.length} students!`);
+      toast.success(`Successfully imported ${dataLines.length} students!`);
       onUploadComplete();
-    } catch (error) { alert('Failed: ' + error.message); }
+    } catch (error) { toast.error('Failed: ' + error.message); }
     finally { setUploading(false); e.target.value = ''; }
   };
 
@@ -594,7 +595,7 @@ const AddStudentModal = ({ student, primaryColor, onClose, onSave }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name || !formData.class_name) { alert('Please fill in name and class'); return; }
+    if (!formData.name || !formData.class_name) { toast.warning('Please fill in name and class'); return; }
     try {
       setSaving(true);
       if (student) {
@@ -613,7 +614,7 @@ const AddStudentModal = ({ student, primaryColor, onClose, onSave }) => {
         });
       }
       onSave();
-    } catch (error) { alert('Failed: ' + error.message); }
+    } catch (error) { toast.error('Failed: ' + error.message); }
     finally { setSaving(false); }
   };
 
@@ -719,7 +720,7 @@ const LinkParentModal = ({ student, primaryColor, onClose, onSave }) => {
   };
 
   const handleAddLink = async () => {
-    if (!selectedParent) { alert('Please select a parent'); return; }
+    if (!selectedParent) { toast.warning('Please select a parent'); return; }
     try {
       setSaving(true);
       const { error } = await supabase.from('student_parents').insert([{
@@ -729,7 +730,7 @@ const LinkParentModal = ({ student, primaryColor, onClose, onSave }) => {
       if (error) throw error;
       await loadData(); 
       setSelectedParent('');
-    } catch (error) { alert('Failed: ' + error.message); }
+    } catch (error) { toast.error('Failed: ' + error.message); }
     finally { setSaving(false); }
   };
 
@@ -738,7 +739,7 @@ const LinkParentModal = ({ student, primaryColor, onClose, onSave }) => {
     try {
       await supabase.from('student_parents').delete().eq('id', linkId);
       await loadData();
-    } catch (error) { alert('Failed to remove'); }
+    } catch (error) { toast.error('Failed to remove'); }
   };
 
   return (

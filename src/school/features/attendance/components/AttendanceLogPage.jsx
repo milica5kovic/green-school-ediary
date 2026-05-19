@@ -5,6 +5,7 @@ import { useAuth } from '../../../../core/context/AuthContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
 import { useBranding } from '../../../../core/context/BrandingContext';
+import { toast } from '../../../../core/components/Toast';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -212,7 +213,7 @@ const AttendanceLogPage = () => {
             </h2>
             <p className="text-sm text-gray-500 mt-1">Historical attendance records and analytics</p>
           </div>
-          <button onClick={() => alert('PDF export coming soon!')}
+          <button onClick={() => toast.info('PDF export coming soon!')}
             className="text-white px-5 py-2.5 rounded-lg font-medium text-sm hover:shadow-lg transition-all flex items-center gap-2"
             style={theme.gradientStyle}>
             <Download size={18} /> Export PDF

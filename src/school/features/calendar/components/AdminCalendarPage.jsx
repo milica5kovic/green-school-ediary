@@ -14,6 +14,7 @@ import {
 import { supabase } from "../../../../core/infrastructure/supabaseClient";
 import { useTenant } from "../../../../core/context/TenantContext";
 import useTermTheme from "../../../../shared/hooks/useTermTheme";
+import { toast } from "../../../../core/components/Toast";
 
 // ============================================================================
 // ADMIN CALENDAR PAGE - Production Ready
@@ -208,7 +209,7 @@ const AdminCalendarPage = () => {
       setEditingEvent(null);
     } catch (error) {
       console.error("Error deleting event:", error);
-      alert("Failed to delete event");
+      toast.error("Failed to delete event");
     } finally {
       setSaving(false);
     }
@@ -218,12 +219,12 @@ const AdminCalendarPage = () => {
     e.preventDefault();
 
     if (!formData.title || !formData.start_date || !formData.end_date) {
-      alert("Please fill in all required fields");
+      toast.warning("Please fill in all required fields");
       return;
     }
 
     if (formData.scope === "specific" && formData.affected_classes.length === 0) {
-      alert("Please select at least one class");
+      toast.warning("Please select at least one class");
       return;
     }
 
@@ -263,7 +264,7 @@ const AdminCalendarPage = () => {
       setEditingEvent(null);
     } catch (error) {
       console.error("Error saving event:", error);
-      alert("Failed to save event: " + error.message);
+      toast.error("Failed to save event: " + error.message);
     } finally {
       setSaving(false);
     }

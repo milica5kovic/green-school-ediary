@@ -6,6 +6,7 @@ import { useAuth } from '../../../../core/context/AuthContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
 import { useBranding } from '../../../../core/context/BrandingContext';
+import { toast } from '../../../../core/components/Toast';
 
 // ════════════════════════════════════════════════════════════════════════════
 // HOMEWORK PAGE - Uses useTermTheme for dynamic colors
@@ -534,7 +535,7 @@ const HomeworkFormModal = ({ homework, subjects, activeTerm, theme, onSave, onCl
 
   const handleSubmit = () => {
     if (!formData.title || !formData.subject || !formData.due_date) {
-      alert('Please fill in title, subject and due date.');
+      toast.warning('Please fill in title, subject and due date.');
       return;
     }
     onSave(formData);

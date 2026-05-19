@@ -32,6 +32,7 @@ import { AppProvider, useApp } from "../core/context/AppContext";
 import { useAuth } from "../core/context/AuthContext";
 import { useTenant } from "../core/context/TenantContext";
 import { useBranding } from "../core/context/BrandingContext";
+import { ToastProvider } from "../core/components/Toast";
 
 import NavItem from "../shared/navigation/NavItem";
 import LoadingSpinner from "../shared/components/LoadingSpinner";
@@ -67,9 +68,11 @@ import TimetableMakerPage from "./features/timetable/components/TimetableMakerPa
 // ============================================================================
 
 const SchoolApp = () => (
-  <AppProvider>
-    <SchoolAppContent />
-  </AppProvider>
+  <ToastProvider>
+    <AppProvider>
+      <SchoolAppContent />
+    </AppProvider>
+  </ToastProvider>
 );
 
 // ============================================================================

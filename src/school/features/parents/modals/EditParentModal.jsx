@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 // import { supabase } from '../../../infrastructure/supabaseClient';
 import { supabase } from '../../../../core/infrastructure/supabaseClient';
+import { toast } from '../../../../core/components/Toast';
 
 const EditParentModal = ({ parent, onClose, onSave }) => {
   const [formData, setFormData] = useState({
@@ -49,7 +50,7 @@ const EditParentModal = ({ parent, onClose, onSave }) => {
         console.warn('Profile update failed:', profileError);
       }
 
-      alert('✅ Parent updated successfully!');
+      toast.success('Parent updated successfully!');
       onSave();
     } catch (err) {
       console.error('Error updating parent:', err);

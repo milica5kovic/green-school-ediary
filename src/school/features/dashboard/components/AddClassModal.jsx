@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
+import { toast } from '../../../../core/components/Toast';
 
 const AddClassModal = ({ onClose, onAdd, schedule }) => {
   const [selectedClass, setSelectedClass] = useState(null);
@@ -9,11 +10,11 @@ const AddClassModal = ({ onClose, onAdd, schedule }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!selectedClass) {
-      alert('Please select a class');
+      toast.warning('Please select a class');
       return;
     }
     if (!title.trim()) {
-      alert('Please enter a lesson title');
+      toast.warning('Please enter a lesson title');
       return;
     }
     onAdd(selectedClass, title, comment); // Pass comment

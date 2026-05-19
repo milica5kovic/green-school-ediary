@@ -4,6 +4,7 @@ import {
   AlertCircle, Mail, Phone, TrendingUp, Filter, Download, X
 } from 'lucide-react';
 import { supabase } from '../../../../core/infrastructure/supabaseClient';
+import { toast } from '../../../../core/components/Toast';
 
 const EnrollmentTabContent = () => {
   const [enrollments, setEnrollments] = useState([]);
@@ -142,7 +143,7 @@ const EnrollmentTabContent = () => {
       }
 
       if (enrollmentsToAdd.length === 0) {
-        alert('No new students to enroll (all already enrolled)');
+        toast.info('No new students to enroll (all already enrolled)');
         return;
       }
 
@@ -152,12 +153,12 @@ const EnrollmentTabContent = () => {
 
       if (error) throw error;
 
-      alert(`Successfully enrolled ${enrollmentsToAdd.length} returning students!`);
+      toast.success(`Successfully enrolled ${enrollmentsToAdd.length} returning students!`);
       await loadData();
 
     } catch (error) {
       console.error('Error auto-enrolling:', error);
-      alert('Failed to auto-enroll students: ' + error.message);
+      toast.error('Failed to auto-enroll students: ' + error.message);
     }
   };
 
@@ -184,10 +185,10 @@ const EnrollmentTabContent = () => {
       });
 
       await loadData();
-      alert('Application added successfully!');
+      toast.success('Application added successfully!');
     } catch (error) {
       console.error('Error adding enrollment:', error);
-      alert('Failed to add application: ' + error.message);
+      toast.error('Failed to add application: ' + error.message);
     }
   };
 
@@ -202,7 +203,7 @@ const EnrollmentTabContent = () => {
       await loadData();
     } catch (error) {
       console.error('Error updating status:', error);
-      alert('Failed to update status: ' + error.message);
+      toast.error('Failed to update status: ' + error.message);
     }
   };
 
@@ -218,7 +219,7 @@ const EnrollmentTabContent = () => {
       await loadData();
     } catch (error) {
       console.error('Error deleting:', error);
-      alert('Failed to delete: ' + error.message);
+      toast.error('Failed to delete: ' + error.message);
     }
   };
 

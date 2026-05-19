@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../core/infrastructure/supabaseClient';
 import { useAuth } from '../core/context/AuthContext';
 import BrandingSettings from './BrandingSettings';
+import { toast } from '../core/components/Toast';
 
 import {
   Building2, Users, GraduationCap, Plus, Search, Trash2,
@@ -268,7 +269,7 @@ const OwnerDashboard = () => {
       loadSchools(true);
     } catch (err) {
       console.error('[OwnerDashboard] handleDelete:', err);
-      alert('Failed to delete school: ' + err.message);
+      toast.error('Failed to delete school: ' + err.message);
     }
   };
 

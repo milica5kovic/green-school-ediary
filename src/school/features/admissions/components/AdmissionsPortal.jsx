@@ -13,6 +13,7 @@ import { supabase } from '../../../../core/infrastructure/supabaseClient';
 import { useAuth } from '../../../../core/context/AuthContext';
 import { useTenant } from '../../../../core/context/TenantContext';
 import { useBranding } from '../../../../core/context/BrandingContext';
+import { toast } from '../../../../core/components/Toast';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
 
 // ============================================================================
@@ -668,7 +669,7 @@ const PipelineView = ({ applicants, theme, schoolId, onRefresh, onSelectApplican
       onRefresh();
     } catch (error) {
       console.error('Error updating status:', error);
-      alert('Failed to update status');
+      toast.error('Failed to update status');
     } finally {
       setDragging(null);
     }
@@ -822,7 +823,7 @@ const ApplicantDetailView = ({ applicant, schoolId, teacher, theme, onBack, onRe
       onRefresh();
     } catch (error) {
       console.error('Error updating status:', error);
-      alert('Failed to update status');
+      toast.error('Failed to update status');
     }
   };
 
@@ -1391,7 +1392,7 @@ const AddApplicantModal = ({ schoolId, teacher, theme, onClose, onSuccess }) => 
 
   const handleSave = async () => {
     if (!data.first_name || !data.last_name || !data.date_of_birth || !data.applying_for_grade || !data.nationality) {
-      alert('Please fill in all required fields');
+      toast.warning('Please fill in all required fields');
       return;
     }
 
@@ -1414,7 +1415,7 @@ const AddApplicantModal = ({ schoolId, teacher, theme, onClose, onSuccess }) => 
       onSuccess();
     } catch (error) {
       console.error('Error creating applicant:', error);
-      alert('Failed to create applicant: ' + error.message);
+      toast.error('Failed to create applicant: ' + error.message);
     } finally {
       setSaving(false);
     }

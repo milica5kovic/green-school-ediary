@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect, useCallback } from "react";
 import { MessageSquare, X, ChevronDown, ChevronUp, Users } from "lucide-react";
+import { toast } from '../../../../core/components/Toast';
 import { useApp } from "../../../../core/context/AppContext";
 import { supabase } from "../../../../core/infrastructure/supabaseClient";
 import { useBranding } from "../../../../core/context/BrandingContext";
@@ -122,7 +123,7 @@ const ClassCard = ({ cls, onRemove, periodNumber = null, stackIndex = 0, total =
       updateStats(students, newAttendance);
     } catch (error) {
       console.error("❌ Error marking attendance:", error);
-      alert("Failed to mark attendance. Please try again.");
+      toast.error("Failed to mark attendance. Please try again.");
 
       // Reload from database on error
       const record = attendanceService.getAttendance(
@@ -192,7 +193,7 @@ const ClassCard = ({ cls, onRemove, periodNumber = null, stackIndex = 0, total =
       setSelectedStudent(null);
     } catch (error) {
       console.error("❌ Error saving comment:", error);
-      alert("Failed to save comment. Please try again.");
+      toast.error("Failed to save comment. Please try again.");
     }
   };
 

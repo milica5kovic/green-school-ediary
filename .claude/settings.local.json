@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Green School Teacher\\\\Documents\\\\Personal Projects\\\\Projects\\\\Akio Platform\\\\.claude\\\\worktrees\\\\dazzling-jones-e4bf22\" -Force)",
+      "Bash(Select-Object Name, FullName)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\Green School Teacher\\\\Documents\\\\Personal Projects\\\\Projects\\\\Akio Platform\\\\.claude\\\\worktrees\\\\dazzling-jones-e4bf22\\\\src\\\\marketing\\\\AkioLanding.jsx\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\Green School Teacher\\\\Documents\\\\Personal Projects\\\\Projects\\\\Akio Platform\\\\.claude\\\\worktrees\\\\dazzling-jones-e4bf22\\\\src\\\\core\\\\utils\\\\emailInvite.js\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\Green School Teacher\\\\Documents\\\\Personal Projects\\\\Projects\\\\Akio Platform\\\\.claude\\\\worktrees\\\\dazzling-jones-e4bf22\\\\src\\\\core\\\\utils\\\\permissions.js\" -Force)",
+      "Bash(Write-Host \"Deleted 3 files\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git commit -m 'fix: remove is_active field — column does not exist in teachers table *)",
+      "Bash(git commit -m 'feat: redesign Profile Management page — custom modals, toast notifications, credential fix *)",
+      "Bash(git commit -m 'feat: redesign AccessDenied screen + friendly Serbian error messages on login *)",
+      "Bash(git commit -m 'fix: translate all Serbian UI strings to English *)",
+      "Bash(git commit -m 'fix: use double quotes around strings with apostrophes in AuthContext *)",
+      "Bash(cd \"/c/Users/Green School Teacher/Documents/Personal Projects/Projects/Akio Platform/.claude/worktrees/dazzling-jones-e4bf22\" && grep -r \"md:\" src/school/SchoolApp.jsx | head -20)",
+      "Bash(git commit *)",
+      "Bash(grep -v \"//.*console\")",
+      "PowerShell($srcPath = \"C:\\\\Users\\\\Green School Teacher\\\\Documents\\\\Personal Projects\\\\Projects\\\\Akio Platform\\\\.claude\\\\worktrees\\\\dazzling-jones-e4bf22\\\\src\"; Get-ChildItem -Path $srcPath -Directory | ForEach-Object { $_.Name })",
+      "PowerShell($srcPath = \"C:\\\\Users\\\\Green School Teacher\\\\Documents\\\\Personal Projects\\\\Projects\\\\Akio Platform\\\\.claude\\\\worktrees\\\\dazzling-jones-e4bf22\\\\src\"; if \\(Test-Path \"$srcPath\\\\grading\"\\) { Get-ChildItem -Recurse -Path \"$srcPath\\\\grading\" } else { \"grading dir not found\" })"
+    ]
+  }
+}

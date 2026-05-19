@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Clock, Calendar } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import DateNavigator from '../../../../shared/components/DateNavigator';
+import { toast } from '../../../../core/components/Toast';
 import ClassCard from './ClassCard';
 import AddClassModal from './AddClassModal';
 import { useAuth } from '../../../../core/context/AuthContext';
@@ -78,7 +79,7 @@ const HomePage = () => {
   // Add class handler
   const addClass = async (scheduleClass, title, comment) => {
     if (!classService || !teacher?.user_id) {
-      alert('You need a teacher profile to add classes');
+      toast.warning('You need a teacher profile to add classes');
       return;
     }
 
@@ -110,7 +111,7 @@ const HomePage = () => {
       setShowAddClass(false);
     } catch (error) {
       console.error('Error adding class:', error);
-      alert('Failed to add class: ' + error.message);
+      toast.error('Failed to add class: ' + error.message);
     } finally {
       setLocalLoading(false);
     }
@@ -138,7 +139,7 @@ const HomePage = () => {
       );
     } catch (error) {
       console.error('Error removing class:', error);
-      alert('Failed to remove class. Please try again.');
+      toast.error('Failed to remove class. Please try again.');
     } finally {
       setLocalLoading(false);
     }

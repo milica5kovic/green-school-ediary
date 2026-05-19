@@ -3,6 +3,7 @@ import { Archive, AlertTriangle, Download, CheckCircle, ChevronRight, ChevronLef
 import * as XLSX from 'xlsx';
 import { useApp } from '../../../../core/context/AppContext';
 import { useAuth } from '../../../../core/context/AuthContext';
+import { toast } from '../../../../core/components/Toast';
 
 const CURRENT_YEAR = '2025-26';
 const NEXT_YEAR = '2026-27';
@@ -165,10 +166,10 @@ const ArchiveTabContent = () => {
       });
 
       setProgress({ current: 0, total: 0, label: '' });
-      alert('Export downloaded successfully!');
+      toast.success('Export downloaded successfully!');
     } catch (error) {
       console.error('Export error:', error);
-      alert('Export failed: ' + error.message);
+      toast.error('Export failed: ' + error.message);
       setProgress({ current: 0, total: 0, label: '' });
     }
   };
@@ -330,10 +331,10 @@ const ArchiveTabContent = () => {
       }));
 
       setProgress({ current: 0, total: 0, label: '' });
-      alert('Excel export downloaded successfully!');
+      toast.success('Excel export downloaded successfully!');
     } catch (error) {
       console.error('Excel export error:', error);
-      alert('Excel export failed: ' + error.message);
+      toast.error('Excel export failed: ' + error.message);
       setProgress({ current: 0, total: 0, label: '' });
     }
   };
@@ -457,7 +458,7 @@ const ArchiveTabContent = () => {
       setStep(6);
     } catch (error) {
       console.error('Archive error:', error);
-      alert('Archive failed at: ' + progress.label + '\nError: ' + error.message + '\n\nSome data may have been partially deleted. Check your database.');
+      toast.error('Archive failed at: ' + progress.label + ' — ' + error.message);
       setStep(4);
     } finally {
       setExecuting(false);
