@@ -20,6 +20,7 @@ const ClassCard = ({ cls, onRemove, periodNumber = null, stackIndex = 0, total =
   const [showBehaviorModal, setShowBehaviorModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [behaviorComment, setBehaviorComment] = useState("");
+  const [shareWithParent, setShareWithParent] = useState(true);
   const [localAttendance, setLocalAttendance] = useState({}); // Local state for instant updates
 
   const dateKey = getDateKey(selectedDate);
@@ -140,18 +141,40 @@ const ClassCard = ({ cls, onRemove, periodNumber = null, stackIndex = 0, total =
     const record = localAttendance[studentId];
     setSelectedStudent(studentId);
     setBehaviorComment(record?.comment || "");
+    setShareWithParent(true);
     setShowBehaviorModal(true);
   };
 
   const saveBehaviorComment = async () => {
     try {
-
+      // Always save to attendance record
       await attendanceService.updateComment(
         dateKey,
         cls.id,
         selectedStudent,
         behaviorComment,
       );
+
+      // If "Share with parent" is on, also write to teacher_comments
+      if (shareWithParent && behaviorComment.trim()) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: teacher } = await supabase
+            .from('teachers')
+            .select('id')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          await supabase.from('teacher_comments').insert({
+            student_id: selectedStudent,
+            teacher_id: teacher?.id || null,
+            comment: behaviorComment,
+            comment_type: 'neutral',
+            is_visible_to_parent: true,
+            created_at: new Date().toISOString(),
+          });
+        }
+      }
 
       // Update local state
       const updatedRecord = attendanceService.getAttendance(
@@ -376,20 +399,63 @@ const ClassCard = ({ cls, onRemove, periodNumber = null, stackIndex = 0, total =
 
       {/* Behavior Comment Modal */}
       {showBehaviorModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4">
-            <h3 className="text-xl font-bold mb-4">Behavior Comment</h3>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${primaryColor}18` }}>
+                <MessageSquare size={18} style={{ color: primaryColor }} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Behavior Comment</h3>
+                <p className="text-xs text-gray-400">
+                  {students.find(s => s.id === selectedStudent)?.name || 'Student'}
+                </p>
+              </div>
+            </div>
+
             <textarea
-              className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              className="w-full border border-gray-200 rounded-xl p-3.5 text-sm focus:ring-2 focus:outline-none resize-none"
+              style={{ '--tw-ring-color': primaryColor }}
               rows={4}
-              placeholder="Enter behavior comment..."
+              placeholder="Write a note about this student's behavior today..."
               value={behaviorComment}
               onChange={(e) => setBehaviorComment(e.target.value)}
+              autoFocus
             />
+
+            {/* Share with parent toggle */}
+            <button
+              type="button"
+              onClick={() => setShareWithParent(prev => !prev)}
+              className="mt-3 w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all"
+              style={shareWithParent
+                ? { borderColor: primaryColor, backgroundColor: `${primaryColor}0d` }
+                : { borderColor: '#e5e7eb', backgroundColor: '#f9fafb' }
+              }>
+              <div className="flex items-center gap-2.5">
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all`}
+                  style={shareWithParent
+                    ? { borderColor: primaryColor, backgroundColor: primaryColor }
+                    : { borderColor: '#d1d5db', backgroundColor: 'white' }
+                  }>
+                  {shareWithParent && (
+                    <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                      <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-semibold text-gray-800">Share with parent</p>
+                  <p className="text-[11px] text-gray-400">Parent will see this in their child's profile</p>
+                </div>
+              </div>
+            </button>
+
             <div className="flex gap-3 mt-4">
               <button
                 onClick={saveBehaviorComment}
-                className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-2 rounded-lg font-medium hover:shadow-lg transition-all"
+                className="flex-1 text-white py-2.5 rounded-xl font-semibold hover:shadow-lg transition-all text-sm"
+                style={{ background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}cc)` }}
               >
                 Save
               </button>
@@ -399,7 +465,7 @@ const ClassCard = ({ cls, onRemove, periodNumber = null, stackIndex = 0, total =
                   setBehaviorComment("");
                   setSelectedStudent(null);
                 }}
-                className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-300 transition-all"
+                className="flex-1 bg-gray-100 text-gray-600 py-2.5 rounded-xl font-semibold hover:bg-gray-200 transition-all text-sm"
               >
                 Cancel
               </button>
