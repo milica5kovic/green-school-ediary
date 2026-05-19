@@ -13,17 +13,17 @@ import { useParentChildrenCtx } from '../context/ParentChildrenContext';
 // ════════════════════════════════════════════════════════════════════════════
 
 const ATT = {
-  present:  { label: 'Prisutan',    Icon: CheckCircle,  color: '#10b981', bg: '#f0fdf4', border: '#86efac', badgeBg: '#dcfce7', badgeText: '#065f46' },
-  late:     { label: 'Zakasnio',    Icon: Clock,        color: '#f59e0b', bg: '#fffbeb', border: '#fde68a', badgeBg: '#fef3c7', badgeText: '#92400e' },
-  absent:   { label: 'Odsutan',     Icon: XCircle,      color: '#ef4444', bg: '#fef2f2', border: '#fca5a5', badgeBg: '#fee2e2', badgeText: '#991b1b' },
-  sent_out: { label: 'Isključen',   Icon: AlertCircle,  color: '#8b5cf6', bg: '#f5f3ff', border: '#c4b5fd', badgeBg: '#ede9fe', badgeText: '#4c1d95' },
-  default:  { label: 'Nije unesen', Icon: Clock,        color: '#9ca3af', bg: '#f9fafb', border: '#e5e7eb', badgeBg: '#f3f4f6', badgeText: '#4b5563' },
+  present:  { label: 'Present',    Icon: CheckCircle,  color: '#10b981', bg: '#f0fdf4', border: '#86efac', badgeBg: '#dcfce7', badgeText: '#065f46' },
+  late:     { label: 'Late',       Icon: Clock,        color: '#f59e0b', bg: '#fffbeb', border: '#fde68a', badgeBg: '#fef3c7', badgeText: '#92400e' },
+  absent:   { label: 'Absent',     Icon: XCircle,      color: '#ef4444', bg: '#fef2f2', border: '#fca5a5', badgeBg: '#fee2e2', badgeText: '#991b1b' },
+  sent_out: { label: 'Sent Out',   Icon: AlertCircle,  color: '#8b5cf6', bg: '#f5f3ff', border: '#c4b5fd', badgeBg: '#ede9fe', badgeText: '#4c1d95' },
+  default:  { label: 'Not Marked', Icon: Clock,        color: '#9ca3af', bg: '#f9fafb', border: '#e5e7eb', badgeBg: '#f3f4f6', badgeText: '#4b5563' },
 };
 
 const COMMENT_TYPE = {
-  positive:        { label: 'Pozitivno', color: '#10b981', bg: '#f0fdf4', border: '#86efac', dot: '🟢' },
-  neutral:         { label: 'Neutralno', color: '#3b82f6', bg: '#eff6ff', border: '#93c5fd', dot: '🔵' },
-  needs_attention: { label: 'Pažnja',    color: '#f59e0b', bg: '#fffbeb', border: '#fde68a', dot: '🟡' },
+  positive:        { label: 'Positive',     color: '#10b981', bg: '#f0fdf4', border: '#86efac', dot: '🟢' },
+  neutral:         { label: 'Neutral',      color: '#3b82f6', bg: '#eff6ff', border: '#93c5fd', dot: '🔵' },
+  needs_attention: { label: 'Needs Work',   color: '#f59e0b', bg: '#fffbeb', border: '#fde68a', dot: '🟡' },
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -162,12 +162,12 @@ const ParentDailyViewPage = () => {
 
   const getHwStatus = (hwId) => {
     const s = studentHomeworkStatus[hwId];
-    if (!s) return { text: 'Nije početo', cls: 'bg-gray-100 text-gray-500' };
+    if (!s) return { text: 'Not Started', cls: 'bg-gray-100 text-gray-500' };
     switch (s.status) {
-      case 'done':           return { text: '✓ Urađeno',      cls: 'bg-green-100 text-green-700' };
-      case 'partially_done': return { text: '◐ Djelimično',   cls: 'bg-orange-100 text-orange-700' };
-      case 'not_done':       return { text: '○ Nije urađeno', cls: 'bg-red-100 text-red-700' };
-      default:               return { text: 'Nije početo',    cls: 'bg-gray-100 text-gray-500' };
+      case 'done':           return { text: '✓ Done',        cls: 'bg-green-100 text-green-700' };
+      case 'partially_done': return { text: '◐ Partial',     cls: 'bg-orange-100 text-orange-700' };
+      case 'not_done':       return { text: '○ Not Done',    cls: 'bg-red-100 text-red-700' };
+      default:               return { text: 'Not Started',   cls: 'bg-gray-100 text-gray-500' };
     }
   };
 
@@ -184,7 +184,7 @@ const ParentDailyViewPage = () => {
   };
 
   const formatDate = (date) =>
-    date.toLocaleDateString('bs-BA', {
+    date.toLocaleDateString('en-GB', {
       weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
     });
 
@@ -203,8 +203,8 @@ const ParentDailyViewPage = () => {
     return (
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
         <Users size={40} className="mx-auto text-gray-300 mb-3" />
-        <p className="text-gray-500 font-medium">Nema povezanog učenika</p>
-        <p className="text-gray-400 text-sm mt-1">Kontaktirajte administratora škole</p>
+        <p className="text-gray-500 font-medium">No children linked to your account</p>
+        <p className="text-gray-400 text-sm mt-1">Please contact the school administrator</p>
       </div>
     );
   }
@@ -233,13 +233,13 @@ const ParentDailyViewPage = () => {
             {isToday ? (
               <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold mt-1"
                 style={{ backgroundColor: theme.color, color: '#fff' }}>
-                Danas
+                Today
               </span>
             ) : (
               <button onClick={() => setSelectedDate(new Date())}
                 className="text-xs mt-1 underline underline-offset-2 transition-opacity hover:opacity-70"
                 style={{ color: theme.color }}>
-                Idi na danas
+                Go to today
               </button>
             )}
           </div>
@@ -254,10 +254,10 @@ const ParentDailyViewPage = () => {
         {(dailyClasses.length > 0 || !dataLoading) && (
           <div className="grid grid-cols-4 gap-3 px-4 pb-4 pt-1">
             {[
-              { label: 'Časova',   value: dailyClasses.length, color: theme.color },
-              { label: 'Prisutan', value: presentCount,        color: '#10b981' },
-              { label: 'Zakasnio',  value: lateCount,           color: '#f59e0b' },
-              { label: 'Odsutan',  value: absentCount,         color: '#ef4444' },
+              { label: 'Classes', value: dailyClasses.length, color: theme.color },
+              { label: 'Present', value: presentCount,        color: '#10b981' },
+              { label: 'Late',    value: lateCount,           color: '#f59e0b' },
+              { label: 'Absent',  value: absentCount,         color: '#ef4444' },
             ].map((s, i) => (
               <div key={i} className="text-center py-3 rounded-xl bg-gray-50">
                 <p className="text-xl font-bold leading-none" style={{ color: s.color }}>{s.value}</p>
@@ -273,7 +273,7 @@ const ParentDailyViewPage = () => {
         <div className="flex items-center justify-center py-10 gap-3">
           <div className="w-7 h-7 border-2 rounded-full animate-spin"
             style={{ borderColor: `${theme.color}30`, borderTopColor: theme.color }} />
-          <span className="text-gray-400 text-sm">Učitavanje...</span>
+          <span className="text-gray-400 text-sm">Loading...</span>
         </div>
       ) : (
         <>
@@ -282,7 +282,7 @@ const ParentDailyViewPage = () => {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <SectionHeader
               icon={BookOpen}
-              title="Raspored & Prisustvo"
+              title="Schedule & Attendance"
               count={dailyClasses.length}
               color={theme.color}
             />
@@ -290,7 +290,7 @@ const ParentDailyViewPage = () => {
             {dailyClasses.length === 0 ? (
               <div className="text-center py-10">
                 <Calendar size={36} className="mx-auto text-gray-200 mb-3" />
-                <EmptyState message="Nema rasporeda za ovaj dan" />
+                <EmptyState message="No classes scheduled for this day" />
               </div>
             ) : (
               <div className="space-y-2">
@@ -355,13 +355,13 @@ const ParentDailyViewPage = () => {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <SectionHeader
               icon={FileText}
-              title="Domaći & Ocjene"
+              title="Homework & Grades"
               count={homeworkDueToday.length + todayGrades.length}
               color="#f59e0b"
             />
 
             {homeworkDueToday.length === 0 && todayGrades.length === 0 ? (
-              <EmptyState message="Nema domaćih ni ocjena za ovaj dan" />
+              <EmptyState message="No homework or grades for this day" />
             ) : (
               <div className="space-y-4">
 
@@ -369,7 +369,7 @@ const ParentDailyViewPage = () => {
                 {homeworkDueToday.length > 0 && (
                   <div>
                     <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2.5">
-                      Domaći zadaci ({homeworkDueToday.length})
+                      Homework due ({homeworkDueToday.length})
                     </p>
                     <div className="space-y-2">
                       {homeworkDueToday.map(hw => {
@@ -402,7 +402,7 @@ const ParentDailyViewPage = () => {
                 {todayGrades.length > 0 && (
                   <div>
                     <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2.5">
-                      Ocjene ({todayGrades.length})
+                      Grades ({todayGrades.length})
                     </p>
                     <div className="space-y-2">
                       {todayGrades.map(grade => {
@@ -449,7 +449,7 @@ const ParentDailyViewPage = () => {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <SectionHeader
               icon={MessageSquare}
-              title="Komentari nastavnika"
+              title="Teacher Comments"
               count={teacherComments.length}
               color="#8b5cf6"
             />
@@ -457,13 +457,13 @@ const ParentDailyViewPage = () => {
             {teacherComments.length === 0 ? (
               <div className="text-center py-6">
                 <MessageSquare size={28} className="mx-auto text-gray-200 mb-2" />
-                <EmptyState message="Nema komentara nastavnika za ovaj dan" />
+                <EmptyState message="No teacher comments for this day" />
               </div>
             ) : (
               <div className="space-y-3">
                 {teacherComments.map(comment => {
                   const typeCfg     = COMMENT_TYPE[comment.comment_type] || COMMENT_TYPE.neutral;
-                  const teacherName = comment.teachers?.full_name || 'Nastavnik';
+                  const teacherName = comment.teachers?.full_name || 'Teacher';
                   const subject     = comment.teachers?.subjects?.[0] || '';
 
                   return (
