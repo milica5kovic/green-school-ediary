@@ -102,6 +102,7 @@ const ProfileManagementPage = () => {
   const [students, setStudents] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [changePwTeacher, setChangePwTeacher] = useState(null);
+  const [changePwParent, setChangePwParent] = useState(null);
   const [showAddParentModal, setShowAddParentModal] = useState(false);
   const [showEditParentModal, setShowEditParentModal] = useState(false);
   const [showManageChildrenModal, setShowManageChildrenModal] = useState(false);
@@ -720,6 +721,11 @@ const ProfileManagementPage = () => {
                             <button onClick={() => { setSelectedParent(parent); setShowManageChildrenModal(true); }} className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Manage Children">
                               <Users size={14} />
                             </button>
+                            {parent.user_id && (
+                              <button onClick={() => setChangePwParent(parent)} className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Change password">
+                                <Key size={14} />
+                              </button>
+                            )}
                             <button onClick={() => { setSelectedParent(parent); setShowDeleteParentModal(true); }} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
                               <Trash2 size={14} />
                             </button>
@@ -751,6 +757,14 @@ const ProfileManagementPage = () => {
         <ChangePasswordModal
           teacher={changePwTeacher}
           onClose={() => setChangePwTeacher(null)}
+          showToast={showToast}
+        />
+      )}
+
+      {changePwParent && (
+        <ChangePasswordModal
+          teacher={changePwParent}
+          onClose={() => setChangePwParent(null)}
           showToast={showToast}
         />
       )}
