@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
-import useParentChildren from '../../../../shared/hooks/useParentChildren';
+import { useParentChildrenCtx } from '../context/ParentChildrenContext';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PARENT ATTENDANCE PAGE — no calendar, heatmap + gauge + history list
@@ -40,7 +40,7 @@ const ParentAttendancePage = () => {
   const { supabase } = useApp();
   const theme = useTermTheme();
   const TermIcon = theme.icon;
-  const { children, selectedChild, setSelectedChild, loading } = useParentChildren();
+  const { children, selectedChild, setSelectedChild, loading } = useParentChildrenCtx();
 
   const [attendance, setAttendance] = useState([]);
   const [filter, setFilter]         = useState('all');   // all | present | late | absent | sent_out

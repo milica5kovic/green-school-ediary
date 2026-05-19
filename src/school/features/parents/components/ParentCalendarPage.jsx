@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
-import useParentChildren from '../../../../shared/hooks/useParentChildren';
+import { useParentChildrenCtx } from '../context/ParentChildrenContext';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PARENT CALENDAR PAGE - Uses useTermTheme for dynamic colors
@@ -41,7 +41,7 @@ const ParentCalendarPage = () => {
   const theme = useTermTheme();
   const TermIcon = theme.icon;
 
-  const { children, selectedChild, setSelectedChild, loading } = useParentChildren();
+  const { children, selectedChild, setSelectedChild, loading } = useParentChildrenCtx();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [schoolEvents, setSchoolEvents] = useState([]);
   const [scheduledTests, setScheduledTests] = useState([]);

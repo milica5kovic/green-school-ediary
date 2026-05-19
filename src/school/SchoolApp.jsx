@@ -33,6 +33,7 @@ import { useAuth } from "../core/context/AuthContext";
 import { useTenant } from "../core/context/TenantContext";
 import { useBranding } from "../core/context/BrandingContext";
 import { ToastProvider } from "../core/components/Toast";
+import { ParentChildrenProvider, useParentChildrenCtx } from "./features/parents/context/ParentChildrenContext";
 
 import NavItem from "../shared/navigation/NavItem";
 import LoadingSpinner from "../shared/components/LoadingSpinner";
@@ -70,7 +71,9 @@ import TimetableMakerPage from "./features/timetable/components/TimetableMakerPa
 const SchoolApp = () => (
   <ToastProvider>
     <AppProvider>
-      <SchoolAppContent />
+      <ParentChildrenProvider>
+        <SchoolAppContent />
+      </ParentChildrenProvider>
     </AppProvider>
   </ToastProvider>
 );
@@ -99,6 +102,12 @@ const SchoolAppContent = () => {
     isAdmin,
     isParent,
   } = useAuth();
+
+  const {
+    children: parentChildren,
+    selectedChild: parentSelectedChild,
+    setSelectedChild: setParentChild,
+  } = useParentChildrenCtx();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -165,17 +174,18 @@ const SchoolAppContent = () => {
       }
 
       switch (displayedPage) {
-        case "home":              return <ParentDashboard />;
+        case "home":
+        case "parent-daily":      return <ParentDailyViewPage />;
+        case "parent-dashboard":  return <ParentDashboard />;
         case "my-child":          return <ParentMyChildPage />;
         case "grading":
         case "parent-grades":     return hasFeature("parent_grades")     ? <ParentGradesPage />     : <FeatureDisabled feature="Grades" />;
         case "parent-attendance": return hasFeature("parent_attendance") ? <ParentAttendancePage /> : <FeatureDisabled feature="Attendance" />;
         case "parent-calendar":   return hasFeature("parent_calendar")   ? <ParentCalendarPage />   : <FeatureDisabled feature="Calendar" />;
-        case "parent-daily":      return <ParentDailyViewPage />;
         case "homework":
         case "parent-homework":   return hasFeature("parent_homework")   ? <ParentHomeworkPage />   : <FeatureDisabled feature="Homework" />;
         case "settings":          return <SettingsPage />;
-        default:                  return <ParentDashboard />;
+        default:                  return <ParentDailyViewPage />;
       }
     }
 
@@ -295,12 +305,11 @@ const SchoolAppContent = () => {
         <>
           {hasFeature("parent_portal") && (
             <>
-              <NavItem icon={LayoutDashboard} label="Dashboard"  page="home" />
-              <NavItem icon={UserCircle}      label="My Child"   page="my-child" />
+              <NavItem icon={CalendarDays}    label="Daily View"  page="parent-daily" />
+              <NavItem icon={UserCircle}      label="My Child"    page="my-child" />
               {hasFeature("parent_grades")     && <NavItem icon={Award}         label="Grades"     page="grading" />}
               {hasFeature("parent_attendance") && <NavItem icon={CalendarCheck} label="Attendance" page="parent-attendance" />}
               {hasFeature("parent_calendar")   && <NavItem icon={Calendar}      label="Calendar"   page="parent-calendar" />}
-              <NavItem icon={CalendarDays} label="Daily View" page="parent-daily" />
               {hasFeature("parent_homework")   && <NavItem icon={ClipboardList} label="Homework"   page="homework" />}
             </>
           )}
@@ -418,6 +427,33 @@ const SchoolAppContent = () => {
 
             {/* Right: user info + logout */}
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+
+              {/* Child selector — parents with linked children only */}
+              {isParent() && parentChildren.length > 0 && (
+                <div className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl border transition-colors"
+                  style={{ borderColor: `${primaryColor}30`, backgroundColor: `${primaryColor}08` }}>
+                  <User size={13} style={{ color: primaryColor }} className="flex-shrink-0" />
+                  {parentChildren.length === 1 ? (
+                    <span className="text-sm font-semibold leading-none" style={{ color: primaryColor }}>
+                      {parentChildren[0].name}
+                      <span className="font-normal opacity-70 ml-1 text-xs">· {parentChildren[0].class_name}</span>
+                    </span>
+                  ) : (
+                    <select
+                      value={parentSelectedChild?.id || ''}
+                      onChange={(e) => setParentChild(parentChildren.find(c => c.id === e.target.value))}
+                      className="bg-transparent text-sm font-semibold focus:outline-none cursor-pointer"
+                      style={{ color: primaryColor }}
+                    >
+                      {parentChildren.map(child => (
+                        <option key={child.id} value={child.id} className="text-gray-900 font-normal">
+                          {child.name} · {child.class_name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
               {/* User info — desktop only */}
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-semibold text-gray-900">

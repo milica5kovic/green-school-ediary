@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { User, ChevronDown, Award, MessageSquare, TrendingUp, Star, AlertCircle, CheckCircle, Target, Users } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
-import useParentChildren from '../../../../shared/hooks/useParentChildren';
+import { useParentChildrenCtx } from '../context/ParentChildrenContext';
 import { useBranding } from '../../../../core/context/BrandingContext';
 import { getGradeFromConfig, isPrimaryClass } from '../../../../core/utils/cambridgeGrading';
 
@@ -16,7 +16,7 @@ const ParentMyChildPage = () => {
   const { gradingConfig } = useBranding();
   const TermIcon = theme.icon;
 
-  const { children, selectedChild, setSelectedChild, loading } = useParentChildren();
+  const { children, selectedChild, setSelectedChild, loading } = useParentChildrenCtx();
   const [teacherComments, setTeacherComments] = useState([]);
   const [topSubjects, setTopSubjects] = useState([]);
   const [behaviorStats, setBehaviorStats] = useState({ positive: 0, neutral: 0, needsAttention: 0 });

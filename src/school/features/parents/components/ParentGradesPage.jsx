@@ -5,7 +5,7 @@ import {
 import { useApp } from '../../../../core/context/AppContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
-import useParentChildren from '../../../../shared/hooks/useParentChildren';
+import { useParentChildrenCtx } from '../context/ParentChildrenContext';
 import { useBranding } from '../../../../core/context/BrandingContext';
 import { getGradeFromConfig, isPrimaryClass } from '../../../../core/utils/cambridgeGrading';
 
@@ -45,7 +45,7 @@ const ParentGradesPage = () => {
     return { color, name };
   };
 
-  const { children, selectedChild, setSelectedChild, loading } = useParentChildren();
+  const { children, selectedChild, setSelectedChild, loading } = useParentChildrenCtx();
   const [grades, setGrades] = useState([]);
   const [selectedTerm, setSelectedTerm] = useState(null);
   const [selectedSubject, setSelectedSubject] = useState('all');

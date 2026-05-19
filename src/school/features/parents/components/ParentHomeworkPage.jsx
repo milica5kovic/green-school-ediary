@@ -6,7 +6,7 @@ import {
 import { useApp } from '../../../../core/context/AppContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
-import useParentChildren from '../../../../shared/hooks/useParentChildren';
+import { useParentChildrenCtx } from '../context/ParentChildrenContext';
 import { useBranding } from '../../../../core/context/BrandingContext';
 
 // ═══════════════════════════════════════════════════════════════
@@ -51,7 +51,7 @@ const ParentHomeworkPage = () => {
     return { color, name };
   };
 
-  const { children, selectedChild, setSelectedChild, loading } = useParentChildren();
+  const { children, selectedChild, setSelectedChild, loading } = useParentChildrenCtx();
   const [homework, setHomework] = useState([]);
   const [selectedTerm, setSelectedTerm] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');

@@ -7,7 +7,7 @@ import {
 import { useApp } from '../../../../core/context/AppContext';
 import useActiveTerm from '../../../../shared/hooks/useActiveTerm';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
-import useParentChildren from '../../../../shared/hooks/useParentChildren';
+import { useParentChildrenCtx } from '../context/ParentChildrenContext';
 import { useBranding } from '../../../../core/context/BrandingContext';
 import { getGradeFromConfig, isPrimaryClass } from '../../../../core/utils/cambridgeGrading';
 
@@ -39,7 +39,7 @@ const ParentDashboard = () => {
   const { gradingConfig } = useBranding();
   const TermIcon = theme.icon;
 
-  const { children, selectedChild, setSelectedChild, loading } = useParentChildren();
+  const { children, selectedChild, setSelectedChild, loading } = useParentChildrenCtx();
   const [dataLoading, setDataLoading] = useState(false);
 
   const [attendanceStats, setAttendanceStats] = useState(null);
