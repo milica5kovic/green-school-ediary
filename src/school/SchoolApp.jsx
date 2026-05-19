@@ -175,8 +175,8 @@ const SchoolAppContent = () => {
 
       switch (displayedPage) {
         case "home":
-        case "parent-daily":      return <ParentDailyViewPage />;
         case "parent-dashboard":  return <ParentDashboard />;
+        case "parent-daily":      return <ParentDailyViewPage />;
         case "my-child":          return <ParentMyChildPage />;
         case "grading":
         case "parent-grades":     return hasFeature("parent_grades")     ? <ParentGradesPage />     : <FeatureDisabled feature="Grades" />;
@@ -185,7 +185,7 @@ const SchoolAppContent = () => {
         case "homework":
         case "parent-homework":   return hasFeature("parent_homework")   ? <ParentHomeworkPage />   : <FeatureDisabled feature="Homework" />;
         case "settings":          return <SettingsPage />;
-        default:                  return <ParentDailyViewPage />;
+        default:                  return <ParentDashboard />;
       }
     }
 
@@ -305,6 +305,7 @@ const SchoolAppContent = () => {
         <>
           {hasFeature("parent_portal") && (
             <>
+              <NavItem icon={LayoutDashboard} label="Overview"    page="home" />
               <NavItem icon={CalendarDays}    label="Daily View"  page="parent-daily" />
               <NavItem icon={UserCircle}      label="My Child"    page="my-child" />
               {hasFeature("parent_grades")     && <NavItem icon={Award}         label="Grades"     page="grading" />}
