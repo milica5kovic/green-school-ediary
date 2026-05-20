@@ -336,54 +336,58 @@ const ParentDailyViewPage = () => {
             </div>
           ) : (
             <>
-              {/* table header */}
-              <div className="grid gap-0 px-6 py-2 border-b border-slate-50"
-                style={{ gridTemplateColumns: '40px 70px 1fr 120px' }}>
-                {['PERIOD', 'TIME', 'SUBJECT', 'STATUS'].map(h => (
-                  <p key={h} className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{h}</p>
+              {/* column headers */}
+              <div className="px-6 py-2 border-b border-slate-50 grid"
+                style={{ gridTemplateColumns: '28px 80px 1fr 110px' }}>
+                {['', 'TIME', 'SUBJECT', 'STATUS'].map((h, i) => (
+                  <p key={i} className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{h}</p>
                 ))}
               </div>
 
-              {/* rows */}
-              <div className="divide-y divide-slate-50">
+              {/* timeline rows */}
+              <div className="px-6 py-2 relative">
+                {/* vertical connecting line */}
+                {classes.length > 1 && (
+                  <div className="absolute top-6 bottom-6 w-px bg-slate-100"
+                    style={{ left: '34px' }} />
+                )}
+
                 {classes.map((cls, i) => {
                   const att = attMap[cls.id];
                   const cfg = att ? ATT[att.status] : null;
                   return (
-                    <React.Fragment key={cls.id}>
-                      <div className={`grid items-center px-6 py-3.5 gap-0 transition-colors ${cfg ? '' : 'hover:bg-slate-50/60'}`}
-                        style={{ gridTemplateColumns: '40px 70px 1fr 120px', backgroundColor: cfg ? `${cfg.dot}08` : undefined }}>
+                    <div key={cls.id} className="grid items-start py-3 gap-0 rounded-xl px-2 -mx-2 transition-colors hover:bg-slate-50/70"
+                      style={{ gridTemplateColumns: '28px 80px 1fr 110px' }}>
 
-                        {/* period number */}
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0"
-                            style={{ backgroundColor: cfg?.dot || '#cbd5e1' }}>
-                            {i + 1}
-                          </div>
-                        </div>
-
-                        {/* time */}
-                        <p className="text-xs font-medium text-slate-500 tabular-nums">{cls.time || '—'}</p>
-
-                        {/* subject + title */}
-                        <div className="min-w-0 pr-3">
-                          <p className="text-sm font-semibold text-slate-800">{cls.subject}</p>
-                          {cls.title && cls.title !== cls.subject && (
-                            <p className="text-xs text-slate-400 mt-0.5">{cls.title}</p>
-                          )}
-                          {att?.comment && (
-                            <p className="text-xs italic mt-1.5 leading-snug" style={{ color: cfg?.color || '#64748b' }}>
-                              "{att.comment}"
-                            </p>
-                          )}
-                        </div>
-
-                        {/* status */}
-                        <div>
-                          <StatusBadge status={att?.status} />
-                        </div>
+                      {/* coloured dot */}
+                      <div className="flex justify-center pt-1 z-10">
+                        <div className="w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm"
+                          style={{ backgroundColor: cfg?.dot || '#e2e8f0' }} />
                       </div>
-                    </React.Fragment>
+
+                      {/* time */}
+                      <div className="pr-2">
+                        <p className="text-xs font-semibold text-slate-700 tabular-nums leading-tight">{cls.time || '—'}</p>
+                      </div>
+
+                      {/* subject + lesson title + comment */}
+                      <div className="min-w-0 pr-4">
+                        <p className="text-sm font-semibold text-slate-900 leading-tight">{cls.subject}</p>
+                        {cls.title && cls.title !== cls.subject && (
+                          <p className="text-xs text-slate-400 mt-0.5">{cls.title}</p>
+                        )}
+                        {att?.comment && (
+                          <p className="text-xs italic mt-1.5 leading-snug" style={{ color: cfg?.color || '#64748b' }}>
+                            "{att.comment}"
+                          </p>
+                        )}
+                      </div>
+
+                      {/* status badge */}
+                      <div className="pt-0.5">
+                        <StatusBadge status={att?.status} />
+                      </div>
+                    </div>
                   );
                 })}
               </div>
@@ -549,20 +553,19 @@ const ParentDailyViewPage = () => {
             <TermIcon size={16} style={{ color: theme.color }} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-semibold text-slate-900">
                 {theme.name} Term · {theme.activeTerm?.academic_year}
               </p>
-              <p className="text-xs text-slate-400">{theme.daysRemaining} days left</p>
+              <p className="text-xs font-semibold text-slate-500">{theme.daysRemaining} days left</p>
             </div>
-            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-              <div className="h-1.5 rounded-full transition-all" style={{ width: `${theme.progress}%`, backgroundColor: theme.color }} />
+            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-2 rounded-full transition-all" style={{ width: `${Math.round(theme.progress)}%`, backgroundColor: theme.color }} />
             </div>
-            <div className="flex items-center justify-between mt-1">
+            <div className="flex items-center justify-between mt-1.5">
               <p className="text-[11px] text-slate-400">
                 {new Date(theme.activeTerm?.start_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
               </p>
-              <p className="text-[11px] font-semibold" style={{ color: theme.color }}>{theme.progress}%</p>
               <p className="text-[11px] text-slate-400">
                 {new Date(theme.activeTerm?.end_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
               </p>
