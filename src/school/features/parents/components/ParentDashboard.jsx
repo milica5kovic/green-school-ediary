@@ -52,6 +52,19 @@ const EVENT_TYPE_LABELS = {
   other:        'School Event',
 };
 
+// Renders a consistent Twemoji image regardless of OS/browser
+const Emoji = ({ char, size = 24 }) => {
+  const cp = [...char].map(c => c.codePointAt(0).toString(16)).join('-');
+  return (
+    <img
+      src={`https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${cp}.svg`}
+      alt={char}
+      draggable={false}
+      style={{ width: size, height: size, display: 'inline-block', verticalAlign: 'middle' }}
+    />
+  );
+};
+
 const formatEventType = (type) => {
   if (!type) return 'Event';
   return EVENT_TYPE_LABELS[type.toLowerCase()]
@@ -322,8 +335,9 @@ const ParentDashboard = () => {
       {/* ── HEADER ────────────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4 pt-1">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            {getGreeting()}{parentName ? `, ${parentName}` : ''}! 👋
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            {getGreeting()}{parentName ? `, ${parentName}` : ''}!
+            <Emoji char="👋" size={26} />
           </h1>
           <p className="text-slate-500 text-sm mt-1">
             {"Here's what's happening with "}
