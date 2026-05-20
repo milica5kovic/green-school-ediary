@@ -21,7 +21,7 @@ import {
   Users,
   Loader2,
 } from "lucide-react";
-import { supabase } from "../../../../core/infrastructure/supabaseClient";
+import { useApp } from "../../../../core/context/AppContext";
 import { useAuth } from "../../../../core/context/AuthContext";
 import { useTenant } from "../../../../core/context/TenantContext";
 import { useBranding } from "../../../../core/context/BrandingContext";
@@ -47,6 +47,7 @@ const INSTRUCTION_PRESETS = [
 
 const TestMakerPage = () => {
   const { schoolId } = useTenant();
+  const { supabase } = useApp(); // 🔒 tenantSupabase — auto-adds school_id filter
   const { teacher } = useAuth();
   const branding = useBranding();
   const theme = useTermTheme();
@@ -122,7 +123,7 @@ const TestMakerPage = () => {
       }
 
     } catch (error) {
-      console.error("Error loading data:", error);
+      console.error("Error loading data:", error.message);
     } finally {
       setLoading(false);
     }
@@ -234,7 +235,7 @@ const TestMakerPage = () => {
 
       toast.success("Test PDF generated successfully!");
     } catch (error) {
-      console.error("PDF error:", error);
+      console.error("PDF error:", error.message);
       toast.error("Failed to generate PDF: " + error.message);
     } finally {
       setGenerating(false);

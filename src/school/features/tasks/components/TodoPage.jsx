@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Calendar as CalendarIcon, AlertCircle, Check, ListTodo, Loader2 } from 'lucide-react';
-import { supabase } from '../../../../core/infrastructure/supabaseClient';
+import { useApp } from '../../../../core/context/AppContext';
 import { useTenant } from '../../../../core/context/TenantContext';
 import { useAuth } from '../../../../core/context/AuthContext';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
@@ -12,6 +12,7 @@ import { toast } from '../../../../core/components/Toast';
 // ============================================================================
 
 const TodoPage = () => {
+  const { supabase } = useApp(); // 🔒 tenantSupabase — auto-adds school_id filter
   const { schoolId } = useTenant();
   const { teacher } = useAuth();
   const theme = useTermTheme();
@@ -57,7 +58,7 @@ const TodoPage = () => {
       setStats({ total: pendingTodos.length, overdue, high });
       
     } catch (error) {
-      console.error('Error loading todos:', error);
+      console.error('Error loading todos:', error.message);
     } finally {
       setLoading(false);
     }
@@ -81,7 +82,7 @@ const TodoPage = () => {
       if (error) throw error;
       await loadTodos();
     } catch (error) {
-      console.error('Error completing todo:', error);
+      console.error('Error completing todo:', error.message);
       toast.error('Failed to complete task');
     }
   };
@@ -99,7 +100,7 @@ const TodoPage = () => {
       if (error) throw error;
       await loadTodos();
     } catch (error) {
-      console.error('Error deleting todo:', error);
+      console.error('Error deleting todo:', error.message);
       toast.error('Failed to delete task');
     }
   };
@@ -123,7 +124,7 @@ const TodoPage = () => {
       await loadTodos();
       setShowAddModal(false);
     } catch (error) {
-      console.error('Error adding todo:', error);
+      console.error('Error adding todo:', error.message);
       toast.error('Failed to add task');
     }
   };

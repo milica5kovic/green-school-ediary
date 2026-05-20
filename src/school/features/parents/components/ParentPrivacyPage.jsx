@@ -168,7 +168,7 @@ const ParentPrivacyPage = () => {
       setDownloadState('done');
       setTimeout(() => setDownloadState('idle'), 4000);
     } catch (err) {
-      console.error('Data export failed:', err);
+      console.error('Data export failed:', err.message);
       setDownloadState('error');
       setTimeout(() => setDownloadState('idle'), 4000);
     }
@@ -188,7 +188,7 @@ const ParentPrivacyPage = () => {
       setDeleteState('done');
       setDeleteModal(false);
     } catch (err) {
-      console.error('Deletion request failed:', err);
+      console.error('Deletion request failed:', err.message);
       setDeleteState('error');
       setDeleteModal(false);
     }
