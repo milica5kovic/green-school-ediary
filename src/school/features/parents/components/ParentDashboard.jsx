@@ -184,7 +184,6 @@ const ParentDashboard = () => {
       // alerts
       const al = [];
       if (overdue) al.push({ sev: 'high', msg: `${overdue} overdue assignment${overdue > 1 ? 's' : ''}` });
-      if (rate !== null && rate < 85) al.push({ sev: 'high', msg: `Attendance at ${rate}% — below 85% threshold` });
       const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
       const wAtt = att?.filter(a => a.date_key >= weekAgo) || [];
       if (wAtt.filter(a => a.status === 'late').length   >= 2) al.push({ sev: 'medium', msg: `Late ${wAtt.filter(a=>a.status==='late').length}× this week` });

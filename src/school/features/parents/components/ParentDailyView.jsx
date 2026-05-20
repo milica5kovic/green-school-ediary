@@ -37,14 +37,14 @@ const StatusBadge = ({ status }) => {
 };
 
 const StatTile = ({ icon: Icon, iconBg, iconColor, label, value, sub, valueColor }) => (
-  <div className="flex items-center gap-3 px-4 py-3 border-l border-slate-100 first:border-l-0">
-    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: iconBg }}>
-      <Icon size={16} style={{ color: iconColor }} />
+  <div className="flex items-start gap-3 p-5">
+    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: iconBg }}>
+      <Icon size={18} style={{ color: iconColor }} />
     </div>
     <div className="min-w-0">
-      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide leading-none mb-1">{label}</p>
-      <p className="text-sm font-bold leading-none" style={{ color: valueColor || '#0f172a' }}>{value}</p>
-      {sub && <p className="text-[11px] text-slate-400 mt-0.5 leading-none">{sub}</p>}
+      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide leading-none mb-1.5">{label}</p>
+      <p className="text-base font-bold leading-tight" style={{ color: valueColor || '#0f172a' }}>{value}</p>
+      {sub && <p className="text-xs text-slate-400 mt-0.5 leading-snug">{sub}</p>}
     </div>
   </div>
 );
@@ -209,15 +209,16 @@ const ParentDailyViewPage = () => {
   return (
     <div className="space-y-5 pb-6">
 
-      {/* ── PAGE TITLE + DATE NAV ─────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-4">
+      {/* ── PAGE TITLE + COMPACT DATE NAV ─────────────────────────────────── */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Daily View</h1>
           <p className="text-slate-500 text-sm mt-0.5">
             Overview of <span className="font-semibold text-slate-700">{selectedChild?.name}</span>'s day
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+
+        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
           {/* child switcher */}
           {children.length > 1 && (
             <div className="relative">
@@ -229,88 +230,84 @@ const ParentDailyViewPage = () => {
               <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400" />
             </div>
           )}
-        </div>
-      </div>
 
-      {/* ── DATE NAVIGATION ───────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-slate-100 flex items-center justify-between px-4 py-3" style={{ boxShadow: CARD_SHADOW }}>
-        <button onClick={prev}
-          className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors">
-          <ChevronLeft size={16} className="text-slate-500" />
-        </button>
-        <div className="text-center">
-          <p className="text-sm font-semibold text-slate-900 capitalize">
-            {date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-            {isToday && <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: `${accent}15`, color: accent }}>Today</span>}
-          </p>
-          {!isToday && (
-            <button onClick={() => setDate(new Date())} className="text-xs mt-0.5 hover:underline" style={{ color: accent }}>
-              ← Back to today
+          {/* compact date navigator */}
+          <div className="inline-flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden" style={{ boxShadow: CARD_SHADOW }}>
+            <button onClick={prev}
+              className="w-8 h-9 flex items-center justify-center hover:bg-slate-50 transition-colors border-r border-slate-100">
+              <ChevronLeft size={14} className="text-slate-500" />
             </button>
-          )}
+            <div className="px-3 text-center" style={{ minWidth: 130 }}>
+              <p className="text-xs font-semibold text-slate-800 whitespace-nowrap">
+                {date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+              </p>
+              {isToday
+                ? <p className="text-[10px] font-semibold leading-tight" style={{ color: accent }}>Today</p>
+                : <button onClick={() => setDate(new Date())} className="text-[10px] leading-tight hover:underline" style={{ color: accent }}>← Today</button>
+              }
+            </div>
+            <button onClick={next}
+              className="w-8 h-9 flex items-center justify-center hover:bg-slate-50 transition-colors border-l border-slate-100">
+              <ChevronRight size={14} className="text-slate-500" />
+            </button>
+          </div>
         </div>
-        <button onClick={next}
-          className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors">
-          <ChevronRight size={16} className="text-slate-500" />
-        </button>
       </div>
 
       {/* ── STUDENT SUMMARY CARD ──────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden" style={{ boxShadow: CARD_SHADOW }}>
-        <div className="flex flex-wrap items-stretch divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
 
-          {/* student identity */}
-          <div className="flex items-center gap-3 px-5 py-4 min-w-[200px]">
-            <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-base font-bold flex-shrink-0"
-              style={{ backgroundColor: accent }}>
-              {selectedChild?.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-            </div>
-            <div>
-              <p className="font-semibold text-slate-900 text-sm">{selectedChild?.name}</p>
-              <p className="text-xs text-slate-400 mt-0.5">Class {selectedChild?.class_name}</p>
-            </div>
+        {/* identity strip */}
+        <div className="flex items-center gap-4 px-6 py-5 border-b border-slate-100">
+          <div
+            className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-xl font-bold flex-shrink-0"
+            style={{ backgroundColor: accent }}
+          >
+            {selectedChild?.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
           </div>
+          <div>
+            <p className="text-lg font-bold text-slate-900 leading-tight">{selectedChild?.name}</p>
+            <p className="text-sm text-slate-400 mt-0.5">Class {selectedChild?.class_name}</p>
+          </div>
+        </div>
 
-          {/* stat tiles */}
-          <div className="flex flex-wrap flex-1 divide-x divide-slate-100">
-            <StatTile
-              icon={todayAttCfg ? CheckCircle : Clock}
-              iconBg={todayAttCfg ? `${todayAttCfg.dot}18` : '#f1f5f9'}
-              iconColor={todayAttCfg?.dot || '#94a3b8'}
-              label="Attendance Today"
-              value={todayAttCfg ? todayAttCfg.label : nMarked > 0 ? 'Mixed' : '—'}
-              sub={nMarked > 0 ? `${nMarked} of ${classes.length} marked` : 'Not yet marked'}
-              valueColor={todayAttCfg?.color}
-            />
-            <StatTile
-              icon={GraduationCap}
-              iconBg={`${accent}15`}
-              iconColor={accent}
-              label="Today's Classes"
-              value={`${classes.length} ${classes.length === 1 ? 'Class' : 'Classes'}`}
-              sub={nMarked > 0 ? `${nPresent} present · ${classes.length - nMarked} remaining` : 'Tap schedule below'}
-            />
-            <StatTile
-              icon={ClipboardList}
-              iconBg={nHwPending > 0 ? '#fff7ed' : '#f0fdf4'}
-              iconColor={nHwPending > 0 ? '#ea580c' : '#16a34a'}
-              label="Homework"
-              value={homework.length > 0 ? `${nHwPending} Pending` : 'None due'}
-              sub={nHwDone > 0 ? `${nHwDone} submitted` : undefined}
-              valueColor={nHwPending > 0 ? '#ea580c' : '#16a34a'}
-            />
-            {overallGrade && (
-              <StatTile
-                icon={Award}
-                iconBg={`${overallGrade.color}18`}
-                iconColor={overallGrade.color}
-                label="Overall Grade"
-                value={`${overallGrade.display}  ${overallGrade.avg}%`}
-                sub="This Term"
-                valueColor={overallGrade.color}
-              />
-            )}
-          </div>
+        {/* stat tiles — 2 across on mobile, 4 across on sm+ */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 divide-x divide-slate-100">
+          <StatTile
+            icon={todayAttCfg ? CheckCircle : Clock}
+            iconBg={todayAttCfg ? `${todayAttCfg.dot}18` : '#f1f5f9'}
+            iconColor={todayAttCfg?.dot || '#94a3b8'}
+            label="Attendance Today"
+            value={todayAttCfg ? todayAttCfg.label : nMarked > 0 ? 'Mixed' : '—'}
+            sub={nMarked > 0 ? `${nMarked} of ${classes.length} marked` : 'Not yet marked'}
+            valueColor={todayAttCfg?.color}
+          />
+          <StatTile
+            icon={GraduationCap}
+            iconBg={`${accent}15`}
+            iconColor={accent}
+            label="Today's Classes"
+            value={`${classes.length} ${classes.length === 1 ? 'Class' : 'Classes'}`}
+            sub={nMarked > 0 ? `${nPresent} present · ${classes.length - nMarked} remaining` : 'See schedule below'}
+          />
+          <StatTile
+            icon={ClipboardList}
+            iconBg={nHwPending > 0 ? '#fff7ed' : '#f0fdf4'}
+            iconColor={nHwPending > 0 ? '#ea580c' : '#16a34a'}
+            label="Homework"
+            value={homework.length > 0 ? `${nHwPending} Pending` : 'None due'}
+            sub={nHwDone > 0 ? `${nHwDone} submitted` : undefined}
+            valueColor={nHwPending > 0 ? '#ea580c' : '#16a34a'}
+          />
+          <StatTile
+            icon={Award}
+            iconBg={overallGrade ? `${overallGrade.color}18` : '#f1f5f9'}
+            iconColor={overallGrade?.color || '#94a3b8'}
+            label="Overall Grade"
+            value={overallGrade ? `${overallGrade.display}  ${overallGrade.avg}%` : '—'}
+            sub="This Term"
+            valueColor={overallGrade?.color}
+          />
         </div>
       </div>
 
