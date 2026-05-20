@@ -40,7 +40,7 @@ const ConsentModal = ({ userId, onDone }) => {
       onDone();
     } catch (err) {
       console.error('Consent save failed:', err);
-      setError('Could not save your consent. Please try again.');
+      setError(`Error: ${err?.message || err?.code || JSON.stringify(err)}`);
     } finally {
       setSaving(false);
     }
