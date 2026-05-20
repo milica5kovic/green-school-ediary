@@ -377,7 +377,7 @@ const ParentMyChildPage = () => {
                   {homeroomTeacher && (
                     <div className="flex items-center gap-1.5 text-xs text-slate-500">
                       <GraduationCap size={13} className="text-slate-400" />
-                      Homeroom: <strong className="text-slate-700 ml-0.5">{homeroomTeacher}</strong>
+                      Class Teacher: <strong className="text-slate-700 ml-0.5">{homeroomTeacher}</strong>
                     </div>
                   )}
                   {theme.hasActiveTerm && (
