@@ -303,7 +303,7 @@ const ClassCard = ({ cls, onRemove, periodNumber = null, stackIndex = 0, total =
         >
           <div className="px-5 pb-5 pt-1">
             {/* Stats row */}
-            <div className="grid grid-cols-4 gap-2 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
               <div className="bg-green-50 rounded-lg p-3 text-center border border-green-200">
                 <p className="text-2xl font-bold text-green-600">{stats.present}</p>
                 <p className="text-xs text-green-600">Present</p>

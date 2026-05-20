@@ -375,7 +375,7 @@ const DailyOverviewPage = () => {
                 {/* ATTENDANCE TAB */}
                 {activeTab === "attendance" && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-5 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                       {[
                         { label: 'Rate', value: studentFullData.attendanceStats.rate + '%', color: 'blue' },
                         { label: 'Present', value: studentFullData.attendanceStats.present, color: 'green' },
@@ -413,7 +413,7 @@ const DailyOverviewPage = () => {
                 {/* HOMEWORK TAB */}
                 {activeTab === "homework" && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       {[
                         { label: 'Total', value: studentFullData.homework.length, color: 'purple' },
                         { label: 'Done', value: studentFullData.homework.filter(h => h.student_status === "done").length, color: 'green' },
@@ -472,7 +472,7 @@ const DailyOverviewPage = () => {
                 {/* ANALYTICS TAB */}
                 {activeTab === "analytics" && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div className="bg-green-50 rounded-xl p-3.5 border border-green-200">
                         <p className="text-xs font-medium text-green-700 mb-0.5">Average</p>
                         <p className="text-xl font-bold text-green-700">{studentFullData.gradeAverage}%</p>

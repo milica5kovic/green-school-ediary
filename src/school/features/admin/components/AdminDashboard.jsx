@@ -271,7 +271,7 @@ const AdminDashboard = () => {
         <DashboardCard title="Today's Attendance" icon={CheckCircle} theme={theme}>
           {todayAttendance && todayAttendance.total > 0 ? (
             <>
-              <div className="grid grid-cols-4 gap-2 mb-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
                 <MiniStat label="Present" value={todayAttendance.present} color="#10b981" />
                 <MiniStat label="Late" value={todayAttendance.late} color="#f59e0b" />
                 <MiniStat label="Absent" value={todayAttendance.absent} color="#ef4444" />
