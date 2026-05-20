@@ -3,7 +3,7 @@ import {
   Users, BookOpen, Award, Edit2, Trash2, Check, X, Plus,
   AlertCircle, CheckCircle, ChevronDown, ChevronUp, RefreshCw, Percent
 } from 'lucide-react';
-import { supabase } from '../../../../core/infrastructure/supabaseClient';
+import { useApp } from '../../../../core/context/AppContext';
 import { useTenant } from '../../../../core/context/TenantContext';
 import useTermTheme from '../../../../shared/hooks/useTermTheme';
 
@@ -348,6 +348,7 @@ const GradingTierPanel = ({
 // ═══════════════════════════════════════════════════════════════════════════
 
 const CurriculumSettingsTab = () => {
+  const { supabase } = useApp(); // 🔒 tenantSupabase — auto-adds school_id filter
   const { schoolId } = useTenant();
   const theme = useTermTheme();
 
@@ -387,18 +388,18 @@ const CurriculumSettingsTab = () => {
     try {
       setLoading(true);
       
-      // Load classes
+      // Load classes — only fields needed for curriculum management
       const { data: classesData } = await supabase
         .from('custom_classes')
-        .select('*')
+        .select('id, class_name, school_id, is_active')
         .eq('school_id', schoolId)
         .eq('is_active', true)
         .order('class_name');
-      
-      // Load subjects
+
+      // Load subjects — only fields needed for curriculum management
       const { data: subjectsData } = await supabase
         .from('custom_subjects')
-        .select('*')
+        .select('id, subject_name, school_id, is_active')
         .eq('school_id', schoolId)
         .eq('is_active', true)
         .order('subject_name');
@@ -491,7 +492,7 @@ const CurriculumSettingsTab = () => {
           .eq('school_id', schoolId);
         
         if (studentsError) {
-          console.error('Error updating students:', studentsError);
+          console.error('Error updating students:', studentsError.message);
         }
       }
       

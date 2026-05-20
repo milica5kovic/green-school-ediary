@@ -85,10 +85,10 @@ const ParentDailyViewPage = () => {
         { data: gr   },
         { data: comm },
       ] = await Promise.all([
-        supabase.from('classes').select('*').eq('date_key', key).eq('class_name', selectedChild.class_name).order('time'),
-        supabase.from('attendance').select('*').eq('date_key', key).eq('student_id', selectedChild.id),
-        supabase.from('homework').select('*').eq('class_name', selectedChild.class_name).eq('due_date', key).order('subject'),
-        supabase.from('grades').select('*').eq('student_id', selectedChild.id).eq('date', key),
+        supabase.from('classes').select('id,subject,time,title,class_name,date_key').eq('date_key', key).eq('class_name', selectedChild.class_name).order('time'),
+        supabase.from('attendance').select('id,student_id,class_id,date_key,status,comment').eq('date_key', key).eq('student_id', selectedChild.id),
+        supabase.from('homework').select('id,title,subject,due_date,class_name,description').eq('class_name', selectedChild.class_name).eq('due_date', key).order('subject'),
+        supabase.from('grades').select('id,student_id,subject,assessment_title,grade,max_grade,date,assessment_type').eq('student_id', selectedChild.id).eq('date', key),
         supabase.from('teacher_comments')
           .select('*, teachers(full_name,subjects)')
           .eq('student_id', selectedChild.id)
@@ -105,7 +105,7 @@ const ParentDailyViewPage = () => {
       setComments(comm || []);
 
       if (hw?.length) {
-        const { data: sh } = await supabase.from('student_homework').select('*')
+        const { data: sh } = await supabase.from('student_homework').select('id,homework_id,student_id,status,submitted_at')
           .eq('student_id', selectedChild.id).in('homework_id', hw.map(h => h.id));
         const sm = {};
         (sh || []).forEach(s => { sm[s.homework_id] = s; });
@@ -113,13 +113,13 @@ const ParentDailyViewPage = () => {
       } else setHwStatus({});
 
       try {
-        const { data: ann } = await supabase.from('announcements').select('*')
+        const { data: ann } = await supabase.from('announcements').select('id,title,content,created_at,is_active')
           .eq('is_active', true).lte('created_at', end)
           .order('created_at', { ascending: false }).limit(3);
         setNotices(ann || []);
       } catch { setNotices([]); }
 
-    } catch (e) { console.error('DailyView error:', e); }
+    } catch (e) { console.error('DailyView error:', e.message); }
     finally { setBusy(false); }
   }, [selectedChild, date, supabase]);
 

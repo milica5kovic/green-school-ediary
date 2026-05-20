@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
-import { supabase } from '../../../../core/infrastructure/supabaseClient';
 import { toast } from '../../../../core/components/Toast';
+import { useApp } from '../../../../core/context/AppContext';
 
 const ScheduleModal = ({ onClose, onSave, existingSchedule, days, modalType = 'class' }) => {
+  const { supabase } = useApp(); // 🔒 tenantSupabase — auto-adds school_id filter
   const [formData, setFormData] = useState({
     day: existingSchedule?.day || days[0],
     time: existingSchedule?.time || '',
@@ -36,7 +37,7 @@ const ScheduleModal = ({ onClose, onSave, existingSchedule, days, modalType = 'c
   const loadClasses = async () => {
     const { data } = await supabase
       .from('custom_classes')
-      .select('*')
+      .select('id, class_name')
       .eq('is_active', true)
       .order('class_name');
     setClasses(data || []);
@@ -45,7 +46,7 @@ const ScheduleModal = ({ onClose, onSave, existingSchedule, days, modalType = 'c
   const loadSubjects = async () => {
     const { data } = await supabase
       .from('custom_subjects')
-      .select('*')
+      .select('id, subject_name')
       .eq('is_active', true)
       .order('subject_name');
     setSubjects(data || []);

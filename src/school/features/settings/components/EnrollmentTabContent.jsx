@@ -3,10 +3,11 @@ import {
   UserPlus, Users, CheckCircle, XCircle, Clock,
   AlertCircle, Mail, Phone, TrendingUp, Filter, Download, X
 } from 'lucide-react';
-import { supabase } from '../../../../core/infrastructure/supabaseClient';
+import { useApp } from '../../../../core/context/AppContext';
 import { toast } from '../../../../core/components/Toast';
 
 const EnrollmentTabContent = () => {
+  const { supabase } = useApp(); // 🔒 tenantSupabase — auto-adds school_id filter
   const [enrollments, setEnrollments] = useState([]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -48,9 +49,10 @@ const EnrollmentTabContent = () => {
       if (enrollError) throw enrollError;
       setEnrollments(enrollData || []);
 
+      // 🔒 Only fetch fields needed for capacity overview
       const { data: studentData, error: studentError } = await supabase
         .from('students')
-        .select('*')
+        .select('id, name, class_name, status')
         .eq('status', 'active')
         .order('class_name');
 
@@ -60,7 +62,7 @@ const EnrollmentTabContent = () => {
       calculateCapacity(enrollData || []);
 
     } catch (error) {
-      console.error('Error loading enrollment data:', error);
+      console.error('Error loading enrollment data:', error.message);
     } finally {
       setLoading(false);
     }

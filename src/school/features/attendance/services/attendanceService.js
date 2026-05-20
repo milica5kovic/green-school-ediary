@@ -46,7 +46,7 @@ export class AttendanceService {
       
       const { data, error } = await this.supabase
         .from('attendance')
-        .select('*')
+        .select('id, student_id, class_id, date_key, status, comment, school_id')
         .eq('date_key', dateKey)
         .eq('class_id', classId);
 
@@ -123,7 +123,7 @@ export class AttendanceService {
     // First, check if record exists
     const { data: existing } = await this.supabase
       .from('attendance')
-      .select('*')
+      .select('id, student_id, class_id, date_key, status, comment')
       .eq('date_key', dateKey)
       .eq('class_id', classId)
       .eq('student_id', studentId)

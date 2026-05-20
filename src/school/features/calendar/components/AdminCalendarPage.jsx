@@ -11,7 +11,7 @@ import {
   Edit2,
   Loader2
 } from "lucide-react";
-import { supabase } from "../../../../core/infrastructure/supabaseClient";
+import { useApp } from "../../../../core/context/AppContext";
 import { useTenant } from "../../../../core/context/TenantContext";
 import useTermTheme from "../../../../shared/hooks/useTermTheme";
 import { toast } from "../../../../core/components/Toast";
@@ -31,6 +31,7 @@ const EVENT_TYPES = {
 };
 
 const AdminCalendarPage = () => {
+  const { supabase } = useApp(); // 🔒 tenantSupabase — auto-adds school_id filter
   const { schoolId } = useTenant();
   const theme = useTermTheme();
   const TermIcon = theme.icon;
@@ -92,7 +93,7 @@ const AdminCalendarPage = () => {
       setAllTests(tests || []);
       
     } catch (error) {
-      console.error("Error loading calendar data:", error);
+      console.error("Error loading calendar data:", error.message);
     } finally {
       setLoading(false);
     }

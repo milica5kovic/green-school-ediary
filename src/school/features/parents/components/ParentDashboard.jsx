@@ -151,11 +151,11 @@ const ParentDashboard = () => {
       // grades
       let raw = [];
       if (termNum) {
-        const { data: tg } = await supabase.from('grades').select('*').eq('student_id', id).eq('term_number', termNum).order('date', { ascending: false });
-        const { data: lg } = await supabase.from('grades').select('*').eq('student_id', id).is('term_number', null).gte('date', tStart).lte('date', tEnd).order('date', { ascending: false });
+        const { data: tg } = await supabase.from('grades').select('id,student_id,subject,assessment_title,assessment_type,grade,max_grade,date,term_number,class_name').eq('student_id', id).eq('term_number', termNum).order('date', { ascending: false });
+        const { data: lg } = await supabase.from('grades').select('id,student_id,subject,assessment_title,assessment_type,grade,max_grade,date,term_number,class_name').eq('student_id', id).is('term_number', null).gte('date', tStart).lte('date', tEnd).order('date', { ascending: false });
         raw = [...(tg || []), ...(lg || [])];
       } else {
-        const { data: g } = await supabase.from('grades').select('*').eq('student_id', id).order('date', { ascending: false });
+        const { data: g } = await supabase.from('grades').select('id,student_id,subject,assessment_title,assessment_type,grade,max_grade,date,term_number,class_name').eq('student_id', id).order('date', { ascending: false });
         raw = g || [];
       }
       const enriched = raw.map(g => ({
@@ -205,9 +205,9 @@ const ParentDashboard = () => {
       setAlerts(al);
 
       // upcoming tests + events + today
-      const { data: tests } = await supabase.from('scheduled_tests').select('*').eq('class_name', cls).gte('test_date', today).order('test_date').limit(4);
+      const { data: tests } = await supabase.from('scheduled_tests').select('id,title,subject,test_date,class_name,duration_minutes').eq('class_name', cls).gte('test_date', today).order('test_date').limit(4);
       setUpcomingTests(tests || []);
-      const { data: evts } = await supabase.from('school_events').select('*').gte('start_date', today).order('start_date').limit(8);
+      const { data: evts } = await supabase.from('school_events').select('id,title,event_type,start_date,end_date,affects_classes').gte('start_date', today).order('start_date').limit(8);
       const rel = (evts || []).filter(e => {
         const aff = Array.isArray(e.affects_classes) ? e.affects_classes : JSON.parse(e.affects_classes || '["All"]');
         return aff.includes('All') || aff.includes(cls);
@@ -215,7 +215,7 @@ const ParentDashboard = () => {
       setUpcomingEvents(rel.slice(0, 4));
       const { data: tc } = await supabase.from('classes').select('subject,time,title').eq('date_key', today).eq('class_name', cls).order('time');
       setTodayClasses(tc || []);
-    } catch (err) { console.error('Dashboard error:', err); }
+    } catch (err) { console.error('Dashboard error:', err.message); }
     finally { setBusy(false); }
   }, [supabase, selectedChild, activeTerm, today, gradingConfig]);
 
