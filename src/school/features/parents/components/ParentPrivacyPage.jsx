@@ -60,11 +60,11 @@ const ConfirmModal = ({ title, message, confirmLabel, danger, onConfirm, onCance
 const FAQ_ITEMS = [
   {
     q: 'What data does Akio store about me?',
-    a: 'We store your name, email address, phone number, and your relationship to your child(ren). We also store records of your child's attendance, grades, homework completion, and behaviour — all tied to the school you are registered with.',
+    a: "We store your name, email address, phone number, and your relationship to your child(ren). We also store records of your child's attendance, grades, homework completion, and behaviour — all tied to the school you are registered with.",
   },
   {
     q: 'Who can see my data?',
-    a: 'Only you and authorised staff at your school can see your data. We use Row Level Security (RLS) at the database level, meaning it is technically impossible for one school to access another school's data. Akio staff do not access your personal data unless required for support, and only with your school's permission.',
+    a: "Only you and authorised staff at your school can see your data. We use Row Level Security (RLS) at the database level, meaning it is technically impossible for one school to access another school's data. Akio staff do not access your personal data unless required for support, and only with your school's permission.",
   },
   {
     q: 'How long is my data kept?',
@@ -76,7 +76,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'What is the legal basis for processing my data?',
-    a: 'Your data is processed under GDPR Article 6(1)(b) — processing necessary for the performance of a contract (your child's education), and Article 6(1)(c) — compliance with a legal obligation (school attendance records required by law).',
+    a: "Your data is processed under GDPR Article 6(1)(b) — processing necessary for the performance of a contract (your child's education), and Article 6(1)(c) — compliance with a legal obligation (school attendance records required by law).",
   },
 ];
 
