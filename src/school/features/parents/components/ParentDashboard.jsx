@@ -79,6 +79,7 @@ const ParentDashboard = () => {
   const [ptmEvent,       setPtmEvent]       = useState(null);
   const [alerts,         setAlerts]         = useState([]);
   const [todayClasses,   setTodayClasses]   = useState([]);
+  const [todayAtt,       setTodayAtt]       = useState([]);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -202,11 +203,16 @@ const ParentDashboard = () => {
       });
       setPtmEvent(ptm || null);
 
-      // today's classes
+      // today's classes + per-class attendance
       const { data: tc } = await supabase.from('classes')
         .select('id, subject, time, title')
         .eq('date_key', today).eq('class_name', cls).order('time');
       setTodayClasses(tc || []);
+
+      const { data: ta } = await supabase.from('attendance')
+        .select('class_id, status, comment')
+        .eq('student_id', id).eq('date_key', today);
+      setTodayAtt(ta || []);
 
       // ── build activity feed ──────────────────────────────────────────────────
       const acts = [];
@@ -423,71 +429,114 @@ const ParentDashboard = () => {
         </div>
       </div>
 
-      {/* ── RECENT ACTIVITY + UPCOMING ────────────────────────────────────────── */}
+      {/* ── TODAY'S CLASSES + RIGHT COLUMN ───────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-        {/* Recent Activity — spans 2 cols */}
+        {/* Today's Classes — spans 2 cols */}
         <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 p-6" style={{ boxShadow: CARD_SHADOW }}>
-          <h3 className="text-sm font-semibold text-slate-900 mb-1">Recent Activity</h3>
-          <p className="text-xs text-slate-400 mb-4">Last 2 weeks</p>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">Today's Classes</h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </p>
+            </div>
+            <button onClick={() => nav('parent-daily')}
+              className="text-xs font-semibold hover:underline transition-colors"
+              style={{ color: accent }}>
+              Daily view
+            </button>
+          </div>
 
-          {recentActivity.length ? (
-            recentActivity.map((item, i) => {
-              const Icon = item.icon;
+          {todayClasses.length ? (() => {
+            // build attendance map: class_id → {status, comment}
+            const attMap = {};
+            todayAtt.forEach(a => { if (a.class_id) attMap[a.class_id] = a; });
+
+            const STATUS_CONFIG = {
+              present:   { label: 'Present',   bg: '#f0fdf4', color: '#16a34a' },
+              late:      { label: 'Late',       bg: '#fffbeb', color: '#d97706' },
+              absent:    { label: 'Absent',     bg: '#fff1f2', color: '#ef4444' },
+              sent_out:  { label: 'Sent out',   bg: '#fff7ed', color: '#ea580c' },
+            };
+
+            return todayClasses.map((c, i, arr) => {
+              const att = attMap[c.id];
+              const sc  = att ? STATUS_CONFIG[att.status] : null;
               return (
-                <div key={i} className={`flex items-start gap-3 py-3.5 ${i < recentActivity.length - 1 ? 'border-b border-slate-50' : ''}`}>
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
-                    style={{ backgroundColor: item.iconBg }}>
-                    <Icon size={15} style={{ color: item.iconColor }} />
+                <div key={i} className={`py-3.5 ${i < arr.length - 1 ? 'border-b border-slate-50' : ''}`}>
+                  <div className="flex items-center gap-3">
+                    {/* time */}
+                    <span className="text-xs font-medium text-slate-400 w-12 tabular-nums flex-shrink-0">
+                      {c.time || '—'}
+                    </span>
+                    {/* colour dot */}
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: sc?.color || accent }} />
+                    {/* subject + title */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-800">{c.subject}</p>
+                      {c.title && c.title !== c.subject && (
+                        <p className="text-xs text-slate-400 mt-0.5">{c.title}</p>
+                      )}
+                    </div>
+                    {/* status badge */}
+                    {sc ? (
+                      <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: sc.bg, color: sc.color }}>
+                        {sc.label}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-medium text-slate-300 flex-shrink-0">—</span>
+                    )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-800">{item.title}</p>
-                    {item.sub && <p className="text-xs text-slate-400 mt-0.5">{item.sub}</p>}
-                  </div>
-                  <span className="text-xs text-slate-400 flex-shrink-0 mt-1 tabular-nums">
-                    {timeAgo(item.date)}
-                  </span>
+                  {/* comment (if any) */}
+                  {att?.comment && (
+                    <p className="text-xs text-slate-500 mt-1.5 ml-[60px] italic">
+                      "{att.comment}"
+                    </p>
+                  )}
                 </div>
               );
-            })
-          ) : (
+            });
+          })() : (
             <div className="py-10 text-center">
-              <Bell size={24} className="mx-auto text-slate-200 mb-2" />
-              <p className="text-sm text-slate-400">No recent activity</p>
+              <GraduationCap size={24} className="mx-auto text-slate-200 mb-2" />
+              <p className="text-sm text-slate-400">No classes today</p>
             </div>
           )}
         </div>
 
-        {/* Right column: Today's Classes + Upcoming stacked */}
+        {/* Right column: Recent Activity + Upcoming stacked */}
         <div className="flex flex-col gap-5">
 
-          {/* Today's Classes */}
+          {/* Recent Activity */}
           <div className="bg-white rounded-2xl border border-slate-100 p-6" style={{ boxShadow: CARD_SHADOW }}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-slate-900">Today's Classes</h3>
-              <button
-                onClick={() => nav('parent-daily')}
-                className="text-xs font-semibold hover:underline transition-colors"
-                style={{ color: accent }}
-              >
-                Daily view
-              </button>
-            </div>
+            <h3 className="text-sm font-semibold text-slate-900 mb-1">Recent Activity</h3>
+            <p className="text-xs text-slate-400 mb-4">Last 2 weeks</p>
 
-            {todayClasses.length ? (
-              todayClasses.slice(0, 6).map((c, i, arr) => (
-                <div key={i} className={`flex items-center gap-3 py-2.5 ${i < arr.length - 1 ? 'border-b border-slate-50' : ''}`}>
-                  <span className="text-xs font-medium text-slate-400 w-10 tabular-nums flex-shrink-0">
-                    {c.time || '—'}
-                  </span>
-                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: accent }} />
-                  <p className="text-sm text-slate-700 flex-1 min-w-0 truncate">{c.subject}</p>
-                </div>
-              ))
+            {recentActivity.length ? (
+              recentActivity.map((item, i) => {
+                const Icon = item.icon;
+                return (
+                  <div key={i} className={`flex items-start gap-3 py-3 ${i < recentActivity.length - 1 ? 'border-b border-slate-50' : ''}`}>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                      style={{ backgroundColor: item.iconBg }}>
+                      <Icon size={13} style={{ color: item.iconColor }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-slate-800 leading-snug">{item.title}</p>
+                      {item.sub && <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">{item.sub}</p>}
+                    </div>
+                    <span className="text-[11px] text-slate-400 flex-shrink-0 mt-0.5 tabular-nums">
+                      {timeAgo(item.date)}
+                    </span>
+                  </div>
+                );
+              })
             ) : (
               <div className="py-6 text-center">
-                <GraduationCap size={22} className="mx-auto text-slate-200 mb-2" />
-                <p className="text-xs text-slate-400">No classes today</p>
+                <Bell size={20} className="mx-auto text-slate-200 mb-2" />
+                <p className="text-xs text-slate-400">No recent activity</p>
               </div>
             )}
           </div>
@@ -496,11 +545,9 @@ const ParentDashboard = () => {
           <div className="bg-white rounded-2xl border border-slate-100 p-6" style={{ boxShadow: CARD_SHADOW }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-slate-900">Upcoming</h3>
-              <button
-                onClick={() => nav('parent-calendar')}
+              <button onClick={() => nav('parent-calendar')}
                 className="text-xs font-semibold hover:underline transition-colors"
-                style={{ color: accent }}
-              >
+                style={{ color: accent }}>
                 View all
               </button>
             </div>
