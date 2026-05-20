@@ -60,14 +60,14 @@ const ConsentModal = ({ supabase, userId, onDone }) => {
             <h2 className="text-base font-semibold tracking-tight">Your Privacy Matters</h2>
           </div>
           <p className="text-xs text-slate-300 leading-relaxed">
-            Before you continue, please review and accept how Akio uses your data.
+            Before you continue, please review and accept how School Hub uses your data.
           </p>
         </div>
 
         {/* body */}
         <div className="px-6 py-5 space-y-4">
           <p className="text-sm text-slate-600 leading-relaxed">
-            Akio Platform processes personal data on behalf of your school to manage attendance,
+            School Hub processes personal data on behalf of your school to manage attendance,
             grades, homework, and communication. Your data is:
           </p>
 
@@ -101,8 +101,9 @@ const ConsentModal = ({ supabase, userId, onDone }) => {
               <span className="text-sm text-slate-700 leading-snug">
                 I have read and agree to the{' '}
                 <a
-                  href="#"
-                  onClick={e => e.preventDefault()}
+                  href="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="text-blue-600 hover:underline inline-flex items-center gap-0.5"
                 >
                   Privacy Policy
@@ -123,7 +124,7 @@ const ConsentModal = ({ supabase, userId, onDone }) => {
                 {checked.processing && <CheckCircle size={12} className="text-white" />}
               </div>
               <span className="text-sm text-slate-700 leading-snug">
-                I consent to Akio processing my personal data for educational management purposes
+                I consent to School Hub processing my personal data for educational management purposes
                 as described above (GDPR Article 6(1)(b))
               </span>
             </label>
@@ -143,7 +144,7 @@ const ConsentModal = ({ supabase, userId, onDone }) => {
             disabled={!allChecked || saving}
             className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-all bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {saving ? 'Saving…' : 'I Accept — Continue to Akio'}
+            {saving ? 'Saving…' : 'I Accept — Continue to School Hub'}
           </button>
           <p className="text-[11px] text-slate-400 text-center mt-3 leading-relaxed">
             You can withdraw consent or request data deletion at any time via{' '}

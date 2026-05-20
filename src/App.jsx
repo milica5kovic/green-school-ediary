@@ -9,6 +9,7 @@ import LoginPage from './auth/LoginPage';
 import ResetPasswordPage from './auth/ResetPasswordPage';
 import Privacy from './marketing/Privacy';
 import Terms from './marketing/Terms';
+import PrivacyPolicyPage from './core/components/PrivacyPolicyPage';
 import LandingPage from './marketing/LandingPage';
 
 function App() {
@@ -49,7 +50,7 @@ const AppRouter = () => {
   // ════════════════════════════════════════════════════════
   // STATIC PAGES (no auth required)
   // ════════════════════════════════════════════════════════
-  if (path === '/privacy') return <Privacy />;
+  if (path === '/privacy') return <PrivacyPolicyPage />;
   if (path === '/terms') return <Terms />;
   if (path === '/reset-password') return <ResetPasswordPage />;
   

@@ -59,12 +59,12 @@ const ConfirmModal = ({ title, message, confirmLabel, danger, onConfirm, onCance
 // ─── faq accordion ────────────────────────────────────────────────────────────
 const FAQ_ITEMS = [
   {
-    q: 'What data does Akio store about me?',
+    q: 'What data does School Hub store about me?',
     a: "We store your name, email address, phone number, and your relationship to your child(ren). We also store records of your child's attendance, grades, homework completion, and behaviour — all tied to the school you are registered with.",
   },
   {
     q: 'Who can see my data?',
-    a: "Only you and authorised staff at your school can see your data. We use Row Level Security (RLS) at the database level, meaning it is technically impossible for one school to access another school's data. Akio staff do not access your personal data unless required for support, and only with your school's permission.",
+    a: "Only you and authorised staff at your school can see your data. We use Row Level Security (RLS) at the database level, meaning it is technically impossible for one school to access another school's data. School Hub staff do not access your personal data unless required for support, and only with your school's permission.",
   },
   {
     q: 'How long is my data kept?',
@@ -161,7 +161,7 @@ const ParentPrivacyPage = () => {
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
       a.href     = url;
-      a.download = `akio-my-data-${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `schoolhub-my-data-${new Date().toISOString().split('T')[0]}.json`;
       a.click();
       URL.revokeObjectURL(url);
 
@@ -365,7 +365,7 @@ const ParentPrivacyPage = () => {
       <div className="rounded-2xl bg-slate-50 border border-slate-100 px-5 py-4">
         <p className="text-xs text-slate-500 leading-relaxed">
           <span className="font-semibold text-slate-700">Data Controller:</span> Your school is the data controller for your child's records.{' '}
-          <span className="font-semibold text-slate-700">Data Processor:</span> Akio Platform processes data on behalf of the school under a Data Processing Agreement (DPA).{' '}
+          <span className="font-semibold text-slate-700">Data Processor:</span> School Hub processes data on behalf of the school under a Data Processing Agreement (DPA).{' '}
           For any privacy concerns not resolved through this page, please contact your school administrator directly.
         </p>
       </div>
