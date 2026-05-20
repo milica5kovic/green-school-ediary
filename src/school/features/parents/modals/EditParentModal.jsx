@@ -47,13 +47,13 @@ const EditParentModal = ({ parent, onClose, onSave }) => {
         .eq('id', parent.user_id);
 
       if (profileError) {
-        console.warn('Profile update failed:', profileError);
+        console.warn('Profile update failed:', profileError.message); // 🔒 No full error object
       }
 
       toast.success('Parent updated successfully!');
       onSave();
     } catch (err) {
-      console.error('Error updating parent:', err);
+      console.error('Error updating parent:', err.message); // 🔒 No full error object
       setError(err.message);
     } finally {
       setSaving(false);

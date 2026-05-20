@@ -2,11 +2,10 @@
 import { MessageSquare, X, ChevronDown, ChevronUp, Users } from "lucide-react";
 import { toast } from '../../../../core/components/Toast';
 import { useApp } from "../../../../core/context/AppContext";
-import { supabase } from "../../../../core/infrastructure/supabaseClient";
 import { useBranding } from "../../../../core/context/BrandingContext";
 
 const ClassCard = ({ cls, onRemove, periodNumber = null, stackIndex = 0, total = 1 }) => {
-  const { attendanceService, getDateKey, selectedDate } = useApp();
+  const { attendanceService, getDateKey, selectedDate, supabase } = useApp();
   const branding = useBranding();
   const primaryColor = branding?.primaryColor || '#10b981';
 
@@ -37,16 +36,17 @@ const ClassCard = ({ cls, onRemove, periodNumber = null, stackIndex = 0, total =
   const loadData = useCallback(async () => {
     try {
 
-      // ✅ FIX: Don't filter by school_year - it might be null!
+      // 🔒 SECURITY: Uses tenantSupabase (from useApp) — auto-adds school_id filter.
+      // select() lists only the fields needed — no PII overfetch.
       const { data: classStudents, error } = await supabase
         .from("students")
-        .select("*")
+        .select("id, name, student_no, class_name, status")
         .eq("class_name", cls.class)
-        .eq("status", "active") // Only active students
+        .eq("status", "active")
         .order("student_no", { ascending: true });
 
       if (error) {
-        console.error("❌ Error loading students:", error);
+        console.error("❌ Error loading students:", error.message);
         setStudents([]);
         return;
       }

@@ -104,9 +104,10 @@ const ProfileManagementPage = () => {
   const loadTeachers = async () => {
     try {
       setLoading(true);
+      // 🔒 Only fetch columns needed for management UI — no PII overfetch
       const { data: teacherRecords, error } = await supabase
         .from('teachers')
-        .select('*')
+        .select('id, user_id, full_name, email, role, subjects, class_teacher_for, school_id')
         .order('full_name');
 
       if (error) throw error;
@@ -149,9 +150,10 @@ const ProfileManagementPage = () => {
   const loadParents = async () => {
     try {
       setLoading(true);
+      // 🔒 Only fetch columns needed for management UI
       const { data: parentsData } = await supabase
         .from("parents")
-        .select("*")
+        .select("id, full_name, email, phone, school_id, user_id, created_at")
         .order("full_name");
 
       const { data: linksData } = await supabase
@@ -175,14 +177,15 @@ const ProfileManagementPage = () => {
 
   const loadStudents = async () => {
     try {
+      // 🔒 Only fetch columns needed for student assignment dropdowns
       const { data } = await supabase
         .from("students")
-        .select("*")
+        .select("id, name, class_name, student_no, status")
         .eq("status", "active")
         .order("name");
       setStudents(data || []);
     } catch (error) {
-      console.error("Error loading students:", error);
+      console.error("Error loading students:", error.message);
     }
   };
 

@@ -72,21 +72,22 @@ const HomeworkPage = () => {
     try {
       const { data } = await supabase.from('custom_classes').select('*').eq('is_active', true).order('class_name');
       setClasses(data || []);
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error('Error loading classes:', err.message); }
   };
 
   const loadSubjects = async () => {
     try {
       const { data } = await supabase.from('custom_subjects').select('*').eq('is_active', true).order('subject_name');
       setSubjects((data || []).filter(s => mySubjects.includes(s.subject_name)));
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error('Error loading subjects:', err.message); }
   };
 
   const loadStudents = async () => {
     try {
-      const { data } = await supabase.from('students').select('*').eq('class_name', selectedClass).eq('status', 'active').order('student_no');
+      // 🔒 Only fetch fields needed for homework tracking UI
+      const { data } = await supabase.from('students').select('id, name, student_no, class_name').eq('class_name', selectedClass).eq('status', 'active').order('student_no');
       setStudents(data || []);
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error('Error loading students:', err.message); }
   };
 
   const loadHomework = async () => {
@@ -145,7 +146,7 @@ const HomeworkPage = () => {
       } else {
         setStudentHomework({});
       }
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error('Error loading homework:', err.message); }
     finally { setLoading(false); }
   };
 

@@ -377,7 +377,7 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
       }
       return { success: true };
     } catch (error) {
-      console.error('❌ Sign in error:', error);
+      console.error('❌ Sign in error:', error.message); // NOTE: full error not logged — GDPR
       setError(error.message);
       setLoading(false);
       return { success: false, error: error.message };

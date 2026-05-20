@@ -49,7 +49,7 @@ const ParentAttendancePage = () => {
       const { data } = await supabase.from('attendance').select('*')
         .eq('student_id', selectedChild.id).order('date_key', { ascending: false });
       setRecords(data || []);
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error('Error loading attendance:', e.message); }
   }, [supabase, selectedChild]);
 
   useEffect(() => { if (selectedChild) load(); }, [selectedChild, load]);

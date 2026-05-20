@@ -119,7 +119,7 @@ const AdmissionsPortal = () => {
       if (error) throw error;
       setApplicants(data || []);
     } catch (error) {
-      console.error('Error loading applicants:', error);
+      console.error('Error loading applicants:', error.message);
     } finally {
       setLoading(false);
     }
@@ -668,7 +668,7 @@ const PipelineView = ({ applicants, theme, schoolId, onRefresh, onSelectApplican
 
       onRefresh();
     } catch (error) {
-      console.error('Error updating status:', error);
+      console.error('Error updating status:', error.message);
       toast.error('Failed to update status');
     } finally {
       setDragging(null);
@@ -768,12 +768,29 @@ const ApplicantDetailView = ({ applicant, schoolId, teacher, theme, onBack, onRe
       try {
         setLoading(true);
 
+        // 🔒 SECURITY: All detail queries are scoped to school_id to prevent
+        // cross-tenant data access even if an applicant_id from another school is known.
         const [guardiansRes, docsRes, timelineRes, notesRes, interviewsRes] = await Promise.all([
-          supabase.from('applicant_guardians').select('*').eq('applicant_id', applicant.id).order('is_primary_contact', { ascending: false }),
-          supabase.from('applicant_documents').select('*').eq('applicant_id', applicant.id).eq('is_current', true).order('created_at', { ascending: false }),
-          supabase.from('applicant_timeline').select('*').eq('applicant_id', applicant.id).order('created_at', { ascending: false }).limit(50),
-          supabase.from('applicant_notes').select('*').eq('applicant_id', applicant.id).order('is_pinned', { ascending: false }).order('created_at', { ascending: false }),
-          supabase.from('applicant_interviews').select('*').eq('applicant_id', applicant.id).order('scheduled_date', { ascending: false }),
+          supabase.from('applicant_guardians')
+            .select('id, applicant_id, full_name, relationship, email, phone, is_primary_contact, national_id_type, national_id_number, occupation, employer, address')
+            .eq('applicant_id', applicant.id).eq('school_id', schoolId)
+            .order('is_primary_contact', { ascending: false }),
+          supabase.from('applicant_documents')
+            .select('id, applicant_id, document_type, file_name, file_url, uploaded_at, is_current, notes')
+            .eq('applicant_id', applicant.id).eq('school_id', schoolId).eq('is_current', true)
+            .order('created_at', { ascending: false }),
+          supabase.from('applicant_timeline')
+            .select('id, applicant_id, action_type, description, old_value, new_value, performed_by_name, created_at')
+            .eq('applicant_id', applicant.id).eq('school_id', schoolId)
+            .order('created_at', { ascending: false }).limit(50),
+          supabase.from('applicant_notes')
+            .select('id, applicant_id, content, is_pinned, is_private, created_by_name, created_at, updated_at')
+            .eq('applicant_id', applicant.id).eq('school_id', schoolId)
+            .order('is_pinned', { ascending: false }).order('created_at', { ascending: false }),
+          supabase.from('applicant_interviews')
+            .select('id, applicant_id, scheduled_date, duration_minutes, location, interviewer_name, status, notes, outcome')
+            .eq('applicant_id', applicant.id).eq('school_id', schoolId)
+            .order('scheduled_date', { ascending: false }),
         ]);
 
         setGuardians(guardiansRes.data || []);
@@ -782,7 +799,7 @@ const ApplicantDetailView = ({ applicant, schoolId, teacher, theme, onBack, onRe
         setNotes(notesRes.data || []);
         setInterviews(interviewsRes.data || []);
       } catch (error) {
-        console.error('Error loading applicant data:', error);
+        console.error('Error loading applicant data:', error.message);
       } finally {
         setLoading(false);
       }
@@ -822,7 +839,7 @@ const ApplicantDetailView = ({ applicant, schoolId, teacher, theme, onBack, onRe
       setData({ ...data, status: newStatus });
       onRefresh();
     } catch (error) {
-      console.error('Error updating status:', error);
+      console.error('Error updating status:', error.message);
       toast.error('Failed to update status');
     }
   };
@@ -1091,7 +1108,7 @@ const DocumentsTab = ({ documents, theme, schoolId, applicantId, teacher, onRefr
 
       onRefresh();
     } catch (error) {
-      console.error('Error verifying document:', error);
+      console.error('Error verifying document:', error.message);
     }
   };
 
@@ -1258,7 +1275,7 @@ const NotesTab = ({ notes, theme, schoolId, applicantId, teacher, onRefresh }) =
       setNewNote('');
       onRefresh();
     } catch (error) {
-      console.error('Error adding note:', error);
+      console.error('Error adding note:', error.message);
     } finally {
       setSaving(false);
     }
@@ -1414,7 +1431,7 @@ const AddApplicantModal = ({ schoolId, teacher, theme, onClose, onSuccess }) => 
 
       onSuccess();
     } catch (error) {
-      console.error('Error creating applicant:', error);
+      console.error('Error creating applicant:', error.message);
       toast.error('Failed to create applicant: ' + error.message);
     } finally {
       setSaving(false);

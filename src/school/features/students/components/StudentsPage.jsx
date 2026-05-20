@@ -711,11 +711,12 @@ const LinkParentModal = ({ student, primaryColor, onClose, onSave }) => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const { data: allParents } = await supabase.from('parents').select('*').order('full_name');
+      // 🔒 Only fetch id + display fields needed for the dropdown — no PII overfetch
+      const { data: allParents } = await supabase.from('parents').select('id, full_name, email').order('full_name');
       setParents(allParents || []);
       const { data: links } = await supabase.from('student_parents').select('*, parents(full_name, email, phone)').eq('student_id', student.id);
       setLinkedParents(links || []);
-    } catch (error) { console.error(error); }
+    } catch (error) { console.error('Error loading parent data:', error.message); }
     finally { setLoading(false); }
   };
 

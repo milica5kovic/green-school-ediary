@@ -89,7 +89,7 @@ const ParentCalendarPage = () => {
         .order('due_date');
       setHomeworkDue(hw || []);
     } catch (err) {
-      console.error(err);
+      console.error('Error loading calendar data:', err.message);
     }
   }, [supabase, selectedChild]);
 
