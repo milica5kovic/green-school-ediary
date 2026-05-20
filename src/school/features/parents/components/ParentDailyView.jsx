@@ -241,10 +241,19 @@ const ParentDailyViewPage = () => {
               <p className="text-xs font-semibold text-slate-800 whitespace-nowrap">
                 {date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
               </p>
-              {isToday
-                ? <p className="text-[10px] font-semibold leading-tight" style={{ color: accent }}>Today</p>
-                : <button onClick={() => setDate(new Date())} className="text-[10px] leading-tight hover:underline" style={{ color: accent }}>← Today</button>
-              }
+              <p
+                onClick={isToday ? undefined : () => setDate(new Date())}
+                className="text-[10px] font-semibold leading-tight mt-0.5"
+                style={{
+                  color: accent,
+                  cursor: isToday ? 'default' : 'pointer',
+                  textDecoration: 'none',
+                }}
+                onMouseEnter={e => { if (!isToday) e.target.style.textDecoration = 'underline'; }}
+                onMouseLeave={e => { e.target.style.textDecoration = 'none'; }}
+              >
+                {isToday ? 'Today' : '← Today'}
+              </p>
             </div>
             <button onClick={next}
               className="w-8 h-9 flex items-center justify-center hover:bg-slate-50 transition-colors border-l border-slate-100">
