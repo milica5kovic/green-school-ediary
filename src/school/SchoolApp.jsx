@@ -383,7 +383,7 @@ const SchoolAppContent = () => {
   );
 
   return (
-    <ConsentGate supabase={supabase} userId={user?.id}>
+    <ConsentGate userId={user?.id}>
     <div
       className="min-h-screen"
       style={{ background: `linear-gradient(to bottom right, ${primaryColor}08, ${primaryColor}03)` }}

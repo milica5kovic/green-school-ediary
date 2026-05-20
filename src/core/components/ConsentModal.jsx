@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, CheckCircle, ExternalLink } from 'lucide-react';
+import { supabase as rawSupabase } from '../infrastructure/supabaseClient';
 
 // ─── GDPR Consent Modal ───────────────────────────────────────────────────────
 // Shown once per user on first login (or if consent version changes).
 // Records consent to `user_consents` table.
 // GDPR Article 7 — conditions for consent.
+//
+// NOTE: uses the raw supabase client (not tenantSupabase) because user_consents
+// is a global table keyed by user_id only — no school_id column.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CONSENT_VERSION = '1.0'; // bump this to re-prompt all users after policy changes
 
-const ConsentModal = ({ supabase, userId, onDone }) => {
+const ConsentModal = ({ userId, onDone }) => {
   const [checked, setChecked]     = useState({ privacy: false, processing: false });
   const [saving, setSaving]       = useState(false);
   const [error, setError]         = useState(null);
@@ -21,7 +25,7 @@ const ConsentModal = ({ supabase, userId, onDone }) => {
     setSaving(true);
     setError(null);
     try {
-      const { error: upsertError } = await supabase
+      const { error: upsertError } = await rawSupabase
         .from('user_consents')
         .upsert([{
           user_id:          userId,
@@ -160,15 +164,15 @@ const ConsentModal = ({ supabase, userId, onDone }) => {
 // Wrapper that checks consent status and conditionally renders the modal.
 // Usage: wrap SchoolAppContent with <ConsentGate supabase={...} userId={...}>
 // ─────────────────────────────────────────────────────────────────────────────
-export const ConsentGate = ({ supabase, userId, children }) => {
+export const ConsentGate = ({ userId, children }) => {
   const [status, setStatus] = useState('checking'); // checking | needed | ok
 
   useEffect(() => {
-    if (!supabase || !userId) return;
+    if (!userId) return;
 
     const checkConsent = async () => {
       try {
-        const { data } = await supabase
+        const { data } = await rawSupabase
           .from('user_consents')
           .select('consent_version, privacy_policy, data_processing')
           .eq('user_id', userId)
@@ -192,14 +196,13 @@ export const ConsentGate = ({ supabase, userId, children }) => {
     };
 
     checkConsent();
-  }, [supabase, userId]);
+  }, [userId]);
 
   if (status === 'checking') return null; // brief flash while checking
   if (status === 'needed') {
     return (
       <>
         <ConsentModal
-          supabase={supabase}
           userId={userId}
           onDone={() => setStatus('ok')}
         />
