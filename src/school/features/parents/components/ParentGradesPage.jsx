@@ -398,16 +398,8 @@ const ParentGradesPage = () => {
       {/* ─── MAIN CONTENT + SIDEBAR ───────────────────────────────────────── */}
       <div className="grid lg:grid-cols-[1fr_240px] gap-5 items-start">
 
-        {/* Subject grades table */}
+        {/* Subject grades — shared card wrapper */}
         <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden" style={{ boxShadow: CARD }}>
-
-          {/* Table header */}
-          <div className="grid gap-3 px-5 py-3.5 bg-slate-50 border-b border-slate-100"
-            style={{ gridTemplateColumns: '2fr 1.4fr 72px 72px 80px 72px' }}>
-            {['Subject', 'Teacher', 'Prev', 'Now', 'Progress', 'Grade'].map(h => (
-              <p key={h} className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">{h}</p>
-            ))}
-          </div>
 
           {busy ? (
             <div className="flex items-center justify-center py-16">
@@ -421,95 +413,152 @@ const ParentGradesPage = () => {
               <p className="text-xs text-slate-400 mt-1">Grades will appear as teachers enter them</p>
             </div>
           ) : (
-            <div>
-              {subjectRows.map((row, idx) => {
-                const SubjectIcon = getSubjectIcon(row.subject);
-                const isExpanded  = expandedSubject === row.subject;
-                const isLast      = idx === subjectRows.length - 1;
+            <>
+              {/* ── DESKTOP TABLE (md+) ───────────────────────────────────── */}
+              <div className="hidden md:block">
+                {/* Table header */}
+                <div className="grid gap-3 px-5 py-3.5 bg-slate-50 border-b border-slate-100"
+                  style={{ gridTemplateColumns: '2fr 1.4fr 72px 72px 80px 72px' }}>
+                  {['Subject', 'Teacher', 'Prev', 'Now', 'Progress', 'Grade'].map(h => (
+                    <p key={h} className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">{h}</p>
+                  ))}
+                </div>
 
-                return (
-                  <div key={row.subject}>
-                    {/* Subject row */}
-                    <button
-                      onClick={() => setExpandedSubject(isExpanded ? null : row.subject)}
-                      className={`w-full grid gap-3 px-5 py-4 items-center text-left transition-colors ${
-                        isExpanded ? 'bg-emerald-50/60' : 'hover:bg-slate-50'
-                      } ${!isLast || isExpanded ? 'border-b border-slate-100' : ''}`}
-                      style={{ gridTemplateColumns: '2fr 1.4fr 72px 72px 80px 72px' }}
-                    >
-                      {/* Subject name + icon */}
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                          style={{ backgroundColor: (row.cambridge?.color || accentColor) + '18' }}>
-                          <SubjectIcon size={15} style={{ color: row.cambridge?.color || accentColor }} />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-slate-900 text-sm truncate">{row.subject}</p>
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <ChevronRight
-                              size={12}
-                              className="transition-transform text-slate-300"
-                              style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
-                            />
-                            <span className="text-[11px] text-slate-400">{row.grades.length} assessment{row.grades.length !== 1 ? 's' : ''}</span>
+                {subjectRows.map((row, idx) => {
+                  const SubjectIcon = getSubjectIcon(row.subject);
+                  const isExpanded  = expandedSubject === row.subject;
+                  const isLast      = idx === subjectRows.length - 1;
+                  return (
+                    <div key={row.subject}>
+                      <button
+                        onClick={() => setExpandedSubject(isExpanded ? null : row.subject)}
+                        className={`w-full grid gap-3 px-5 py-4 items-center text-left transition-colors ${
+                          isExpanded ? 'bg-emerald-50/60' : 'hover:bg-slate-50'
+                        } ${!isLast || isExpanded ? 'border-b border-slate-100' : ''}`}
+                        style={{ gridTemplateColumns: '2fr 1.4fr 72px 72px 80px 72px' }}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                            style={{ backgroundColor: (row.cambridge?.color || accentColor) + '18' }}>
+                            <SubjectIcon size={15} style={{ color: row.cambridge?.color || accentColor }} />
                           </div>
-                        </div>
-                      </div>
-
-                      {/* Teacher */}
-                      <p className="text-xs text-slate-500 truncate">
-                        {row.teacher || <span className="text-slate-300">—</span>}
-                      </p>
-
-                      {/* Prev term */}
-                      <p className="text-sm font-medium text-slate-400">
-                        {row.prevAvg !== null ? `${row.prevAvg}%` : <span className="text-slate-300">—</span>}
-                      </p>
-
-                      {/* This term */}
-                      <p className="text-sm font-semibold text-slate-900">{row.currAvg}%</p>
-
-                      {/* Progress */}
-                      <div>
-                        <ProgressBadge delta={row.delta} />
-                      </div>
-
-                      {/* Grade badge */}
-                      <GradeBadge cambridge={row.cambridge} size="sm" />
-                    </button>
-
-                    {/* Expanded: individual assessments */}
-                    {isExpanded && (
-                      <div className={`bg-slate-50/80 ${!isLast ? 'border-b border-slate-100' : ''}`}>
-                        {row.grades.map((g, i) => (
-                          <div key={g.id || i}
-                            className="grid items-center gap-3 px-5 py-3 border-b border-slate-100/80 last:border-0"
-                            style={{ gridTemplateColumns: '1fr auto auto auto' }}
-                          >
-                            {/* Assessment title + date */}
-                            <div className="pl-11 min-w-0">
-                              <p className="text-sm text-slate-700 font-medium truncate">{g.assessment_title || 'Assessment'}</p>
-                              <p className="text-[11px] text-slate-400 mt-0.5">
-                                {g.date
-                                  ? new Date(g.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                                  : '—'}
-                                {g.assessment_type && <span className="ml-1 text-slate-300">· {g.assessment_type}</span>}
-                              </p>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-900 text-sm truncate">{row.subject}</p>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <ChevronRight size={12} className="transition-transform text-slate-300"
+                                style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }} />
+                              <span className="text-[11px] text-slate-400">{row.grades.length} assessment{row.grades.length !== 1 ? 's' : ''}</span>
                             </div>
-                            {/* Score */}
-                            <p className="text-xs text-slate-500 font-medium whitespace-nowrap">{g.grade}/{g.max_grade}</p>
-                            {/* % */}
-                            <p className="text-sm font-semibold text-slate-700 w-10 text-right">{g.percentage}%</p>
-                            {/* Grade */}
-                            <GradeBadge cambridge={g.cambridge} size="sm" />
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                        </div>
+                        <p className="text-xs text-slate-500 truncate">{row.teacher || <span className="text-slate-300">—</span>}</p>
+                        <p className="text-sm font-medium text-slate-400">{row.prevAvg !== null ? `${row.prevAvg}%` : <span className="text-slate-300">—</span>}</p>
+                        <p className="text-sm font-semibold text-slate-900">{row.currAvg}%</p>
+                        <div><ProgressBadge delta={row.delta} /></div>
+                        <GradeBadge cambridge={row.cambridge} size="sm" />
+                      </button>
+
+                      {isExpanded && (
+                        <div className={`bg-slate-50/80 ${!isLast ? 'border-b border-slate-100' : ''}`}>
+                          {row.grades.map((g, i) => (
+                            <div key={g.id || i}
+                              className="grid items-center gap-3 px-5 py-3 border-b border-slate-100/80 last:border-0"
+                              style={{ gridTemplateColumns: '1fr auto auto auto' }}
+                            >
+                              <div className="pl-11 min-w-0">
+                                <p className="text-sm text-slate-700 font-medium truncate">{g.assessment_title || 'Assessment'}</p>
+                                <p className="text-[11px] text-slate-400 mt-0.5">
+                                  {g.date ? new Date(g.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                                  {g.assessment_type && <span className="ml-1 text-slate-300">· {g.assessment_type}</span>}
+                                </p>
+                              </div>
+                              <p className="text-xs text-slate-500 font-medium whitespace-nowrap">{g.grade}/{g.max_grade}</p>
+                              <p className="text-sm font-semibold text-slate-700 w-10 text-right">{g.percentage}%</p>
+                              <GradeBadge cambridge={g.cambridge} size="sm" />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* ── MOBILE CARDS (< md) ──────────────────────────────────── */}
+              <div className="md:hidden divide-y divide-slate-100">
+                {subjectRows.map((row, idx) => {
+                  const SubjectIcon = getSubjectIcon(row.subject);
+                  const isExpanded  = expandedSubject === row.subject;
+                  return (
+                    <div key={row.subject}>
+                      {/* Subject card row */}
+                      <button
+                        onClick={() => setExpandedSubject(isExpanded ? null : row.subject)}
+                        className={`w-full px-4 py-4 flex items-center gap-3 text-left transition-colors ${
+                          isExpanded ? 'bg-emerald-50/60' : 'active:bg-slate-50'
+                        }`}
+                      >
+                        {/* Icon */}
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                          style={{ backgroundColor: (row.cambridge?.color || accentColor) + '18' }}>
+                          <SubjectIcon size={17} style={{ color: row.cambridge?.color || accentColor }} />
+                        </div>
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="font-semibold text-slate-900 text-sm truncate">{row.subject}</p>
+                            <GradeBadge cambridge={row.cambridge} size="sm" />
+                          </div>
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            <span className="text-sm font-bold" style={{ color: row.cambridge?.color || accentColor }}>
+                              {row.currAvg}%
+                            </span>
+                            <ProgressBadge delta={row.delta} />
+                            {row.prevAvg !== null && (
+                              <span className="text-xs text-slate-400">was {row.prevAvg}%</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            {row.teacher && (
+                              <span className="text-[11px] text-slate-400 truncate">{row.teacher}</span>
+                            )}
+                            <span className="text-[11px] text-slate-300 ml-auto flex-shrink-0">
+                              {row.grades.length} assessment{row.grades.length !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Expand chevron */}
+                        <ChevronRight size={16} className="text-slate-300 flex-shrink-0 transition-transform"
+                          style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }} />
+                      </button>
+
+                      {/* Expanded assessments on mobile */}
+                      {isExpanded && (
+                        <div className="bg-slate-50/80 border-t border-slate-100">
+                          {row.grades.map((g, i) => (
+                            <div key={g.id || i}
+                              className="flex items-center gap-3 px-4 py-3 border-b border-slate-100/80 last:border-0">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-slate-700 font-medium truncate">{g.assessment_title || 'Assessment'}</p>
+                                <p className="text-[11px] text-slate-400 mt-0.5">
+                                  {g.date ? new Date(g.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}
+                                  {g.assessment_type && <span className="ml-1">· {g.assessment_type}</span>}
+                                </p>
+                              </div>
+                              <span className="text-xs text-slate-500 font-medium whitespace-nowrap flex-shrink-0">{g.grade}/{g.max_grade}</span>
+                              <span className="text-sm font-semibold text-slate-700 flex-shrink-0">{g.percentage}%</span>
+                              <GradeBadge cambridge={g.cambridge} size="sm" />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
 
