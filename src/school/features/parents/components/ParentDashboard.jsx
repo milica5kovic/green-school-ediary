@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Calendar, Clock, CheckCircle, XCircle, AlertTriangle,
-  ClipboardList, BarChart3, ArrowRight, UserCheck,
-  Award, Users, BookOpen, Bell, ChevronDown,
+  ClipboardList, ArrowRight, UserCheck,
+  Award, Users, BookOpen, Bell, ChevronDown, GraduationCap,
 } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import { useAuth } from '../../../../core/context/AuthContext';
@@ -37,6 +37,27 @@ const timeAgo = (isoOrDate) => {
   } catch { return ''; }
 };
 
+const EVENT_TYPE_LABELS = {
+  exam_period:  'Exam Period',
+  exam:         'Exam',
+  outing:       'School Outing',
+  trip:         'School Trip',
+  residential:  'Residential Trip',
+  ptm:          'Parent–Teacher Meeting',
+  holiday:      'School Holiday',
+  sports_day:   'Sports Day',
+  assembly:     'Assembly',
+  open_day:     'Open Day',
+  graduation:   'Graduation',
+  other:        'School Event',
+};
+
+const formatEventType = (type) => {
+  if (!type) return 'Event';
+  return EVENT_TYPE_LABELS[type.toLowerCase()]
+    || type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+};
+
 // ─── main ─────────────────────────────────────────────────────────────────────
 
 const ParentDashboard = () => {
@@ -57,6 +78,7 @@ const ParentDashboard = () => {
   const [recentActivity, setRecentActivity] = useState([]);
   const [ptmEvent,       setPtmEvent]       = useState(null);
   const [alerts,         setAlerts]         = useState([]);
+  const [todayClasses,   setTodayClasses]   = useState([]);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -180,6 +202,12 @@ const ParentDashboard = () => {
       });
       setPtmEvent(ptm || null);
 
+      // today's classes
+      const { data: tc } = await supabase.from('classes')
+        .select('id, subject, time, title')
+        .eq('date_key', today).eq('class_name', cls).order('time');
+      setTodayClasses(tc || []);
+
       // ── build activity feed ──────────────────────────────────────────────────
       const acts = [];
 
@@ -264,7 +292,7 @@ const ParentDashboard = () => {
   // ── next upcoming item ─────────────────────────────────────────────────────
   const allUpcoming = [
     ...(upcomingTests.slice(0, 3).map(t => ({ title: t.title, sub: t.subject,           date: t.test_date,   color: '#ef4444' }))),
-    ...(upcomingEvents.slice(0, 3).map(e => ({ title: e.title, sub: e.event_type || 'Event', date: e.start_date, color: accent }))),
+    ...(upcomingEvents.slice(0, 3).map(e => ({ title: e.title, sub: formatEventType(e.event_type), date: e.start_date, color: accent }))),
   ].sort((a, b) => a.date.localeCompare(b.date));
 
   // ── loading / empty states ─────────────────────────────────────────────────
@@ -430,50 +458,86 @@ const ParentDashboard = () => {
           )}
         </div>
 
-        {/* Upcoming — 1 col */}
-        <div className="bg-white rounded-2xl border border-slate-100 p-6" style={{ boxShadow: CARD_SHADOW }}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-slate-900">Upcoming</h3>
-            <button
-              onClick={() => nav('parent-calendar')}
-              className="text-xs font-semibold hover:underline transition-colors"
-              style={{ color: accent }}
-            >
-              View all
-            </button>
+        {/* Right column: Today's Classes + Upcoming stacked */}
+        <div className="flex flex-col gap-5">
+
+          {/* Today's Classes */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-6" style={{ boxShadow: CARD_SHADOW }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-slate-900">Today's Classes</h3>
+              <button
+                onClick={() => nav('parent-daily')}
+                className="text-xs font-semibold hover:underline transition-colors"
+                style={{ color: accent }}
+              >
+                Daily view
+              </button>
+            </div>
+
+            {todayClasses.length ? (
+              todayClasses.slice(0, 6).map((c, i, arr) => (
+                <div key={i} className={`flex items-center gap-3 py-2.5 ${i < arr.length - 1 ? 'border-b border-slate-50' : ''}`}>
+                  <span className="text-xs font-medium text-slate-400 w-10 tabular-nums flex-shrink-0">
+                    {c.time || '—'}
+                  </span>
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: accent }} />
+                  <p className="text-sm text-slate-700 flex-1 min-w-0 truncate">{c.subject}</p>
+                </div>
+              ))
+            ) : (
+              <div className="py-6 text-center">
+                <GraduationCap size={22} className="mx-auto text-slate-200 mb-2" />
+                <p className="text-xs text-slate-400">No classes today</p>
+              </div>
+            )}
           </div>
 
-          {allUpcoming.slice(0, 5).length ? (
-            allUpcoming.slice(0, 5).map((item, i, arr) => {
-              const d = new Date(item.date + 'T00:00:00');
-              const { label, cls } = dayBadge(item.date);
-              return (
-                <div key={i} className={`flex items-center gap-3 py-3 ${i < arr.length - 1 ? 'border-b border-slate-50' : ''}`}>
-                  <div className="w-10 h-10 rounded-xl flex flex-col items-center justify-center flex-shrink-0 border"
-                    style={{ backgroundColor: `${item.color}0d`, borderColor: `${item.color}25` }}>
-                    <span className="text-[8px] font-bold leading-none" style={{ color: item.color }}>
-                      {d.toLocaleDateString('en-GB', { month: 'short' }).toUpperCase()}
-                    </span>
-                    <span className="text-sm font-bold leading-none mt-0.5" style={{ color: item.color }}>
-                      {d.getDate()}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-800 truncate">{item.title}</p>
-                    <p className="text-xs text-slate-400 truncate mt-0.5">{item.sub}</p>
-                  </div>
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${cls}`}>
-                    {label}
-                  </span>
-                </div>
-              );
-            })
-          ) : (
-            <div className="py-10 text-center">
-              <Calendar size={24} className="mx-auto text-slate-200 mb-2" />
-              <p className="text-sm text-slate-400">Nothing coming up</p>
+          {/* Upcoming */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-6" style={{ boxShadow: CARD_SHADOW }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-slate-900">Upcoming</h3>
+              <button
+                onClick={() => nav('parent-calendar')}
+                className="text-xs font-semibold hover:underline transition-colors"
+                style={{ color: accent }}
+              >
+                View all
+              </button>
             </div>
-          )}
+
+            {allUpcoming.slice(0, 5).length ? (
+              allUpcoming.slice(0, 5).map((item, i, arr) => {
+                const d = new Date(item.date + 'T00:00:00');
+                const { label, cls: badgeCls } = dayBadge(item.date);
+                return (
+                  <div key={i} className={`flex items-center gap-3 py-3 ${i < arr.length - 1 ? 'border-b border-slate-50' : ''}`}>
+                    <div className="w-10 h-10 rounded-xl flex flex-col items-center justify-center flex-shrink-0 border"
+                      style={{ backgroundColor: `${item.color}0d`, borderColor: `${item.color}25` }}>
+                      <span className="text-[8px] font-bold leading-none" style={{ color: item.color }}>
+                        {d.toLocaleDateString('en-GB', { month: 'short' }).toUpperCase()}
+                      </span>
+                      <span className="text-sm font-bold leading-none mt-0.5" style={{ color: item.color }}>
+                        {d.getDate()}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-800 truncate">{item.title}</p>
+                      <p className="text-xs text-slate-400 truncate mt-0.5">{item.sub}</p>
+                    </div>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${badgeCls}`}>
+                      {label}
+                    </span>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="py-6 text-center">
+                <Calendar size={22} className="mx-auto text-slate-200 mb-2" />
+                <p className="text-xs text-slate-400">Nothing coming up</p>
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
 
