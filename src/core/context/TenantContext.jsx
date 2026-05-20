@@ -16,6 +16,15 @@ export const useTenant = () => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Demo / staging hostname overrides
+// Maps a full hostname directly to a school ID — no DB domain column needed.
+// Add entries here for testing deployments, remove before going multi-tenant.
+// ═══════════════════════════════════════════════════════════════════════════
+const DEMO_DOMAIN_IDS = {
+  'ediary-prototype.id': 'f2100ee0-c12b-4418-82b0-3567d6207920', // Green School demo
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Extract subdomain from hostname
 // Supports:
 //   - greenschool.localhost:3000 → "greenschool"
@@ -98,8 +107,19 @@ export const TenantProvider = ({ children }) => {
           let data = null;
           let fetchError = null;
 
+          // Demo/staging override — look up directly by school ID
+          if (DEMO_DOMAIN_IDS[hostname]) {
+            const result = await supabase
+              .from('schools')
+              .select('*')
+              .eq('id', DEMO_DOMAIN_IDS[hostname])
+              .single();
+            data = result.data;
+            fetchError = result.error;
+          }
+
           // Try custom domain first, then slug
-          if (customDomain) {
+          if (!data && customDomain) {
             const result = await supabase
               .from('schools')
               .select('*')
