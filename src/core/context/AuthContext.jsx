@@ -368,7 +368,7 @@ export const AuthProvider = ({ children, supabase, schoolId }) => {
         if (!belongsToSchool) {
           // ❌ User postoji ali NE pripada ovoj školi!
           console.error('❌ ACCESS DENIED: User does not belong to this school!');
-          console.error('   User email:', email);
+          // NOTE: Email not logged here — GDPR compliance (do not log PII)
           console.error('   School ID:', schoolId);
           
           await supabase.auth.signOut();

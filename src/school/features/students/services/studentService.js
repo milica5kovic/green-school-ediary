@@ -136,12 +136,8 @@ export class StudentsService {
         throw new Error('School ID is required to add a student');
       }
 
-      console.log('➕ Adding student:', {
-        name: studentData.name,
-        class: studentData.class_name,
-        no: studentData.student_no,
-        school_id: this.schoolId
-      });
+      // NOTE: Student name not logged — GDPR compliance
+      console.log('➕ Adding student to class:', studentData.class_name, '| school:', this.schoolId);
       
       const insertData = {
         name: studentData.name,

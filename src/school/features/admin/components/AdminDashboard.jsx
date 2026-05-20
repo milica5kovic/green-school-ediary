@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, GraduationCap, BookOpen, Calendar, AlertCircle, CheckCircle,
-  Clock, ClipboardList, XCircle, AlertTriangle, BarChart3
+  Clock, ClipboardList, XCircle, AlertTriangle, BarChart3, Shield
 } from 'lucide-react';
 import { useApp } from '../../../../core/context/AppContext';
 import { useBranding } from '../../../../core/context/BrandingContext';
@@ -44,6 +44,7 @@ const AdminDashboard = () => {
   const [upcomingTests, setUpcomingTests] = useState([]);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [pendingDeletions, setPendingDeletions] = useState(0);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -158,9 +159,20 @@ const AdminDashboard = () => {
         .limit(5);
       setUpcomingEvents(events || []);
 
+      // GDPR: pending deletion requests
+      let pendingDelCount = 0;
+      try {
+        const { count: delCount } = await supabase
+          .from('deletion_requests')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'pending');
+        pendingDelCount = delCount || 0;
+        setPendingDeletions(pendingDelCount);
+      } catch { /* table may not exist yet */ }
+
       // Build alerts
       const alertsList = [];
-      
+
       if (!activeTerm) {
         alertsList.push({
           id: 'no-term', severity: 'error', icon: AlertCircle,
@@ -175,6 +187,14 @@ const AdminDashboard = () => {
           id: 'all-finalized', severity: 'info', icon: CheckCircle,
           title: 'All Terms Finalized',
           message: 'Consider running year-end archive.'
+        });
+      }
+
+      if (pendingDelCount > 0) {
+        alertsList.push({
+          id: 'pending-deletions', severity: 'warning', icon: Shield,
+          title: `${pendingDelCount} Pending Deletion Request${pendingDelCount > 1 ? 's' : ''}`,
+          message: `GDPR: ${pendingDelCount} account deletion request${pendingDelCount > 1 ? 's' : ''} awaiting review. Respond within 30 days.`
         });
       }
 

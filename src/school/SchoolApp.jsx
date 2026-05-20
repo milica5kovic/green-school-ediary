@@ -61,6 +61,8 @@ import ParentAttendancePage from "./features/parents/components/ParentAttendance
 import ParentCalendarPage from "./features/parents/components/ParentCalendarPage";
 import ParentDailyViewPage from "./features/parents/components/ParentDailyView";
 import ParentHomeworkPage from "./features/parents/components/ParentHomeworkPage";
+import ParentPrivacyPage from "./features/parents/components/ParentPrivacyPage";
+import { ConsentGate } from "../core/components/ConsentModal";
 import ActivityTrackerPage from "./features/activity/components/ActivityTrackerPage";
 import TimetableMakerPage from "./features/timetable/components/TimetableMakerPage";
 
@@ -83,7 +85,7 @@ const SchoolApp = () => (
 // ============================================================================
 
 const SchoolAppContent = () => {
-  const { currentPage, setCurrentPage, loading, error, loadAllStudents } = useApp();
+  const { currentPage, setCurrentPage, loading, error, loadAllStudents, supabase } = useApp();
   const { school } = useTenant();
   const {
     primaryColor,
@@ -184,6 +186,7 @@ const SchoolAppContent = () => {
         case "parent-calendar":   return hasFeature("parent_calendar")   ? <ParentCalendarPage />   : <FeatureDisabled feature="Calendar" />;
         case "homework":
         case "parent-homework":   return hasFeature("parent_homework")   ? <ParentHomeworkPage />   : <FeatureDisabled feature="Homework" />;
+        case "parent-privacy":    return <ParentPrivacyPage />;
         case "settings":          return <SettingsPage />;
         default:                  return <ParentDashboard />;
       }
@@ -314,6 +317,7 @@ const SchoolAppContent = () => {
               {hasFeature("parent_homework")   && <NavItem icon={ClipboardList} label="Homework"   page="homework" />}
             </>
           )}
+          <NavItem icon={Shield} label="Privacy" page="parent-privacy" />
           <NavItem icon={Settings} label="Settings" page="settings" />
         </>
 
@@ -379,6 +383,7 @@ const SchoolAppContent = () => {
   );
 
   return (
+    <ConsentGate supabase={supabase} userId={user?.id}>
     <div
       className="min-h-screen"
       style={{ background: `linear-gradient(to bottom right, ${primaryColor}08, ${primaryColor}03)` }}
@@ -587,6 +592,7 @@ const SchoolAppContent = () => {
       </div>
 
     </div>
+    </ConsentGate>
   );
 };
 
