@@ -2,11 +2,10 @@ import React, { useState, useRef } from 'react';
 import supabase from '../core/infrastructure/supabaseClient';
 import {
   Palette, Upload, Eye, Save, X, Check, AlertCircle,
-  Image, Type, Globe, FileText, ToggleLeft, ToggleRight,
-  Smartphone, Monitor, RefreshCw, Camera, Trash2,
-  Home, Clock, Calendar, CheckSquare, BookMarked, GraduationCap,
-  ClipboardCheck, Users, UserPlus, BarChart3, Settings,
-  CalendarDays, MessageSquare, Bell
+  Image, Globe, FileText, ToggleLeft,
+  RefreshCw, Camera, Trash2,
+  Home, GraduationCap,
+  BarChart3,
 } from 'lucide-react';
 
 // ============================================================================
@@ -51,55 +50,13 @@ const BrandingSettings = ({ school, onSave, onClose }) => {
     pdf_footer_text: school?.pdf_footer_text || '',
     show_logo_in_pdf: school?.show_logo_in_pdf ?? true,
     
-    // Plan & Status
+    // Plan
     plan: school?.plan || 'pro',
     status: school?.status || 'active',
-    
-    // Features - Sidebar modules
-    features: school?.features || {
-      // Teacher features
-      schedule: true,
-      calendar: true,
-      tasks: true,
-      homework: true,
-      grading: true,
-      daily_overview: true,
-      test_maker: true,
-      
-      // Admin features
-      management: true,
-      admissions: true,
-      reports: true,
-      admin_calendar: true,
-      
-      // Parent features
-      parent_portal: true,
-      parent_grades: true,
-      parent_attendance: true,
-      parent_homework: true,
-      parent_calendar: true,
-      
-      // System features
-      messaging: false,
-      notifications: true,
-      custom_branding: true,
-      pdf_branding: true,
-    },
   });
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    setSuccess(false);
-  };
-
-  const handleFeatureToggle = (feature) => {
-    setFormData(prev => ({
-      ...prev,
-      features: {
-        ...prev.features,
-        [feature]: !prev.features[feature],
-      },
-    }));
     setSuccess(false);
   };
 
@@ -219,57 +176,8 @@ const BrandingSettings = ({ school, onSave, onClose }) => {
     { id: 'colors', label: 'Colors', icon: Palette },
     { id: 'contact', label: 'Contact', icon: Globe },
     { id: 'academic', label: 'Academic', icon: GraduationCap },
-    { id: 'features', label: 'Features', icon: ToggleLeft },
     { id: 'pdf', label: 'PDF', icon: FileText },
     { id: 'subscription', label: 'Plan', icon: BarChart3 },
-  ];
-
-  // Feature groups for better organization
-  const featureGroups = [
-    {
-      title: 'Teacher Features',
-      description: 'Modules available to teachers',
-      features: [
-        { key: 'schedule', label: 'My Schedule', icon: Clock, desc: 'Weekly schedule view' },
-        { key: 'calendar', label: 'Calendar', icon: Calendar, desc: 'Personal calendar' },
-        { key: 'tasks', label: 'Tasks', icon: CheckSquare, desc: 'To-do list' },
-        { key: 'homework', label: 'Homework', icon: BookMarked, desc: 'Assign & track homework' },
-        { key: 'grading', label: 'Grading', icon: GraduationCap, desc: 'Enter & manage grades' },
-        { key: 'daily_overview', label: 'Daily Overview', icon: ClipboardCheck, desc: 'Class teacher daily view' },
-        { key: 'test_maker', label: 'Test Maker', icon: FileText, desc: 'Create & print tests' },
-      ]
-    },
-    {
-      title: 'Admin Features',
-      description: 'Modules available to administrators',
-      features: [
-        { key: 'management', label: 'Management', icon: Users, desc: 'Students, teachers, classes' },
-        { key: 'admissions', label: 'Admissions', icon: UserPlus, desc: 'Application management' },
-        { key: 'reports', label: 'Reports', icon: BarChart3, desc: 'Analytics & reports' },
-        { key: 'admin_calendar', label: 'School Calendar', icon: CalendarDays, desc: 'School-wide calendar' },
-      ]
-    },
-    {
-      title: 'Parent Portal',
-      description: 'Modules available to parents',
-      features: [
-        { key: 'parent_portal', label: 'Parent Portal', icon: Home, desc: 'Enable parent access' },
-        { key: 'parent_grades', label: 'View Grades', icon: GraduationCap, desc: 'Parents see grades' },
-        { key: 'parent_attendance', label: 'View Attendance', icon: ClipboardCheck, desc: 'Parents see attendance' },
-        { key: 'parent_homework', label: 'View Homework', icon: BookMarked, desc: 'Parents see homework' },
-        { key: 'parent_calendar', label: 'View Calendar', icon: Calendar, desc: 'Parents see events' },
-      ]
-    },
-    {
-      title: 'System Features',
-      description: 'Platform-wide settings',
-      features: [
-        { key: 'messaging', label: 'Messaging', icon: MessageSquare, desc: 'In-app messaging (coming soon)' },
-        { key: 'notifications', label: 'Notifications', icon: Bell, desc: 'Email & push notifications' },
-        { key: 'custom_branding', label: 'Custom Branding', icon: Palette, desc: 'Use school colors' },
-        { key: 'pdf_branding', label: 'PDF Branding', icon: FileText, desc: 'School logo on PDFs' },
-      ]
-    },
   ];
 
   return (
@@ -656,54 +564,6 @@ const BrandingSettings = ({ school, onSave, onClose }) => {
             </div>
           )}
 
-          {/* Features Tab */}
-          {activeTab === 'features' && (
-            <div className="space-y-8">
-              <p className="text-slate-400">Enable or disable modules for this school. Disabled modules won't appear in the sidebar.</p>
-              
-              {featureGroups.map(group => (
-                <div key={group.title}>
-                  <div className="mb-4">
-                    <h3 className="text-lg font-semibold text-white">{group.title}</h3>
-                    <p className="text-sm text-slate-500">{group.description}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    {group.features.map(({ key, label, icon: Icon, desc }) => (
-                      <div 
-                        key={key}
-                        className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                          formData.features[key] 
-                            ? 'bg-violet-500/10 border-violet-500/30' 
-                            : 'bg-slate-700/30 border-slate-600 opacity-60'
-                        }`}
-                        onClick={() => handleFeatureToggle(key)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                              formData.features[key] ? 'bg-violet-500/20 text-violet-400' : 'bg-slate-600 text-slate-400'
-                            }`}>
-                              <Icon size={16} />
-                            </div>
-                            <div>
-                              <p className="font-medium text-white">{label}</p>
-                              <p className="text-xs text-slate-400">{desc}</p>
-                            </div>
-                          </div>
-                          <div className={`w-10 h-6 rounded-full transition-colors flex items-center ${
-                            formData.features[key] ? 'bg-violet-500 justify-end' : 'bg-slate-600 justify-start'
-                          }`}>
-                            <div className="w-5 h-5 bg-white rounded-full shadow mx-0.5" />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
           {/* PDF Tab */}
           {activeTab === 'pdf' && (
             <div className="space-y-6">
@@ -771,56 +631,29 @@ const BrandingSettings = ({ school, onSave, onClose }) => {
 
           {/* Subscription Tab */}
           {activeTab === 'subscription' && (
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-3">Plan</label>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { id: 'basic', name: 'Basic', price: '€300', limit: '50 students' },
-                    { id: 'pro', name: 'Pro', price: '€500', limit: '200 students' },
-                    { id: 'enterprise', name: 'Enterprise', price: '€800', limit: 'Unlimited' },
-                  ].map(plan => (
-                    <button
-                      key={plan.id}
-                      type="button"
-                      onClick={() => handleChange('plan', plan.id)}
-                      className={`p-4 rounded-xl border-2 text-left transition-all ${
-                        formData.plan === plan.id
-                          ? 'border-violet-500 bg-violet-500/10'
-                          : 'border-slate-600 hover:border-slate-500'
-                      }`}
-                    >
-                      <p className="font-semibold text-white">{plan.name}</p>
-                      <p className="text-lg font-bold text-violet-400">{plan.price}<span className="text-sm font-normal text-slate-400">/mo</span></p>
-                      <p className="text-xs text-slate-400 mt-1">{plan.limit}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-3">Status</label>
-                <div className="grid grid-cols-4 gap-3">
-                  {[
-                    { id: 'active', label: 'Active', color: 'emerald' },
-                    { id: 'trial', label: 'Trial', color: 'amber' },
-                    { id: 'suspended', label: 'Suspended', color: 'red' },
-                    { id: 'cancelled', label: 'Cancelled', color: 'slate' },
-                  ].map(status => (
-                    <button
-                      key={status.id}
-                      type="button"
-                      onClick={() => handleChange('status', status.id)}
-                      className={`p-3 rounded-xl border-2 text-center transition-all ${
-                        formData.status === status.id
-                          ? 'border-violet-500 bg-violet-500/10'
-                          : 'border-slate-600 hover:border-slate-500'
-                      }`}
-                    >
-                      <span className="font-medium text-white">{status.label}</span>
-                    </button>
-                  ))}
-                </div>
+            <div className="space-y-4">
+              <p className="text-sm text-slate-400">Select the plan tier for this school. Status is managed from the school card on the main dashboard.</p>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { id: 'basic',      name: 'Basic',      limit: 'Up to 50 students',   desc: 'Essential features' },
+                  { id: 'pro',        name: 'Pro',        limit: 'Up to 200 students',  desc: 'Full feature set' },
+                  { id: 'enterprise', name: 'Enterprise', limit: 'Unlimited students',  desc: 'Custom & priority support' },
+                ].map(plan => (
+                  <button
+                    key={plan.id}
+                    type="button"
+                    onClick={() => handleChange('plan', plan.id)}
+                    className={`p-4 rounded-xl border-2 text-left transition-all ${
+                      formData.plan === plan.id
+                        ? 'border-violet-500 bg-violet-500/10'
+                        : 'border-slate-600 hover:border-slate-500'
+                    }`}
+                  >
+                    <p className="font-bold text-white">{plan.name}</p>
+                    <p className="text-xs text-violet-300 mt-1">{plan.limit}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{plan.desc}</p>
+                  </button>
+                ))}
               </div>
             </div>
           )}

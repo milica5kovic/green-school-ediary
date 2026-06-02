@@ -107,34 +107,37 @@ export const TenantProvider = ({ children }) => {
           let data = null;
           let fetchError = null;
 
+          const withTimeout = (promise, ms = 10000) =>
+            Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), ms))]);
+
           // Demo/staging override — look up directly by school ID
           if (DEMO_DOMAIN_IDS[hostname]) {
-            const result = await supabase
+            const result = await withTimeout(supabase
               .from('schools')
               .select('*')
               .eq('id', DEMO_DOMAIN_IDS[hostname])
-              .single();
+              .single());
             data = result.data;
             fetchError = result.error;
           }
 
           // Try custom domain first, then slug
           if (!data && customDomain) {
-            const result = await supabase
+            const result = await withTimeout(supabase
               .from('schools')
               .select('*')
               .eq('domain', hostname)
-              .single();
+              .single());
             data = result.data;
             fetchError = result.error;
           }
 
           if (!data && subdomain) {
-            const result = await supabase
+            const result = await withTimeout(supabase
               .from('schools')
               .select('*')
               .eq('slug', subdomain)
-              .single();
+              .single());
             data = result.data;
             fetchError = result.error;
           }

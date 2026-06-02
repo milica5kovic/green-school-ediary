@@ -246,6 +246,20 @@ const sanitizeTextForPdf = (text) => {
     .trim();
 };
 
+/**
+ * Parse fill-in-the-blank question text.
+ * Teacher writes: "Water boils at [100] degrees."
+ * Returns studentText with underscores, and array of answers.
+ */
+const parseFillBlank = (text = '') => {
+  const blanks = [];
+  const studentText = text.replace(/\[([^\]]+)\]/g, (_, word) => {
+    blanks.push(word);
+    return '_'.repeat(Math.max(8, word.length + 4));
+  });
+  return { studentText, blanks };
+};
+
 // ============================================================================
 // MAIN EXPORT - Generate Test Bundle
 // ============================================================================
@@ -556,10 +570,14 @@ const generateStudentTest = async (doc, testData, logoData) => {
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(31, 41, 55);
-    
-    const questionLines = doc.splitTextToSize(sanitizeTextForPdf(q.question) || '', contentWidth - 30);
+
+    // For fill_blank, replace [answer] with underscores in the question text
+    const rawQ = q.question || '';
+    const displayQ = q.type === 'fill_blank' ? parseFillBlank(rawQ).studentText : rawQ;
+
+    const questionLines = doc.splitTextToSize(sanitizeTextForPdf(displayQ), contentWidth - 30);
     doc.text(questionLines, margin + 12, y + 3);
-    
+
     y += questionLines.length * 4 + 5;
 
     // Answer options based on type
@@ -612,19 +630,206 @@ const generateStudentTest = async (doc, testData, logoData) => {
       
       y += 8;
       
+    } else if (q.type === 'fill_blank') {
+      // Blanks are inline in the question text already (rendered as underscores above)
+      y += 4;
+
+    } else if (q.type === 'flowchart') {
+      // ── Flowchart answer area ──────────────────────────────────────
+      const boxH = 88;
+      const boxX = margin + 5;
+      const boxW = contentWidth - 10;
+
+      if (q.drawing) {
+        // Teacher drew a partial flowchart — render it; students complete on paper
+        try { doc.addImage(q.drawing, 'PNG', boxX, y, boxW, boxH); } catch (e) { /* skip */ }
+        doc.setDrawColor(150, 190, 230); doc.setLineWidth(0.5); doc.rect(boxX, y, boxW, boxH, 'S');
+      } else {
+      // Light blue-tinted background
+      doc.setFillColor(245, 250, 255);
+      doc.rect(boxX, y, boxW, boxH, 'F');
+
+      // Border
+      doc.setDrawColor(150, 190, 230);
+      doc.setLineWidth(0.5);
+      doc.rect(boxX, y, boxW, boxH, 'S');
+
+      // Label
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(160, 185, 210);
+      doc.text('Draw your flowchart in this space', boxX + boxW / 2, y + 7, { align: 'center' });
+
+      // ── Symbol legend (right side, very light) ─────────────────────
+      const lgX = boxX + boxW - 40;
+      const lgY = y + 14;
+      doc.setDrawColor(185, 200, 220);
+      doc.setFontSize(5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(185, 200, 220);
+
+      // Oval: Start / End
+      doc.roundedRect(lgX, lgY, 20, 7, 3, 3, 'S');
+      doc.text('Start / End', lgX + 10, lgY + 4.5, { align: 'center' });
+
+      // Arrow down
+      doc.line(lgX + 10, lgY + 7, lgX + 10, lgY + 11);
+      doc.line(lgX + 8.5, lgY + 9.5, lgX + 10, lgY + 11);
+      doc.line(lgX + 11.5, lgY + 9.5, lgX + 10, lgY + 11);
+
+      // Rectangle: Process
+      doc.rect(lgX, lgY + 12, 20, 7, 'S');
+      doc.text('Process', lgX + 10, lgY + 16.5, { align: 'center' });
+
+      // Arrow down
+      doc.line(lgX + 10, lgY + 19, lgX + 10, lgY + 23);
+      doc.line(lgX + 8.5, lgY + 21.5, lgX + 10, lgY + 23);
+      doc.line(lgX + 11.5, lgY + 21.5, lgX + 10, lgY + 23);
+
+      // Diamond: Decision
+      const dCX = lgX + 10;
+      const dCY = lgY + 29;
+      doc.line(dCX, dCY - 6, dCX + 10, dCY);
+      doc.line(dCX + 10, dCY, dCX, dCY + 6);
+      doc.line(dCX, dCY + 6, dCX - 10, dCY);
+      doc.line(dCX - 10, dCY, dCX, dCY - 6);
+      doc.text('Decision', dCX, dCY + 10, { align: 'center' });
+
+      // Arrow down
+      doc.line(dCX, dCY + 6, dCX, dCY + 14);
+      doc.line(dCX - 1.5, dCY + 12, dCX, dCY + 14);
+      doc.line(dCX + 1.5, dCY + 12, dCX, dCY + 14);
+
+      // Oval: End
+      doc.roundedRect(lgX, lgY + 45, 20, 7, 3, 3, 'S');
+      doc.text('End', lgX + 10, lgY + 49.5, { align: 'center' });
+      } // end else (no teacher drawing)
+
+      y += boxH + 5;
+
+    } else if (q.type === 'algorithm') {
+      // ── Algorithm / Pseudocode box ────────────────────────────────
+      const boxH = 68;
+      const boxX = margin + 5;
+      const boxW = contentWidth - 10;
+
+      // Grey background
+      doc.setFillColor(248, 248, 250);
+      doc.roundedRect(boxX, y, boxW, boxH, 2, 2, 'F');
+
+      // Border
+      doc.setDrawColor(200, 200, 215);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(boxX, y, boxW, boxH, 2, 2, 'S');
+
+      // Header bar
+      doc.setFillColor(218, 220, 228);
+      doc.roundedRect(boxX, y, boxW, 7, 2, 2, 'F');
+      doc.rect(boxX, y + 4, boxW, 3, 'F');
+      doc.setFontSize(5.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(90, 90, 115);
+      doc.text('ALGORITHM / PSEUDOCODE', boxX + 4, y + 5);
+
+      // Starter code rows
+      const hasStarter = q.starterCode && q.starterCode.trim();
+      // Split FIRST (preserving \n), then sanitize each line individually.
+      // sanitizeTextForPdf strips  - which includes \n, so calling
+      // it on the whole string collapses everything onto one line.
+      const starterLines = hasStarter
+        ? q.starterCode.split('\n').slice(0, 8).map(l => sanitizeTextForPdf(l))
+        : [];
+      const filledRows = starterLines.length;
+      const totalRows = 8;
+      const rowH = 7;
+      const rowStart = y + 10;
+
+      // Print starter code lines
+      starterLines.forEach((line, i) => {
+        const rowY = rowStart + i * rowH;
+        doc.setFontSize(5.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(150, 152, 165);
+        doc.text(`${i + 1}`, boxX + 3.5, rowY + 4.5, { align: 'right' });
+        doc.setTextColor(55, 55, 80);
+        doc.setFontSize(7.5);
+        doc.text(line, boxX + 8, rowY + 5);
+      });
+
+      // Blank numbered lines for student
+      doc.setDrawColor(210, 210, 222);
+      doc.setLineWidth(0.15);
+      doc.setTextColor(175, 178, 195);
+      doc.setFontSize(5.5);
+      for (let i = filledRows; i < totalRows; i++) {
+        const rowY = rowStart + i * rowH;
+        if (rowY + 5 < y + boxH) {
+          doc.setFont('helvetica', 'normal');
+          doc.text(`${i + 1}`, boxX + 3.5, rowY + 4.5, { align: 'right' });
+          doc.line(boxX + 8, rowY + 5.5, boxX + boxW - 3, rowY + 5.5);
+        }
+      }
+
+      y += boxH + 5;
+
+    } else if (q.type === 'math_graph') {
+      // ── Graph paper area ──────────────────────────────────────────
+      const boxH = 82;
+      const boxX = margin + 5;
+      const boxW = contentWidth - 10;
+
+      if (q.drawing) {
+        // Teacher drew a partial graph/diagram — the drawing has grid baked in
+        try { doc.addImage(q.drawing, 'PNG', boxX, y, boxW, boxH); } catch (e) { /* skip */ }
+        doc.setDrawColor(100, 145, 210); doc.setLineWidth(0.5); doc.rect(boxX, y, boxW, boxH, 'S');
+      } else {
+        const gridMm = 4; // 4 mm squares
+
+        // White background
+        doc.setFillColor(255, 255, 255);
+        doc.rect(boxX, y, boxW, boxH, 'F');
+
+        // Minor grid lines (every 4 mm)
+        doc.setDrawColor(195, 215, 245);
+        doc.setLineWidth(0.08);
+        for (let gx = boxX; gx <= boxX + boxW; gx += gridMm) {
+          doc.line(gx, y, gx, y + boxH);
+        }
+        for (let gy = y; gy <= y + boxH; gy += gridMm) {
+          doc.line(boxX, gy, boxX + boxW, gy);
+        }
+
+        // Major grid lines (every 5 minor squares = 20 mm)
+        doc.setDrawColor(160, 195, 235);
+        doc.setLineWidth(0.2);
+        for (let gx = boxX; gx <= boxX + boxW; gx += gridMm * 5) {
+          doc.line(gx, y, gx, y + boxH);
+        }
+        for (let gy = y; gy <= y + boxH; gy += gridMm * 5) {
+          doc.line(boxX, gy, boxX + boxW, gy);
+        }
+
+        // Outer border on top of grid
+        doc.setDrawColor(100, 145, 210);
+        doc.setLineWidth(0.5);
+        doc.rect(boxX, y, boxW, boxH, 'S');
+      }
+
+      y += boxH + 5;
+
     } else {
-      // Short answer / Essay - answer lines
+      // Short answer / Essay / Fill blank – answer lines
       const lines = q.type === 'essay' ? 5 : 2;
       doc.setDrawColor(210, 210, 210);
       doc.setLineWidth(0.2);
-      
+
       for (let i = 0; i < lines; i++) {
         doc.line(margin + 10, y + (i * 7), pageWidth - margin - 5, y + (i * 7));
       }
-      
+
       y += lines * 7 + 3;
     }
-    
+
     y += 3;
   });
 
@@ -766,42 +971,96 @@ const generateAnswerKey = async (doc, testData, logoData) => {
 
     // Answer box
     let answerText = '';
+    let isCodeAnswer = false;
+    let codeLines = [];
+
     if (q.type === 'multiple_choice') {
       const letter = q.correctAnswer || '';
       const optionText = sanitizeTextForPdf(q.options?.[letter]) || '';
       answerText = `${letter}) ${optionText}`;
+    } else if (q.type === 'fill_blank') {
+      // Show the full sentence with answers filled in
+      const filledText = (q.question || '').replace(/\[([^\]]+)\]/g, '$1');
+      answerText = sanitizeTextForPdf(filledText) || sanitizeTextForPdf(q.correctAnswer) || 'No answer provided';
+    } else if (q.type === 'algorithm' && q.correctAnswer) {
+      // Code-style rendering — split BEFORE sanitize to preserve newlines
+      isCodeAnswer = true;
+      codeLines = (q.correctAnswer || '').split('\n').slice(0, 20).map(l => sanitizeTextForPdf(l) || ' ');
+      if (codeLines.length === 0) codeLines = ['No solution provided'];
+    } else if (q.type === 'flowchart' || q.type === 'math_graph') {
+      const hasDrawing = !!q.drawing;
+      const noteText = sanitizeTextForPdf(q.correctAnswer) || '';
+      if (noteText) {
+        answerText = hasDrawing ? `[Diagram provided] ${noteText}` : noteText;
+      } else {
+        answerText = hasDrawing ? '[Teacher-drawn diagram included on student sheet]' : 'No answer provided';
+      }
     } else {
       answerText = sanitizeTextForPdf(q.correctAnswer) || 'No answer provided';
     }
-    
-    const answerLines = doc.splitTextToSize(answerText, contentWidth - 28);
-    const boxHeight = Math.max(8, answerLines.length * 4 + 4);
-    
-    // Green background for correct answer
-    doc.setFillColor(220, 252, 231);
-    doc.roundedRect(margin + 5, y, contentWidth - 10, boxHeight, 2, 2, 'F');
-    
-    // Green border
-    doc.setDrawColor(34, 197, 94);
-    doc.setLineWidth(0.2);
-    doc.roundedRect(margin + 5, y, contentWidth - 10, boxHeight, 2, 2, 'S');
-    
-    // Check icon
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(22, 163, 74);
-    doc.text('[OK]', margin + 8, y + 5);
-    
-    // Answer text
-    doc.setFont('helvetica', 'normal');
-    doc.text(answerLines, margin + 15, y + 5);
-    
-    // Points
-    doc.setFontSize(6);
-    doc.setTextColor(107, 114, 128);
-    doc.text(`${q.points} pts`, pageWidth - margin - 10, y + 5, { align: 'right' });
-    
-    y += boxHeight + 5;
+
+    if (isCodeAnswer) {
+      // Code-style box for algorithm model solutions
+      const lineH = 4;
+      const boxH = Math.max(12, codeLines.length * lineH + 10);
+
+      // Green-tinted background
+      doc.setFillColor(220, 252, 231);
+      doc.roundedRect(margin + 5, y, contentWidth - 10, boxH, 2, 2, 'F');
+      doc.setDrawColor(34, 197, 94);
+      doc.setLineWidth(0.2);
+      doc.roundedRect(margin + 5, y, contentWidth - 10, boxH, 2, 2, 'S');
+
+      // Label row
+      doc.setFontSize(6);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(22, 163, 74);
+      doc.text('MODEL SOLUTION', margin + 8, y + 4.5);
+      doc.setTextColor(107, 114, 128);
+      doc.text(`${q.points} pts`, pageWidth - margin - 10, y + 4.5, { align: 'right' });
+
+      // Code lines with line numbers (Courier for monospace feel)
+      doc.setFont('courier', 'normal');
+      doc.setFontSize(7);
+      codeLines.forEach((line, i) => {
+        const lineY = y + 9 + i * lineH;
+        doc.setTextColor(107, 114, 128);
+        doc.text(String(i + 1).padStart(2, ' '), margin + 9, lineY);
+        doc.setTextColor(15, 23, 42);
+        doc.text(line, margin + 16, lineY);
+      });
+
+      y += boxH + 5;
+    } else {
+      const answerLines = doc.splitTextToSize(answerText, contentWidth - 28);
+      const boxHeight = Math.max(8, answerLines.length * 4 + 4);
+
+      // Green background for correct answer
+      doc.setFillColor(220, 252, 231);
+      doc.roundedRect(margin + 5, y, contentWidth - 10, boxHeight, 2, 2, 'F');
+
+      // Green border
+      doc.setDrawColor(34, 197, 94);
+      doc.setLineWidth(0.2);
+      doc.roundedRect(margin + 5, y, contentWidth - 10, boxHeight, 2, 2, 'S');
+
+      // Check icon
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(22, 163, 74);
+      doc.text('[OK]', margin + 8, y + 5);
+
+      // Answer text
+      doc.setFont('helvetica', 'normal');
+      doc.text(answerLines, margin + 15, y + 5);
+
+      // Points
+      doc.setFontSize(6);
+      doc.setTextColor(107, 114, 128);
+      doc.text(`${q.points} pts`, pageWidth - margin - 10, y + 5, { align: 'right' });
+
+      y += boxHeight + 5;
+    }
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -831,10 +1090,10 @@ const generateAnswerKey = async (doc, testData, logoData) => {
  */
 const estimateQuestionHeight = (doc, question, contentWidth) => {
   let height = 15;
-  
+
   const questionLines = doc.splitTextToSize(question.question || '', contentWidth - 30);
   height += questionLines.length * 4;
-  
+
   if (question.type === 'multiple_choice' && question.options) {
     Object.values(question.options).forEach(opt => {
       if (opt) {
@@ -846,10 +1105,16 @@ const estimateQuestionHeight = (doc, question, contentWidth) => {
     height += 10;
   } else if (question.type === 'essay') {
     height += 40;
+  } else if (question.type === 'flowchart') {
+    height += 95;
+  } else if (question.type === 'algorithm') {
+    height += 75;
+  } else if (question.type === 'math_graph') {
+    height += 90;
   } else {
     height += 18;
   }
-  
+
   return height;
 };
 

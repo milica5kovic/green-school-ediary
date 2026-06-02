@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   FileText,
   Plus,
@@ -20,6 +20,22 @@ import {
   Calendar,
   Users,
   Loader2,
+  GitBranch,
+  Code2,
+  Calculator,
+  MessageSquare,
+  AlignLeft,
+  Type,
+  CheckSquare,
+  ToggleLeft,
+  Pencil,
+  Eraser,
+  RotateCcw,
+  Square,
+  Circle,
+  Diamond,
+  ArrowRight,
+  Minus,
 } from "lucide-react";
 import { useApp } from "../../../../core/context/AppContext";
 import { useAuth } from "../../../../core/context/AuthContext";
@@ -33,6 +49,67 @@ import { toast } from "../../../../core/components/Toast";
 // TEST MAKER PAGE - Production Ready
 // Multi-tenant aware, uses useTermTheme
 // ============================================================================
+
+// ─── Question Type Registry ─────────────────────────────────────────────────
+
+const QUESTION_TYPES = [
+  {
+    id: "multiple_choice",
+    label: "Multiple Choice",
+    desc: "A / B / C / D options with one correct answer",
+    icon: CheckSquare,
+    bg: "bg-blue-50", border: "border-blue-200", text: "text-blue-700",
+  },
+  {
+    id: "true_false",
+    label: "True / False",
+    desc: "Binary choice question",
+    icon: ToggleLeft,
+    bg: "bg-green-50", border: "border-green-200", text: "text-green-700",
+  },
+  {
+    id: "short_answer",
+    label: "Short Answer",
+    desc: "Brief written response with answer lines",
+    icon: MessageSquare,
+    bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-700",
+  },
+  {
+    id: "essay",
+    label: "Essay",
+    desc: "Extended written response, multiple lines",
+    icon: AlignLeft,
+    bg: "bg-purple-50", border: "border-purple-200", text: "text-purple-700",
+  },
+  {
+    id: "fill_blank",
+    label: "Fill in Blank",
+    desc: "Complete the missing word or phrase",
+    icon: Type,
+    bg: "bg-pink-50", border: "border-pink-200", text: "text-pink-700",
+  },
+  {
+    id: "flowchart",
+    label: "Flowchart",
+    desc: "Students draw a flow diagram in blank area",
+    icon: GitBranch,
+    bg: "bg-cyan-50", border: "border-cyan-200", text: "text-cyan-700",
+  },
+  {
+    id: "algorithm",
+    label: "Algorithm",
+    desc: "Write pseudocode steps in a code-style box",
+    icon: Code2,
+    bg: "bg-slate-50", border: "border-slate-200", text: "text-slate-700",
+  },
+  {
+    id: "math_graph",
+    label: "Math / Grid",
+    desc: "Graph paper area for diagrams and working",
+    icon: Calculator,
+    bg: "bg-orange-50", border: "border-orange-200", text: "text-orange-700",
+  },
+];
 
 const INSTRUCTION_PRESETS = [
   { id: "standard", label: "Standard Test", text: "Read all questions carefully before answering. Write your answers clearly. Check your work before submitting." },
@@ -572,15 +649,9 @@ const TestMakerPage = () => {
 // ─── Question Card ───────────────────────────────────────────────────────────
 
 const QuestionCard = ({ question, index, theme, onEdit, onDelete }) => {
-  const typeStyles = {
-    multiple_choice: { label: "Multiple Choice", bg: "bg-blue-50", text: "text-blue-700" },
-    true_false: { label: "True/False", bg: "bg-green-50", text: "text-green-700" },
-    short_answer: { label: "Short Answer", bg: "bg-amber-50", text: "text-amber-700" },
-    essay: { label: "Essay", bg: "bg-purple-50", text: "text-purple-700" },
-    fill_blank: { label: "Fill Blank", bg: "bg-pink-50", text: "text-pink-700" },
-  };
-
-  const style = typeStyles[question.type] || typeStyles.short_answer;
+  const typeConfig = QUESTION_TYPES.find(qt => qt.id === question.type) || QUESTION_TYPES[2];
+  const style = { label: typeConfig.label, bg: typeConfig.bg, text: typeConfig.text };
+  const TypeIcon = typeConfig.icon;
 
   return (
     <div className="border border-gray-200 rounded-xl p-4 hover:border-gray-300 transition-colors group">
@@ -592,10 +663,11 @@ const QuestionCard = ({ question, index, theme, onEdit, onDelete }) => {
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <span className={`px-2 py-0.5 rounded text-xs font-medium ${style.bg} ${style.text}`}>
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${style.bg} ${style.text}`}>
+              <TypeIcon size={10} />
               {style.label}
             </span>
-            <span 
+            <span
               className="px-2 py-0.5 rounded text-xs font-medium"
               style={{ backgroundColor: theme.withAlpha(0.15), color: theme.color }}
             >
@@ -607,7 +679,7 @@ const QuestionCard = ({ question, index, theme, onEdit, onDelete }) => {
 
           {question.type === "multiple_choice" && question.options && (
             <div className="mt-2 ml-2 space-y-0.5">
-              {["A", "B", "C", "D"].map(letter => 
+              {["A", "B", "C", "D"].map(letter =>
                 question.options[letter] && (
                   <p key={letter} className="text-xs text-gray-600 flex items-center gap-1">
                     <span className="font-medium">{letter})</span> {question.options[letter]}
@@ -621,6 +693,20 @@ const QuestionCard = ({ question, index, theme, onEdit, onDelete }) => {
           {question.type === "true_false" && (
             <p className="text-xs text-gray-500 mt-1">
               Answer: <span className="font-medium text-green-600">{question.correctAnswer}</span>
+            </p>
+          )}
+
+          {question.type === "algorithm" && question.starterCode && (
+            <pre className="mt-2 text-xs text-gray-500 bg-slate-50 rounded-lg p-2 font-mono overflow-x-auto whitespace-pre-wrap border border-slate-200">
+              {question.starterCode.slice(0, 120)}{question.starterCode.length > 120 ? "…" : ""}
+            </pre>
+          )}
+
+          {(question.type === "flowchart" || question.type === "math_graph") && (
+            <p className="text-xs text-gray-400 mt-1 italic">
+              {question.type === "flowchart"
+                ? "PDF: blank area with flowchart symbol guide"
+                : "PDF: graph paper grid for working / diagrams"}
             </p>
           )}
         </div>
@@ -638,32 +724,266 @@ const QuestionCard = ({ question, index, theme, onEdit, onDelete }) => {
   );
 };
 
+// ─── Fill-in-blank parser ───────────────────────────────────────────────────
+// Teacher writes: "Water boils at [100] degrees." → student sees underscores
+
+const parseFillBlank = (text = '') => {
+  const blanks = [];
+  const studentText = text.replace(/\[([^\]]+)\]/g, (_, word) => {
+    blanks.push(word);
+    return '_'.repeat(Math.max(8, word.length + 4));
+  });
+  return { studentText, blanks };
+};
+
+// ─── Drawing Canvas ─────────────────────────────────────────────────────────
+
+const DRAW_TOOLS = [
+  { id: 'pen',     label: 'Pen',       icon: Pencil    },
+  { id: 'eraser',  label: 'Eraser',    icon: Eraser    },
+  { id: 'line',    label: 'Line',      icon: Minus     },
+  { id: 'arrow',   label: 'Arrow',     icon: ArrowRight },
+  { id: 'rect',    label: 'Rectangle', icon: Square    },
+  { id: 'oval',    label: 'Oval',      icon: Circle    },
+  { id: 'diamond', label: 'Diamond',   icon: Diamond   },
+  { id: 'text',    label: 'Text',      icon: Type      },
+];
+
+const CANVAS_W = 440;
+const CANVAS_H = 210;
+const GRID_PX  = 10;
+
+const _drawBg = (ctx, bg) => {
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  if (bg !== 'grid') return;
+  ctx.strokeStyle = '#c7dcf5'; ctx.lineWidth = 0.4;
+  for (let x = 0; x <= CANVAS_W; x += GRID_PX) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,CANVAS_H); ctx.stroke(); }
+  for (let y = 0; y <= CANVAS_H; y += GRID_PX) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(CANVAS_W,y); ctx.stroke(); }
+  ctx.strokeStyle = '#a8c8ed'; ctx.lineWidth = 0.7;
+  for (let x = 0; x <= CANVAS_W; x += GRID_PX*5) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,CANVAS_H); ctx.stroke(); }
+  for (let y = 0; y <= CANVAS_H; y += GRID_PX*5) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(CANVAS_W,y); ctx.stroke(); }
+};
+
+const _execShape = (ctx, tool, s, e, col, w) => {
+  ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const { x: sx, y: sy } = s; const { x: ex, y: ey } = e;
+  if (tool === 'line') {
+    ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(ex,ey); ctx.stroke();
+  } else if (tool === 'arrow') {
+    ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(ex,ey); ctx.stroke();
+    const a = Math.atan2(ey-sy, ex-sx), hl = Math.max(10, w*5);
+    ctx.beginPath();
+    ctx.moveTo(ex,ey); ctx.lineTo(ex - hl*Math.cos(a-0.5), ey - hl*Math.sin(a-0.5));
+    ctx.moveTo(ex,ey); ctx.lineTo(ex - hl*Math.cos(a+0.5), ey - hl*Math.sin(a+0.5));
+    ctx.stroke();
+  } else if (tool === 'rect') {
+    ctx.beginPath(); ctx.strokeRect(sx, sy, ex-sx, ey-sy);
+  } else if (tool === 'oval') {
+    ctx.beginPath();
+    ctx.ellipse((sx+ex)/2, (sy+ey)/2, Math.abs(ex-sx)/2, Math.abs(ey-sy)/2, 0, 0, 2*Math.PI);
+    ctx.stroke();
+  } else if (tool === 'diamond') {
+    const cx=(sx+ex)/2, cy=(sy+ey)/2;
+    ctx.beginPath(); ctx.moveTo(cx,sy); ctx.lineTo(ex,cy); ctx.lineTo(cx,ey); ctx.lineTo(sx,cy);
+    ctx.closePath(); ctx.stroke();
+  }
+};
+
+const DrawingCanvas = ({ background = 'plain', onChange, initialValue }) => {
+  const canvasRef    = useRef(null);
+  const isDownRef    = useRef(false);
+  const startRef     = useRef({ x: 0, y: 0 });
+  const savedRef     = useRef(null);
+  const toolRef      = useRef('pen');
+  const colorRef     = useRef('#1e293b');
+  const widthRef     = useRef(2);
+  const undoRef      = useRef([]);
+
+  const [activeTool, setActiveTool] = useState('pen');
+  const [color,      setColor]      = useState('#1e293b');
+  const [strokeW,    setStrokeW]    = useState(2);
+  const [canUndo,    setCanUndo]    = useState(false);
+
+  useEffect(() => { toolRef.current  = activeTool; }, [activeTool]);
+  useEffect(() => { colorRef.current = color;       }, [color]);
+  useEffect(() => { widthRef.current = strokeW;     }, [strokeW]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    _drawBg(ctx, background);
+    const snap = () => { undoRef.current = [canvas.toDataURL()]; setCanUndo(false); };
+    if (initialValue) {
+      const img = new Image();
+      img.onload = () => { ctx.drawImage(img, 0, 0, CANVAS_W, CANVAS_H); snap(); };
+      img.src = initialValue;
+    } else {
+      snap();
+    }
+  }, []); // eslint-disable-line
+
+  const pushAndEmit = (canvas) => {
+    undoRef.current = [...undoRef.current.slice(-14), canvas.toDataURL()];
+    setCanUndo(undoRef.current.length > 1);
+    onChange?.(canvas.toDataURL());
+  };
+
+  const getPos = (e) => {
+    const r = canvasRef.current.getBoundingClientRect();
+    const src = e.touches ? e.touches[0] : e;
+    return { x: (src.clientX - r.left) * (CANVAS_W / r.width), y: (src.clientY - r.top) * (CANVAS_H / r.height) };
+  };
+
+  const onDown = (e) => {
+    e.preventDefault();
+    const p = getPos(e);
+    isDownRef.current = true; startRef.current = p;
+    const canvas = canvasRef.current; const ctx = canvas.getContext('2d');
+    const tool = toolRef.current;
+    if (tool === 'text') {
+      const txt = window.prompt('Enter text:');
+      if (txt) { ctx.font = '13px Arial'; ctx.fillStyle = colorRef.current; ctx.fillText(txt, p.x, p.y); pushAndEmit(canvas); }
+      isDownRef.current = false; return;
+    }
+    if (tool === 'pen' || tool === 'eraser') { ctx.beginPath(); ctx.moveTo(p.x, p.y); }
+    else { savedRef.current = ctx.getImageData(0, 0, CANVAS_W, CANVAS_H); }
+  };
+
+  const onMove = (e) => {
+    if (!isDownRef.current) return;
+    e.preventDefault();
+    const p = getPos(e); const canvas = canvasRef.current; const ctx = canvas.getContext('2d');
+    const tool = toolRef.current; const col = colorRef.current; const w = widthRef.current;
+    if (tool === 'pen') {
+      ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.lineTo(p.x, p.y); ctx.stroke();
+    } else if (tool === 'eraser') {
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = w * 6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.lineTo(p.x, p.y); ctx.stroke();
+    } else if (savedRef.current) {
+      ctx.putImageData(savedRef.current, 0, 0);
+      _execShape(ctx, tool, startRef.current, p, col, w);
+    }
+  };
+
+  const onUp = (e) => {
+    if (!isDownRef.current) return;
+    const p = getPos(e); const canvas = canvasRef.current; const ctx = canvas.getContext('2d');
+    const tool = toolRef.current;
+    if (savedRef.current && tool !== 'pen' && tool !== 'eraser') {
+      ctx.putImageData(savedRef.current, 0, 0);
+      _execShape(ctx, tool, startRef.current, p, colorRef.current, widthRef.current);
+      savedRef.current = null;
+    }
+    pushAndEmit(canvas); isDownRef.current = false;
+  };
+
+  const undo = () => {
+    if (undoRef.current.length <= 1) return;
+    undoRef.current = undoRef.current.slice(0, -1);
+    setCanUndo(undoRef.current.length > 1);
+    const prev = undoRef.current[undoRef.current.length - 1];
+    const canvas = canvasRef.current; const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.onload = () => { ctx.clearRect(0, 0, CANVAS_W, CANVAS_H); ctx.drawImage(img, 0, 0); onChange?.(prev); };
+    img.src = prev;
+  };
+
+  const clearAll = () => {
+    const canvas = canvasRef.current; const ctx = canvas.getContext('2d');
+    _drawBg(ctx, background); pushAndEmit(canvas);
+  };
+
+  const cursor = activeTool === 'text' ? 'text' : activeTool === 'eraser' ? 'cell' : 'crosshair';
+
+  return (
+    <div className="space-y-2">
+      {/* Toolbar */}
+      <div className="flex items-center gap-1 flex-wrap p-1.5 bg-gray-50 rounded-xl border border-gray-200">
+        {DRAW_TOOLS.map(t => {
+          const Icon = t.icon;
+          return (
+            <button key={t.id} type="button" title={t.label} onClick={() => setActiveTool(t.id)}
+              className={`p-1.5 rounded-lg transition-colors ${activeTool === t.id ? 'bg-white shadow-sm text-blue-600 border border-blue-200' : 'text-gray-500 hover:bg-gray-100'}`}
+            >
+              <Icon size={14} />
+            </button>
+          );
+        })}
+        <div className="w-px h-5 bg-gray-200 mx-1" />
+        <input type="color" value={color} onChange={e => setColor(e.target.value)} title="Color"
+          className="w-7 h-7 cursor-pointer rounded-md border border-gray-200 p-0.5" />
+        <select value={strokeW} onChange={e => setStrokeW(Number(e.target.value))}
+          className="text-xs border border-gray-200 bg-white rounded-lg px-1.5 py-1">
+          <option value={1}>Thin</option>
+          <option value={2}>Normal</option>
+          <option value={4}>Thick</option>
+        </select>
+        <div className="flex-1" />
+        <button type="button" title="Undo" onClick={undo} disabled={!canUndo}
+          className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 disabled:opacity-30 transition-colors">
+          <RotateCcw size={14} />
+        </button>
+        <button type="button" title="Clear all" onClick={clearAll}
+          className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 transition-colors">
+          <Trash2 size={14} />
+        </button>
+      </div>
+      {/* Canvas */}
+      <canvas ref={canvasRef} width={CANVAS_W} height={CANVAS_H}
+        style={{ width: '100%', borderRadius: '10px', border: '1.5px solid #e2e8f0', cursor, display: 'block', touchAction: 'none' }}
+        onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
+        onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp}
+      />
+      <p className="text-xs text-gray-400 text-center">
+        Students see this drawing on the printed test and complete / fill it in by hand.
+      </p>
+    </div>
+  );
+};
+
 // ─── Question Modal ──────────────────────────────────────────────────────────
 
 const QuestionModal = ({ question, theme, onClose, onSave }) => {
-  const [type, setType] = useState(question?.type || "multiple_choice");
-  const [text, setText] = useState(question?.question || "");
-  const [options, setOptions] = useState(question?.options || { A: "", B: "", C: "", D: "" });
-  const [answer, setAnswer] = useState(question?.correctAnswer || "");
+  const [type, setType]           = useState(question?.type || "multiple_choice");
+  const [text, setText]           = useState(question?.question || "");
+  const [options, setOptions]     = useState(question?.options || { A: "", B: "", C: "", D: "" });
+  const [answer, setAnswer]       = useState(question?.correctAnswer || "");
+  const [starterCode, setStarterCode] = useState(question?.starterCode || "");
+  const [drawing, setDrawing]     = useState(question?.drawing || null);
+
+  const selectedType = QUESTION_TYPES.find(qt => qt.id === type);
 
   const handleSave = () => {
     if (!text.trim()) {
       toast.warning("Please enter a question");
       return;
     }
+    // For fill_blank: auto-extract answer from [brackets] if no manual answer
+    let effectiveAnswer = answer;
+    if (type === "fill_blank" && !answer.trim()) {
+      const { blanks } = parseFillBlank(text);
+      if (blanks.length > 0) effectiveAnswer = blanks.join(" / ");
+    }
     onSave({
       type,
       question: text,
       options: type === "multiple_choice" ? options : null,
-      correctAnswer: answer,
+      correctAnswer: effectiveAnswer,
+      ...(type === "algorithm" && starterCode.trim() ? { starterCode } : {}),
+      ...((type === "flowchart" || type === "math_graph") && drawing ? { drawing } : {}),
     });
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div 
-          className="px-6 py-4 flex items-center justify-between text-white"
+
+        {/* Header */}
+        <div
+          className="px-6 py-4 flex items-center justify-between text-white rounded-t-2xl"
           style={{ backgroundColor: theme.color }}
         >
           <h3 className="text-lg font-bold">{question ? "Edit Question" : "Add Question"}</h3>
@@ -672,24 +992,38 @@ const QuestionModal = ({ question, theme, onClose, onSave }) => {
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
-          {/* Type */}
+        <div className="p-6 space-y-5">
+
+          {/* Visual Type Selector */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-            <select
-              value={type}
-              onChange={e => setType(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none bg-white"
-            >
-              <option value="multiple_choice">Multiple Choice</option>
-              <option value="true_false">True/False</option>
-              <option value="short_answer">Short Answer</option>
-              <option value="essay">Essay</option>
-              <option value="fill_blank">Fill in the Blank</option>
-            </select>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Question Type</label>
+            <div className="grid grid-cols-4 gap-1.5">
+              {QUESTION_TYPES.map(qt => {
+                const Icon = qt.icon;
+                const isSelected = type === qt.id;
+                return (
+                  <button
+                    key={qt.id}
+                    type="button"
+                    onClick={() => setType(qt.id)}
+                    className={`flex flex-col items-center gap-1 p-2.5 rounded-xl border-2 transition-all text-center ${
+                      isSelected
+                        ? `${qt.bg} ${qt.border} ${qt.text}`
+                        : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100 hover:border-gray-300"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    <span className="text-xs font-semibold leading-tight">{qt.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {selectedType && (
+              <p className="text-xs text-gray-500 mt-2 ml-1">{selectedType.desc}</p>
+            )}
           </div>
 
-          {/* Question */}
+          {/* Question Text */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Question *</label>
             <textarea
@@ -698,17 +1032,20 @@ const QuestionModal = ({ question, theme, onClose, onSave }) => {
               rows={3}
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none resize-none"
               placeholder="Enter your question..."
+              autoFocus
             />
           </div>
 
           {/* Multiple Choice Options */}
           {type === "multiple_choice" && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Options</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Options <span className="text-gray-400 font-normal text-xs">(click ✓ to mark correct)</span>
+              </label>
               <div className="space-y-2">
                 {["A", "B", "C", "D"].map(letter => (
                   <div key={letter} className="flex items-center gap-2">
-                    <span className="font-medium text-gray-500 w-6 text-sm">{letter})</span>
+                    <span className="font-bold text-gray-400 w-6 text-sm text-center">{letter}</span>
                     <input
                       type="text"
                       value={options[letter]}
@@ -719,11 +1056,14 @@ const QuestionModal = ({ question, theme, onClose, onSave }) => {
                     <button
                       type="button"
                       onClick={() => setAnswer(letter)}
-                      className={`p-2 rounded-lg transition-colors ${
-                        answer === letter ? "bg-green-100 text-green-600" : "hover:bg-gray-100 text-gray-400"
+                      title="Mark as correct"
+                      className={`p-2 rounded-lg transition-all border ${
+                        answer === letter
+                          ? "bg-green-100 text-green-600 border-green-300"
+                          : "text-gray-300 border-gray-200 hover:text-gray-400 hover:bg-gray-50"
                       }`}
                     >
-                      <Check size={16} />
+                      <Check size={15} />
                     </button>
                   </div>
                 ))}
@@ -731,21 +1071,29 @@ const QuestionModal = ({ question, theme, onClose, onSave }) => {
             </div>
           )}
 
-          {/* True/False */}
+          {/* True / False */}
           {type === "true_false" && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Correct Answer</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Correct Answer</label>
               <div className="flex gap-3">
                 {["True", "False"].map(val => (
-                  <label key={val} className="flex items-center gap-2 cursor-pointer">
+                  <label
+                    key={val}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all ${
+                      answer === val
+                        ? "bg-green-50 border-green-400 text-green-700 font-semibold"
+                        : "bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300"
+                    }`}
+                  >
                     <input
                       type="radio"
                       name="tf"
                       value={val}
                       checked={answer === val}
                       onChange={e => setAnswer(e.target.value)}
-                      style={{ accentColor: theme.color }}
+                      className="sr-only"
                     />
+                    {answer === val && <Check size={14} className="text-green-600" />}
                     <span className="text-sm">{val}</span>
                   </label>
                 ))}
@@ -753,31 +1101,172 @@ const QuestionModal = ({ question, theme, onClose, onSave }) => {
             </div>
           )}
 
+          {/* Fill in Blank – smart bracket syntax */}
+          {type === "fill_blank" && (
+            <>
+              <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5">
+                <Type size={14} className="text-blue-500 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-blue-700">
+                  Wrap each missing word in <strong>[square brackets]</strong>. The PDF replaces them with blank lines automatically.{" "}
+                  Example: <code className="bg-blue-100 px-1 rounded">Water boils at [100] degrees.</code>
+                </p>
+              </div>
+
+              {parseFillBlank(text).blanks.length > 0 && (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-1.5 text-xs">
+                  <p className="font-semibold text-gray-600">Live preview</p>
+                  <p>
+                    <span className="text-gray-400">Student sees: </span>
+                    <span className="text-gray-800">{parseFillBlank(text).studentText}</span>
+                  </p>
+                  <p>
+                    <span className="text-gray-400">Answer key: </span>
+                    <span className="font-medium text-green-700">{parseFillBlank(text).blanks.join(" / ")}</span>
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Answer Override{" "}
+                  <span className="text-gray-400 font-normal text-xs">(optional — overrides auto-extracted answers)</span>
+                </label>
+                <input
+                  type="text"
+                  value={answer}
+                  onChange={e => setAnswer(e.target.value)}
+                  placeholder="Leave blank to auto-extract from [brackets]"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none"
+                />
+              </div>
+            </>
+          )}
+
           {/* Short Answer / Essay */}
-          {(type === "short_answer" || type === "essay" || type === "fill_blank") && (
+          {(type === "short_answer" || type === "essay") && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Sample Answer</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Sample Answer <span className="text-gray-400 font-normal text-xs">(for answer key)</span>
+              </label>
               <textarea
                 value={answer}
                 onChange={e => setAnswer(e.target.value)}
-                rows={3}
+                rows={type === "essay" ? 4 : 2}
                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none resize-none"
                 placeholder="Expected answer..."
               />
             </div>
           )}
+
+          {/* Algorithm – Starter Code + Model Solution */}
+          {type === "algorithm" && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Starter Code / Template{" "}
+                  <span className="text-gray-400 font-normal text-xs">(optional — shown to students)</span>
+                </label>
+                <textarea
+                  value={starterCode}
+                  onChange={e => setStarterCode(e.target.value)}
+                  rows={4}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none resize-none font-mono bg-slate-50 text-slate-800"
+                  placeholder={"BEGIN\n  INPUT x\n  // students continue here\nEND"}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Pre-filled in the student test. Leave blank for an empty code box.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Model Solution{" "}
+                  <span className="text-gray-400 font-normal text-xs">(for answer key only — students never see this)</span>
+                </label>
+                <textarea
+                  value={answer}
+                  onChange={e => setAnswer(e.target.value)}
+                  rows={5}
+                  className="w-full px-3 py-2 text-sm border border-green-100 rounded-xl focus:outline-none resize-none font-mono bg-green-50 text-green-900"
+                  placeholder={"BEGIN\n  total = 0\n  FOR i FROM 1 TO 5\n    INPUT num\n    total = total + num\n  END FOR\n  OUTPUT total / 5\nEND"}
+                />
+              </div>
+            </>
+          )}
+
+          {/* Flowchart – Drawing Canvas + Model Answer */}
+          {type === "flowchart" && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Teacher Drawing{" "}
+                  <span className="text-gray-400 font-normal text-xs">
+                    (draw a partial flowchart — students complete it on the printout)
+                  </span>
+                </label>
+                <DrawingCanvas background="plain" onChange={setDrawing} initialValue={drawing} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Model Answer / Notes{" "}
+                  <span className="text-gray-400 font-normal text-xs">(for answer key only — describe the expected flowchart)</span>
+                </label>
+                <textarea
+                  value={answer}
+                  onChange={e => setAnswer(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm border border-green-100 rounded-xl focus:outline-none resize-none bg-green-50 text-green-900"
+                  placeholder="e.g. Start → Input number → Is number > 0? → Yes: Output 'Positive' → End. No: Output 'Negative' → End."
+                />
+              </div>
+            </>
+          )}
+
+          {/* Math Grid – Drawing Canvas + Model Answer */}
+          {type === "math_graph" && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Teacher Drawing{" "}
+                  <span className="text-gray-400 font-normal text-xs">
+                    (draw axes, partial graph, etc. — students complete on the graph paper printout)
+                  </span>
+                </label>
+                <DrawingCanvas background="grid" onChange={setDrawing} initialValue={drawing} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Model Answer / Notes{" "}
+                  <span className="text-gray-400 font-normal text-xs">(for answer key only)</span>
+                </label>
+                <textarea
+                  value={answer}
+                  onChange={e => setAnswer(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm border border-green-100 rounded-xl focus:outline-none resize-none bg-green-50 text-green-900"
+                  placeholder="e.g. Points: (0,3), (1,5), (2,7), (-1,1), (-2,-1). Straight line, gradient = 2, y-intercept = 3."
+                />
+              </div>
+            </>
+          )}
         </div>
 
-        <div className="px-6 py-4 border-t bg-gray-50 flex gap-3">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl">
+        {/* Footer */}
+        <div className="px-6 py-4 border-t bg-gray-50 flex gap-3 rounded-b-2xl">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
+          >
             Cancel
           </button>
-          <button 
-            onClick={handleSave} 
-            className="flex-1 px-4 py-2.5 text-sm font-medium text-white rounded-xl"
+          <button
+            onClick={handleSave}
+            className="flex-1 px-4 py-2.5 text-sm font-medium text-white rounded-xl transition-colors"
             style={{ backgroundColor: theme.color }}
           >
-            {question ? "Update" : "Add"}
+            {question ? "Update Question" : "Add Question"}
           </button>
         </div>
       </div>
@@ -787,27 +1276,96 @@ const QuestionModal = ({ question, theme, onClose, onSave }) => {
 
 // ─── AI Guide Modal ──────────────────────────────────────────────────────────
 
+const TYPE_REFERENCE = [
+  {
+    id: "multiple_choice", label: "Multiple Choice",
+    bg: "bg-blue-50", text: "text-blue-700",
+    fields: `"options": { "A": "...", "B": "...", "C": "...", "D": "..." },\n"correctAnswer": "B"`,
+    note: "correctAnswer must be a single letter: A, B, C or D",
+  },
+  {
+    id: "true_false", label: "True / False",
+    bg: "bg-green-50", text: "text-green-700",
+    fields: `"correctAnswer": "True"`,
+    note: 'Must be exactly "True" or "False"',
+  },
+  {
+    id: "fill_blank", label: "Fill in Blank",
+    bg: "bg-pink-50", text: "text-pink-700",
+    fields: `"question": "Plants use [sunlight] and [water] to grow."`,
+    note: "Wrap each blank in [brackets] — answers are extracted automatically, no correctAnswer needed",
+  },
+  {
+    id: "short_answer", label: "Short Answer",
+    bg: "bg-amber-50", text: "text-amber-700",
+    fields: `"correctAnswer": "Expected short response"`,
+    note: "Renders as blank writing lines in the student PDF",
+  },
+  {
+    id: "essay", label: "Essay",
+    bg: "bg-purple-50", text: "text-purple-700",
+    fields: `"correctAnswer": "Sample model answer..."`,
+    note: "Larger writing space in PDF",
+  },
+  {
+    id: "algorithm", label: "Algorithm",
+    bg: "bg-slate-50", text: "text-slate-700",
+    fields: `"starterCode": "BEGIN\\n  INPUT x\\n  // complete\\nEND",\n"correctAnswer": "BEGIN\\n  INPUT x\\n  x = x * 2\\n  OUTPUT x\\nEND"`,
+    note: "starterCode is shown to students; correctAnswer is the model solution (answer key only). Both use \\n for newlines in JSON.",
+  },
+  {
+    id: "flowchart", label: "Flowchart",
+    bg: "bg-cyan-50", text: "text-cyan-700",
+    fields: `"correctAnswer": "Start → Input number → Is number > 0? → Yes: Output 'Positive' → End"`,
+    note: "correctAnswer is answer-key notes describing the expected flowchart. The teacher draws the partial diagram inside the app.",
+  },
+  {
+    id: "math_graph", label: "Math / Grid",
+    bg: "bg-orange-50", text: "text-orange-700",
+    fields: `"correctAnswer": "y = 2x + 1, passes through (0,1) and (2,5)"`,
+    note: "correctAnswer is the expected answer/description for the answer key. The teacher draws axes/partial graphs inside the app.",
+  },
+];
+
 const AIGuideModal = ({ theme, onClose }) => {
   const [copied, setCopied] = useState(false);
+  const [tab, setTab]       = useState("prompt");
 
-  const prompt = `Create a 10-question test for [SUBJECT] for [CLASS] students about [TOPIC].
+  const prompt = `You are generating a school test in JSON format.
 
-Include: 5 multiple choice, 2 true/false, 2 short answer, 1 essay.
+Create a [N]-question test for [SUBJECT], Class [CLASS], about [TOPIC].
 
-Return ONLY valid JSON:
-{
-  "title": "Test Title",
-  "subject": "Subject",
-  "className": "Y5",
-  "duration": 45,
-  "totalPoints": 100,
-  "instructions": "Read carefully.",
-  "questions": [
-    {"type": "multiple_choice", "question": "What is 2+2?", "options": {"A": "3", "B": "4", "C": "5", "D": "6"}, "correctAnswer": "B"},
-    {"type": "true_false", "question": "The sun is a star.", "correctAnswer": "True"},
-    {"type": "short_answer", "question": "Define photosynthesis.", "correctAnswer": "Plants convert sunlight to energy."}
-  ]
-}`;
+Return ONLY a valid JSON object — no markdown, no code fences, no explanation.
+
+PLACEHOLDER_JSON
+
+STRICT RULES — follow exactly:
+• multiple_choice → correctAnswer is a single letter only: "A", "B", "C" or "D"
+• true_false      → correctAnswer is exactly "True" or "False"
+• fill_blank      → wrap every missing word/phrase in [square brackets] inside the question. Do NOT use underscores. No correctAnswer field.
+• short_answer / essay → correctAnswer is the model answer text
+• algorithm       → starterCode (optional) is the template shown to students; correctAnswer is the full model solution for the answer key. Both use \\n for line breaks in JSON.
+• flowchart       → correctAnswer is a text description of the expected flowchart for the answer key. The teacher draws the partial diagram inside the app — not via JSON.
+• math_graph      → correctAnswer describes the expected graph/values for the answer key. The teacher draws axes/partial graphs inside the app — not via JSON.
+• Do NOT include any field not shown in the example below.`
+    .replace("PLACEHOLDER_JSON", JSON.stringify({
+      title: "Unit 4 Test – Photosynthesis",
+      subject: "Biology",
+      className: "Y8A",
+      duration: 45,
+      totalPoints: 100,
+      instructions: "Read all questions carefully. Show your working where required.",
+      questions: [
+        { type: "multiple_choice", question: "Which gas do plants absorb during photosynthesis?", options: { A: "Oxygen", B: "Carbon dioxide", C: "Nitrogen", D: "Hydrogen" }, correctAnswer: "B" },
+        { type: "true_false", question: "Photosynthesis only occurs during the day.", correctAnswer: "True" },
+        { type: "fill_blank", question: "Plants use [sunlight], [water] and [carbon dioxide] to produce glucose and oxygen." },
+        { type: "short_answer", question: "Name the two products of photosynthesis.", correctAnswer: "Glucose and oxygen" },
+        { type: "essay", question: "Explain the process of photosynthesis and why it is important for life on Earth.", correctAnswer: "Photosynthesis is the process by which green plants convert sunlight into chemical energy stored as glucose. It is essential for life because it produces oxygen and forms the base of most food chains." },
+        { type: "algorithm", question: "Write pseudocode to calculate the average of five numbers.", starterCode: "BEGIN\n  total = 0\n  count = 5\n  // Add your code here\nEND", correctAnswer: "BEGIN\n  total = 0\n  FOR i FROM 1 TO 5\n    INPUT num\n    total = total + num\n  END FOR\n  OUTPUT total / 5\nEND" },
+        { type: "flowchart", question: "Draw a flowchart showing how a plant cell carries out photosynthesis step by step.", correctAnswer: "Start → Absorb sunlight (chlorophyll) → Take in CO2 (stomata) → Take in H2O (roots) → Produce glucose + O2 → End" },
+        { type: "math_graph", question: "Plot the rate of photosynthesis (y-axis) against light intensity (x-axis) using the data in the table.", correctAnswer: "Curve rises steeply at low light, then levels off (plateau) at high light intensity due to limiting factors. Points: (0,0), (10,10), (20,18), (30,22), (40,23)" },
+      ],
+    }, null, 2));
 
   const handleCopy = () => {
     navigator.clipboard.writeText(prompt);
@@ -817,65 +1375,104 @@ Return ONLY valid JSON:
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div 
-          className="px-6 py-4 flex items-center justify-between text-white"
-          style={{ backgroundColor: theme.color }}
-        >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="px-6 py-4 flex items-center justify-between text-white rounded-t-2xl" style={{ backgroundColor: theme.color }}>
           <div className="flex items-center gap-2">
             <Sparkles size={20} />
             <h3 className="text-lg font-bold">AI Test Generator</h3>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-lg">
-            <X size={18} />
-          </button>
+          <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-lg"><X size={18} /></button>
         </div>
 
-        <div className="p-6 space-y-4">
-          <div className="grid grid-cols-3 gap-2 text-center">
-            {["1. Copy prompt", "2. Paste in ChatGPT", "3. Upload JSON"].map((step, i) => (
-              <div key={i} className="p-3 bg-gray-50 rounded-xl">
-                <div 
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold mx-auto mb-1"
-                  style={{ backgroundColor: theme.color }}
-                >
-                  {i + 1}
-                </div>
-                <p className="text-xs text-gray-600">{step.split(". ")[1]}</p>
+        {/* Steps */}
+        <div className="px-6 pt-5 grid grid-cols-3 gap-3">
+          {[
+            { n: 1, label: "Copy prompt below" },
+            { n: 2, label: "Paste into ChatGPT or any AI" },
+            { n: 3, label: 'Save as .json & Upload' },
+          ].map(s => (
+            <div key={s.n} className="p-3 bg-gray-50 rounded-xl border border-gray-100 text-center">
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold mx-auto mb-1.5" style={{ backgroundColor: theme.color }}>
+                {s.n}
               </div>
+              <p className="text-xs text-gray-600 font-medium">{s.label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Tabs */}
+        <div className="px-6 pt-4">
+          <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
+            {[{ id: "prompt", label: "Prompt Template" }, { id: "types", label: "Type Reference" }].map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-all ${tab === t.id ? "bg-white shadow-sm text-gray-800" : "text-gray-500 hover:text-gray-700"}`}>
+                {t.label}
+              </button>
             ))}
           </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium text-gray-700">Prompt Template</label>
-              <button
-                onClick={handleCopy}
-                className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
-                  copied ? "bg-green-100 text-green-700" : "text-gray-600 hover:bg-gray-100"
-                }`}
-              >
-                {copied ? <Check size={12} /> : <Copy size={12} />}
-                {copied ? "Copied!" : "Copy"}
-              </button>
-            </div>
-            <pre className="bg-gray-900 rounded-xl p-4 text-xs text-gray-300 whitespace-pre-wrap font-mono overflow-x-auto">
-              {prompt}
-            </pre>
-          </div>
-
-          <div className="bg-amber-50 rounded-xl p-3 border border-amber-200">
-            <div className="flex gap-2">
-              <HelpCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-amber-800">
-                <strong>Tip:</strong> Replace [SUBJECT], [CLASS], [TOPIC] with your values. Remove any markdown from ChatGPT's response before saving as .json
-              </p>
-            </div>
-          </div>
         </div>
 
-        <div className="px-6 py-4 border-t bg-gray-50">
-          <button onClick={onClose} className="w-full px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl">
+        <div className="px-6 pb-6 pt-3 space-y-3">
+
+          {/* ── Prompt tab ── */}
+          {tab === "prompt" && (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs text-gray-500">
+                  Replace <code className="bg-gray-100 px-1 rounded">[N]</code>{" "}
+                  <code className="bg-gray-100 px-1 rounded">[SUBJECT]</code>{" "}
+                  <code className="bg-gray-100 px-1 rounded">[CLASS]</code>{" "}
+                  <code className="bg-gray-100 px-1 rounded">[TOPIC]</code> with your values.
+                </p>
+                <button onClick={handleCopy}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex-shrink-0 ${copied ? "bg-green-100 text-green-700" : "bg-gray-100 hover:bg-gray-200 text-gray-700"}`}>
+                  {copied ? <Check size={12} /> : <Copy size={12} />}
+                  {copied ? "Copied!" : "Copy prompt"}
+                </button>
+              </div>
+
+              <pre className="bg-gray-950 rounded-xl p-4 text-xs text-gray-300 whitespace-pre-wrap font-mono overflow-x-auto leading-relaxed max-h-96 overflow-y-auto">
+                {prompt}
+              </pre>
+
+              <div className="bg-amber-50 rounded-xl p-3 border border-amber-200 flex gap-2">
+                <HelpCircle size={15} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800">
+                  <strong>After the AI responds:</strong> the reply should start with <code className="bg-amber-100 px-1 rounded">{`{`}</code> and end with <code className="bg-amber-100 px-1 rounded">{`}`}</code> — no extra text. Save it as <code className="bg-amber-100 px-1 rounded">.json</code> and upload using the button in the page header.
+                </p>
+              </div>
+            </>
+          )}
+
+          {/* ── Type Reference tab ── */}
+          {tab === "types" && (
+            <div className="space-y-2">
+              <p className="text-xs text-gray-500 mb-3">All 8 question types — required JSON fields and notes for each.</p>
+              {TYPE_REFERENCE.map(tr => (
+                <div key={tr.id} className={`rounded-xl border p-3 ${tr.bg}`}>
+                  <div className="flex items-start gap-3">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-lg bg-white/60 ${tr.text} flex-shrink-0 mt-0.5 whitespace-nowrap`}>
+                      {tr.label}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <code className="text-xs text-gray-700 font-mono block whitespace-pre-wrap break-words leading-relaxed">
+                        {tr.fields}
+                      </code>
+                      {tr.note && (
+                        <p className={`text-xs mt-1.5 ${tr.text} opacity-80`}>{tr.note}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t bg-gray-50 rounded-b-2xl">
+          <button onClick={onClose} className="w-full px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors">
             Close
           </button>
         </div>
