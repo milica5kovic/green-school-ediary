@@ -1,8 +1,7 @@
 #  SchoolHub — School Management System for Cambridge Curriculum Schools
 
-<p align="center">
-  <img src="public/Logo.png" alt="SchoolHub Logo" width="120" />
-</p>
+**Live Demo:** [ediary-prototype.id](https://ediary-prototype.id)
+
 
 <p align="center">
   <strong>A modern, multi-tenant SaaS platform for managing academics, attendance, and parent communication in Cambridge Primary & IGCSE schools.</strong>
