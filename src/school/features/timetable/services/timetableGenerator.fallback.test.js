@@ -91,6 +91,38 @@ describe('Part-time teacher priority', () => {
   });
 });
 
+describe('Phase 5 — repair by displacing a blocking lesson', () => {
+  test('moves another class out of the way instead of leaving the task unplaced', () => {
+    // tx is available ONLY Monday slots 1+2. ty is available ONLY Monday
+    // slot 2 and teaches Y1 — so Y1 is occupied at (0,2) first.
+    // tx's History(Y2) then grabs (0,1); tx's Music(Y1) has nowhere left:
+    // (0,1) tx busy, (0,2) Y1 busy. Repair must move History(Y2) to (0,2)
+    // (Y2 is free there) and place Music(Y1) at (0,1).
+    const assignments = [
+      { id: 'ay', teacher_id: 'ty', subject: 'Library', class_name: 'Y1', periods_per_week: 1, parallel_group: null },
+      { id: 'a1', teacher_id: 'tx', subject: 'History', class_name: 'Y2', periods_per_week: 1, parallel_group: null },
+      { id: 'a2', teacher_id: 'tx', subject: 'Music', class_name: 'Y1', periods_per_week: 1, parallel_group: null },
+    ];
+    const availability = [
+      ...availableOnly('tx', [[0, 1], [0, 2]]),
+      ...availableOnly('ty', [[0, 2]]),
+    ];
+    const { placed, unplaced } = generateTimetable(assignments, SLOTS_6, availability);
+    expect(unplaced).toHaveLength(0);
+    expect(placed).toHaveLength(3);
+
+    const music = placed.find(p => p.subject === 'Music');
+    const history = placed.find(p => p.subject === 'History');
+    expect(music.day_of_week).toBe(0);
+    expect(history.day_of_week).toBe(0);
+    // Both tx lessons in tx's two available slots, no overlap
+    expect(new Set([music.slot_number, history.slot_number])).toEqual(new Set([1, 2]));
+    // No teacher double-booking anywhere
+    const byTeacherSlot = placed.map(p => `${p.teacher_id}|${p.day_of_week}|${p.slot_number}`);
+    expect(new Set(byTeacherSlot).size).toBe(byTeacherSlot.length);
+  });
+});
+
 describe('Unplaced diagnostics', () => {
   test('genuinely impossible task reports a reason', () => {
     // Teacher blocked everywhere → cannot be placed at all.

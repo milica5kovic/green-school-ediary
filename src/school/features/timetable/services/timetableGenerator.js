@@ -794,6 +794,77 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     return 'teacher already teaching another class in every free slot of this class';
   };
 
+  // ---- Move an already-placed entry to a new day/slot (full bookkeeping) ----
+  const moveEntry = (entry, newDay, newSlot) => {
+    const oldDay = entry.day_of_week, oldSlot = entry.slot_number;
+    delete grid[oldDay][oldSlot][entry.class_name];
+    teacherBusy[oldDay][oldSlot].delete(entry.teacher_id);
+    const oldSdk = subjectDayKey(entry.class_name, oldDay, entry.subject);
+    classSubjectDay[oldSdk] = Math.max(0, (classSubjectDay[oldSdk] || 0) - 1);
+    classDayLoad[entry.class_name][oldDay] = Math.max(0, (classDayLoad[entry.class_name]?.[oldDay] || 0) - 1);
+    teacherDayLoad[entry.teacher_id][oldDay] = Math.max(0, (teacherDayLoad[entry.teacher_id]?.[oldDay] || 0) - 1);
+
+    grid[newDay][newSlot][entry.class_name] = entry;
+    teacherBusy[newDay][newSlot].add(entry.teacher_id);
+    const newSdk = subjectDayKey(entry.class_name, newDay, entry.subject);
+    classSubjectDay[newSdk] = (classSubjectDay[newSdk] || 0) + 1;
+    if (!classDayLoad[entry.class_name]) classDayLoad[entry.class_name] = {};
+    classDayLoad[entry.class_name][newDay] = (classDayLoad[entry.class_name][newDay] || 0) + 1;
+    if (!teacherDayLoad[entry.teacher_id]) teacherDayLoad[entry.teacher_id] = {};
+    teacherDayLoad[entry.teacher_id][newDay] = (teacherDayLoad[entry.teacher_id][newDay] || 0) + 1;
+    entry.day_of_week = newDay;
+    entry.slot_number = newSlot;
+  };
+
+  // ---- PHASE 5 repair: displace a blocking lesson ----
+  // The class has a free slot where the teacher is available but busy
+  // with ANOTHER class. If that other lesson (simple single, no group,
+  // no double) can move somewhere else, move it and place our task in
+  // the freed slot. This is exactly what a human does by hand.
+  const tryRepair = (task) => {
+    for (const day of DAYS) {
+      for (const slot of slotNumbers) {
+        if (!classAllowedInSlot(task.class_name, slot)) continue;
+        if (grid[day][slot][task.class_name]) continue;           // class busy here
+        if (!isAvailable(task.teacher_id, day, slot)) continue;   // teacher blocked here
+        const cap = maxPerDay(task.subject) + 1;                  // relaxed cap (last resort)
+        if ((classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0) >= cap) continue;
+
+        if (!teacherBusy[day][slot].has(task.teacher_id)) {
+          commitTask({ ...task, _isDouble: false }, day, slot);
+          return true;
+        }
+
+        // Teacher is busy — who blocks this slot?
+        const blockers = placed.filter(p =>
+          p.teacher_id === task.teacher_id &&
+          p.day_of_week === day &&
+          (p.slot_number === slot || (p.is_double && p.slot_number + 1 === slot))
+        );
+        if (blockers.length !== 1) continue;
+        const b = blockers[0];
+        if (b.is_double || b.parallel_group) continue; // don't break pairs/groups
+
+        // Find a new home for the blocking lesson
+        for (const d2 of DAYS) {
+          for (const s2 of slotNumbers) {
+            if (d2 === day && s2 === slot) continue;
+            if (!classAllowedInSlot(b.class_name, s2)) continue;
+            if (grid[d2][s2][b.class_name]) continue;
+            if (!isAvailable(b.teacher_id, d2, s2)) continue;
+            if (teacherBusy[d2][s2].has(b.teacher_id)) continue;
+            if ((classSubjectDay[subjectDayKey(b.class_name, d2, b.subject)] || 0) >= maxPerDay(b.subject)) continue;
+
+            moveEntry(b, d2, s2);
+            commitTask({ ...task, _isDouble: false }, day, slot);
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  };
+
   const stillUnplaced = [];
   for (const task of unplacedTaskRefs) {
     // A task queued in round 1 may have been placed in round 2 (or as a
@@ -821,6 +892,8 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
   // ============================================================
   // PHASE 4: last resort — allow one extra period of the same
   // subject per day (cap+1) before giving up.
+  // PHASE 5: repair — displace a movable blocking lesson to free
+  // a slot for the task (see tryRepair above).
   // ============================================================
   for (const item of stillUnplaced) {
     let left = item.remaining;
@@ -831,6 +904,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
       left--;
     }
     for (let i = 0; i < left; i++) {
+      if (tryRepair(item.task)) continue;
       unplaced.push({
         teacher_id: item.task.teacher_id,
         subject: item.task.subject,
