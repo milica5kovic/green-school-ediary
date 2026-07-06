@@ -325,6 +325,11 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
   const unplaced = [];
   // Full task objects that failed Phase 2 — retried in Phase 3 without sibling-sync
   const unplacedTaskRefs = [];
+  // A task may fail in the priority round and again in the normal round —
+  // queue it only once so Phase 3 doesn't process (and place) it twice.
+  const queueUnplaced = (task) => {
+    if (!task._queued) { task._queued = true; unplacedTaskRefs.push(task); }
+  };
 
   // ---- Sort helper ----
   const teacherFreeSlots = {};
@@ -446,11 +451,11 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
   makeJitteredSort(doubleTasks);
   makeJitteredSort(singleTasks);
 
-  // ---- Process C&G tasks FIRST (most slot-restricted: P1 or P6 only) ----
-  // Must run before doubles so English/ESL doubles don't claim P1+P2 or P5+P6
+  // ---- C&G task placement (most slot-restricted: P1 or P6 only) ----
+  // Runs before doubles so English/ESL doubles don't claim P1+P2 or P5+P6
   // and leave no legal C&G slot for that class.
-  for (const task of cgTasks) {
-    if (task._placed) continue;
+  const processCGTask = (task) => {
+    if (task._placed) return;
 
     if (task.parallel_group) {
       // Parallel C&G (Y12-CG, Y34-CG, Y789-CG) — same logic as parallel singles
@@ -461,9 +466,9 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
         if (canPlace(task, committed.day, committed.slot)) {
           commitTask(task, committed.day, committed.slot);
         } else {
-          unplacedTaskRefs.push(task);
+          queueUnplaced(task);
         }
-        continue;
+        return;
       }
       const siblings = cgTasks.filter(
         t => t !== task && t.parallel_group === group && t._parallelIndex === occurrence && !t._placed
@@ -483,12 +488,12 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
         commitTask(task, bestDay, bestSlot);
         siblings.forEach(s => { if (!s._placed) commitTask(s, bestDay, bestSlot); });
       } else {
-        unplacedTaskRefs.push(task);
+        queueUnplaced(task);
       }
-      continue;
+      return;
     }
 
-    // Non-parallel C&G (Y5a, Y5b, Y6 go alone)
+    // Non-parallel C&G (goes alone)
     let bestDay = null, bestSlot = null, bestScore = Infinity;
     for (const day of DAYS) {
       for (const slot of cgAllowedSlots) {
@@ -500,18 +505,17 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     if (bestDay !== null) {
       commitTask(task, bestDay, bestSlot);
     } else {
-      unplacedTaskRefs.push(task);
+      queueUnplaced(task);
     }
-  }
+  };
 
-  // ---- Process double tasks NEXT ----
-  for (const task of doubleTasks) {
-    if (task._placed) continue;
+  // ---- Double task placement ----
+  const processDoubleTask = (task) => {
+    if (task._placed) return;
 
     if (task.parallel_group) {
       const group = task.parallel_group;
       const occurrence = task._parallelIndex;
-      if (task._placed) continue;
       const committed = parallelGroupSlots[group]?.[occurrence];
       if (committed) {
         // committed stores {day, slotA, slotB} for doubles
@@ -519,17 +523,17 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
           if (canPlaceDouble(task, committed.day, committed.slotA, committed.slotB)) {
             commitDouble(task, committed.day, committed.slotA, committed.slotB);
           } else {
-            unplacedTaskRefs.push(task);
+            queueUnplaced(task);
           }
         } else {
           // committed as single - place as single
           if (canPlace(task, committed.day, committed.slot)) {
             commitTask(task, committed.day, committed.slot);
           } else {
-            unplacedTaskRefs.push(task);
+            queueUnplaced(task);
           }
         }
-        continue;
+        return;
       }
 
       const siblings = doubleTasks.filter(
@@ -551,9 +555,9 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
         commitDouble(task, bestDay, bestSlotA, bestSlotB);
         siblings.forEach(s => { if (!s._placed) commitDouble(s, bestDay, bestSlotA, bestSlotB); });
       } else {
-        unplacedTaskRefs.push(task);
+        queueUnplaced(task);
       }
-      continue;
+      return;
     }
 
     // Non-parallel double task
@@ -568,18 +572,18 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     if (bestDay !== null) {
       commitDouble(task, bestDay, bestSlotA, bestSlotB);
     } else {
-      unplacedTaskRefs.push(task);
+      queueUnplaced(task);
     }
-  }
+  };
 
-  // ---- Process single tasks ----
-  for (const task of singleTasks) {
+  // ---- Single task placement ----
+  const processSingleTask = (task) => {
+    if (task._placed) return;
+
     // ── PARALLEL GROUP LOGIC ─────────────────────────────────
     if (task.parallel_group) {
       const group = task.parallel_group;
       const occurrence = task._parallelIndex;
-
-      if (task._placed) continue;
 
       const committed = parallelGroupSlots[group]?.[occurrence];
       if (committed) {
@@ -589,16 +593,16 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
           if (canPlaceDouble(task, committed.day, committed.slotA, committed.slotB)) {
             commitDouble(task, committed.day, committed.slotA, committed.slotB);
           } else {
-            unplacedTaskRefs.push(task);
+            queueUnplaced(task);
           }
         } else {
           if (canPlace(task, committed.day, committed.slot)) {
             commitTask(task, committed.day, committed.slot);
           } else {
-            unplacedTaskRefs.push(task);
+            queueUnplaced(task);
           }
         }
-        continue;
+        return;
       }
 
       // No slot committed yet for this occurrence.
@@ -647,13 +651,13 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
         commitTask(task, bestDay, bestSlot);
         siblings.forEach(s => { if (!s._placed) commitTask(s, bestDay, bestSlot); });
       } else {
-        unplacedTaskRefs.push(task);
+        queueUnplaced(task);
       }
-      continue;
+      return;
     }
 
     // ── NORMAL (non-parallel) PLACEMENT ─────────────────────
-    // (C&G tasks are pre-processed in the cgTasks loop above — not present here)
+    // (C&G tasks are pre-processed via processCGTask — not present here)
     const slotsToTry = slotNumbers;
 
     let bestDay = null;
@@ -697,9 +701,33 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     if (bestDay !== null) {
       commitTask(task, bestDay, bestSlot);
     } else {
-      unplacedTaskRefs.push(task);
+      queueUnplaced(task);
     }
-  }
+  };
+
+  // ============================================================
+  // TWO SCHEDULING ROUNDS — constrained (part-time) teachers first.
+  //
+  // A part-timer's few available slots are precious: if full-time
+  // teachers' lessons are placed first, they occupy the class's grid
+  // exactly where the part-timer could have taught. So every task of
+  // a teacher whose availability is limited (≤ 60% of the week free)
+  // is scheduled BEFORE the rest, in the same CG → doubles → singles
+  // order. Group siblings placed along the way keep their sync.
+  // ============================================================
+  const totalWeeklySlots = DAYS.length * slotNumbers.length;
+  const isConstrainedTeacherTask = (task) =>
+    (teacherFreeSlots[task.teacher_id] ?? totalWeeklySlots) <= totalWeeklySlots * 0.6;
+
+  // Round 1: part-time / heavily blocked teachers
+  cgTasks.filter(isConstrainedTeacherTask).forEach(processCGTask);
+  doubleTasks.filter(isConstrainedTeacherTask).forEach(processDoubleTask);
+  singleTasks.filter(isConstrainedTeacherTask).forEach(processSingleTask);
+
+  // Round 2: everyone else (tasks already placed are skipped)
+  cgTasks.forEach(processCGTask);
+  doubleTasks.forEach(processDoubleTask);
+  singleTasks.forEach(processSingleTask);
 
   // ============================================================
   // PHASE 3: Relaxed fallback — retry EVERY unplaced task.
@@ -768,6 +796,9 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
 
   const stillUnplaced = [];
   for (const task of unplacedTaskRefs) {
+    // A task queued in round 1 may have been placed in round 2 (or as a
+    // group sibling) — skip it so it isn't scheduled twice.
+    if (task._placed) continue;
     if (task._isDouble) {
       const d = findBestDouble(task, false);
       if (d) { commitDouble(task, d.day, d.slotA, d.slotB); continue; }

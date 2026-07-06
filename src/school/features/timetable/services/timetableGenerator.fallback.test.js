@@ -68,6 +68,29 @@ describe('Phase 4 — daily cap relaxed as last resort', () => {
   });
 });
 
+describe('Part-time teacher priority', () => {
+  test('part-timer lessons claim their few available slots before full-timer doubles', () => {
+    // Part-timer tp is free ONLY Monday slots 1+2 (2 of 30 slots).
+    // Full-timer tf teaches Maths 10/week (5 doubles) to the same class —
+    // enough to fill the entire week. Without the priority round, tf's
+    // doubles would grab Monday 1+2 and tp could never be placed.
+    const assignments = [
+      { id: 'af', teacher_id: 'tf', subject: 'Maths', class_name: 'Y3', periods_per_week: 10, parallel_group: null },
+      { id: 'ap', teacher_id: 'tp', subject: 'Music', class_name: 'Y3', periods_per_week: 2, parallel_group: null },
+    ];
+    const availability = availableOnly('tp', [[0, 1], [0, 2]]);
+    const { placed } = generateTimetable(assignments, SLOTS_6, availability);
+
+    const partTimer = placed.filter(p => p.teacher_id === 'tp');
+    const totalPartTimer = partTimer.reduce((n, p) => n + (p.is_double ? 2 : 1), 0);
+    expect(totalPartTimer).toBe(2);
+    partTimer.forEach(p => {
+      expect(p.day_of_week).toBe(0);
+      expect([1, 2]).toContain(p.slot_number);
+    });
+  });
+});
+
 describe('Unplaced diagnostics', () => {
   test('genuinely impossible task reports a reason', () => {
     // Teacher blocked everywhere → cannot be placed at all.
