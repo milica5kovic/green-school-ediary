@@ -9,6 +9,7 @@ import GradingService from '../../school/features/grading/services/gradingServic
 import { ScheduleService } from '../../school/features/schedule/services/scheduleService';
 import { TodoService } from '../../school/features/tasks/services/todoService';
 import { ParentService } from '../../school/features/parents/services/parentService';
+import { ReportsService } from '../../school/features/reports/services/reportsService';
 
 const AppContext = createContext(null);
 
@@ -70,6 +71,7 @@ export const AppProvider = ({ children }) => {
     schedule: new ScheduleService(tenantSupabase, schoolId),
     todos: new TodoService(tenantSupabase, schoolId),
     parents: new ParentService(tenantSupabase, schoolId),
+    reports: new ReportsService(tenantSupabase),
   }), [schoolId]);
 
   // Clear caches when school changes

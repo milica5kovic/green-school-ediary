@@ -65,6 +65,7 @@ import ParentPrivacyPage from "./features/parents/components/ParentPrivacyPage";
 import { ConsentGate } from "../core/components/ConsentModal";
 import ActivityTrackerPage from "./features/activity/components/ActivityTrackerPage";
 import TimetableMakerPage from "./features/timetable/components/TimetableMakerPage";
+import ReportsPage from "./features/reports/components/ReportsPage";
 
 // ============================================================================
 // SCHOOL APP
@@ -252,8 +253,7 @@ const SchoolAppContent = () => {
         return hasFeature("admissions") ? <AdmissionsPortal /> : <FeatureDisabled feature="Admissions" />;
 
       case "reports":
-        if (!isAdmin()) return <UnauthorizedPage />;
-        return hasFeature("reports") ? <ReportsComingSoon /> : <FeatureDisabled feature="Reports" />;
+        return hasFeature("reports") ? <ReportsPage /> : <FeatureDisabled feature="Reports" />;
 
       case "settings":     return <SettingsPage />;
       case "unauthorized": return <UnauthorizedPage />;
@@ -376,6 +376,7 @@ const SchoolAppContent = () => {
             <NavItem icon={ClipboardCheck} label="Daily Overview" page="daily-overview" />
           }
           {hasFeature("test_maker")      && <NavItem icon={FileText}       label="Test Maker"       page="test-maker" />}
+          {hasFeature("reports")         && <NavItem icon={BarChart3}      label="Reports"          page="reports" />}
           <NavItem icon={Settings} label="Settings" page="settings" />
         </>
       )}
@@ -596,55 +597,7 @@ const SchoolAppContent = () => {
   );
 };
 
-// ============================================================================
-// REPORTS COMING SOON
-// ============================================================================
 
-const ReportsComingSoon = () => {
-  const { primaryColor } = useBranding();
-  const items = [
-    { icon: BarChart3,   label: 'Student Progress Reports',   desc: 'Term-by-term grade trends per student' },
-    { icon: Users,       label: 'Class Performance Overview', desc: 'Compare averages across all classes' },
-    { icon: CheckSquare, label: 'Attendance Analytics',       desc: 'Absence patterns and monthly summaries' },
-    { icon: FileText,    label: 'PDF Report Cards',           desc: 'One-click printable reports per student' },
-  ];
-  return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-2xl shadow-lg border p-8" style={{ borderColor: `${primaryColor}20` }}>
-        <div className="flex items-center gap-4 mb-6">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: `${primaryColor}15` }}>
-            <BarChart3 size={28} style={{ color: primaryColor }} />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Reports & Analytics</h2>
-            <p className="text-gray-500 text-sm">Detailed school-wide reporting</p>
-          </div>
-        </div>
-
-        <div className="rounded-xl p-4 mb-6 flex items-center gap-3" style={{ backgroundColor: `${primaryColor}10`, border: `1px solid ${primaryColor}30` }}>
-          <Clock size={18} style={{ color: primaryColor }} className="flex-shrink-0" />
-          <p className="text-sm font-medium" style={{ color: primaryColor }}>
-            Full reporting module coming soon. In the meantime, the <strong>Admin Dashboard</strong> shows live school stats.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {items.map(({ icon: Icon, label, desc }) => (
-            <div key={label} className="flex items-start gap-3 p-4 rounded-xl border border-gray-100 bg-gray-50">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${primaryColor}12` }}>
-                <Icon size={18} style={{ color: primaryColor }} />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-800">{label}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // ============================================================================
 // FEATURE DISABLED

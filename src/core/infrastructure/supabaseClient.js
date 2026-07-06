@@ -35,7 +35,10 @@ const TENANT_TABLES = [
   'students', 'teachers', 'parents', 'grades', 'attendance',
   'homework', 'classes', 'academic_terms', 'scheduled_tests',
   'school_events', 'student_parents', 'schedule', 'activity_logs',
-  'custom_classes', 'custom_subjects', 'teacher_todos'
+  'custom_classes', 'custom_subjects', 'teacher_todos',
+  // Reports module
+  'report_periods', 'report_objectives', 'psd_statements',
+  'report_entries', 'report_meta', 'report_validation_rules',
 ];
 
 class TenantQueryBuilder {
