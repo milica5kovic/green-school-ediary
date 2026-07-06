@@ -174,10 +174,13 @@ export default function TimetableMakerPage() {
           <strong>⚠ {tt.unplacedTasks.length} task{tt.unplacedTasks.length !== 1 ? 's' : ''} could not be auto-scheduled:</strong>
           <ul className="mt-1 ml-4 list-disc text-xs space-y-0.5">
             {tt.unplacedTasks.map((t, i) => (
-              <li key={i}>{t.class_name} — {t.subject} ({t.teacherName})</li>
+              <li key={i}>
+                {t.class_name} — {t.subject} ({t.teacherName})
+                {t.reason && <span className="text-amber-500"> — {t.reason}</span>}
+              </li>
             ))}
           </ul>
-          <p className="text-xs mt-1 text-amber-600">Add these manually in the Timetable tab.</p>
+          <p className="text-xs mt-1 text-amber-600">Fix the cause shown next to each task (Availability / Assignments), then use Fill Gaps — or add them manually in the Timetable tab.</p>
         </div>
       )}
 

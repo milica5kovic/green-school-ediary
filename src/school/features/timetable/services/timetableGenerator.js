@@ -226,7 +226,9 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     Math.max(getGapPenalty(class_name, day, slotA), getGapPenalty(class_name, day, slotB));
 
   // ---- Helper: check if a single task can go at (day, slot) ----
-  const canPlace = (task, day, slot) => {
+  // relaxCap=true (Phase 4 last resort) allows ONE extra period of the
+  // same subject on the same day rather than leaving the task unplaced.
+  const canPlace = (task, day, slot, relaxCap = false) => {
     if (!classAllowedInSlot(task.class_name, slot)) return false;
     if (!isAvailable(task.teacher_id, day, slot)) return false;
     if (teacherBusy[day][slot].has(task.teacher_id)) {
@@ -246,13 +248,14 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
                         task.parallel_group === existing.parallel_group;
       if (!sameGroup) return false;
     }
-    if ((classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0) >= maxPerDay(task.subject)) return false;
+    const cap = maxPerDay(task.subject) + (relaxCap ? 1 : 0);
+    if ((classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0) >= cap) return false;
     return true;
   };
 
   // ---- canPlaceDouble helper ----
-  const canPlaceDouble = (task, day, slotA, slotB) => {
-    return canPlace(task, day, slotA) && canPlace(task, day, slotB) &&
+  const canPlaceDouble = (task, day, slotA, slotB, relaxCap = false) => {
+    return canPlace(task, day, slotA, relaxCap) && canPlace(task, day, slotB, relaxCap) &&
       (classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0) === 0;
     // The last condition ensures at most one double per subject per day per class
   };
@@ -699,47 +702,110 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
   }
 
   // ============================================================
-  // PHASE 3: Relaxed fallback — ONLY for French / German
+  // PHASE 3: Relaxed fallback — retry EVERY unplaced task.
+  // Parallel-group sync is dropped (better a lesson out of sync than
+  // no lesson); failed doubles retry as a double first, then split
+  // into two independent single periods.
   // ============================================================
-  const PHASE3_SUBJECTS = new Set(['French', 'German']);
-
-  for (const task of unplacedTaskRefs) {
-    if (!PHASE3_SUBJECTS.has(task.subject)) {
-      // Must keep parallel-group timing — leave for manual placement
-      unplaced.push({ teacher_id: task.teacher_id, subject: task.subject, class_name: task.class_name });
-      continue;
-    }
-
-    // French / German: find the best free slot ignoring sibling sync
-    let bestDay = null;
-    let bestSlot = null;
-    let bestScore = Infinity;
-
+  const findBestSingle = (task, relaxCap) => {
+    let bestDay = null, bestSlot = null, bestScore = Infinity;
     for (const day of DAYS) {
       for (const slot of slotNumbers) {
-        if (!canPlace(task, day, slot)) continue;
-
-        const existingSameSubjectToday = classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0;
+        if (!canPlace(task, day, slot, relaxCap)) continue;
         const loadScore = getLoad(task.class_name, day);
+        const teacherLoadScore = 0.4 * getTeacherLoad(task.teacher_id, day);
         let consecutiveBonus = 0;
-        if (existingSameSubjectToday > 0 && DOUBLE_PREFERRED_SUBJECTS.has(task.subject)) {
+        const sameToday = classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0;
+        if (sameToday > 0 && DOUBLE_PREFERRED_SUBJECTS.has(task.subject)) {
           const prevSlotIdx = slotNumbers.indexOf(slot) - 1;
           const prevSlot   = prevSlotIdx >= 0 ? slotNumbers[prevSlotIdx] : null;
           const prevEntry  = prevSlot !== null ? grid[day][prevSlot][task.class_name] : null;
           consecutiveBonus = (prevEntry && prevEntry.subject === task.subject) ? -50 : -10;
         }
-        const teacherLoadScore = 0.4 * getTeacherLoad(task.teacher_id, day);
         const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
         const prePeriodPenalty = PRE_PERIOD_SLOTS.has(slot) ? PRE_PERIOD_PENALTY : 0;
         const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty + prePeriodPenalty + getGapPenalty(task.class_name, day, slot);
         if (score < bestScore) { bestScore = score; bestDay = day; bestSlot = slot; }
       }
     }
+    return bestDay !== null ? { day: bestDay, slot: bestSlot } : null;
+  };
 
-    if (bestDay !== null) {
-      commitTask(task, bestDay, bestSlot);
-    } else {
-      unplaced.push({ teacher_id: task.teacher_id, subject: task.subject, class_name: task.class_name });
+  const findBestDouble = (task, relaxCap) => {
+    let best = null, bestScore = Infinity;
+    for (const day of DAYS) {
+      for (const [slotA, slotB] of validDoublePairs) {
+        if (!canPlaceDouble(task, day, slotA, slotB, relaxCap)) continue;
+        const score = getLoad(task.class_name, day)
+          + weeklySpreadPenalty(task.class_name, task.subject, day)
+          + 0.4 * getTeacherLoad(task.teacher_id, day)
+          + getGapPenaltyDouble(task.class_name, day, slotA, slotB);
+        if (score < bestScore) { bestScore = score; best = { day, slotA, slotB }; }
+      }
+    }
+    return best;
+  };
+
+  // Explain WHY a task has no feasible slot — shown in the unplaced list
+  // so the admin knows what to change (availability, assignments, load).
+  const diagnoseTask = (task) => {
+    let classFull = 0, blocked = 0, busy = 0, capped = 0, candidates = 0;
+    for (const day of DAYS) {
+      for (const slot of slotNumbers) {
+        if (!classAllowedInSlot(task.class_name, slot)) continue;
+        candidates++;
+        if (grid[day][slot][task.class_name]) { classFull++; continue; }
+        if (!isAvailable(task.teacher_id, day, slot)) { blocked++; continue; }
+        if (teacherBusy[day][slot].has(task.teacher_id)) { busy++; continue; }
+        capped++;
+      }
+    }
+    if (candidates === classFull) return 'class timetable is completely full';
+    if (capped > 0) return 'daily limit for this subject reached in every free slot';
+    if (blocked >= busy) return 'teacher marked unavailable in every free slot of this class — check Availability';
+    return 'teacher already teaching another class in every free slot of this class';
+  };
+
+  const stillUnplaced = [];
+  for (const task of unplacedTaskRefs) {
+    if (task._isDouble) {
+      const d = findBestDouble(task, false);
+      if (d) { commitDouble(task, d.day, d.slotA, d.slotB); continue; }
+      // Split the failed double into two independent singles
+      let remaining = 2;
+      for (let i = 0; i < 2; i++) {
+        const s = findBestSingle(task, false);
+        if (!s) break;
+        commitTask({ ...task, _isDouble: false }, s.day, s.slot);
+        remaining--;
+      }
+      if (remaining > 0) stillUnplaced.push({ task, remaining });
+      continue;
+    }
+    const s = findBestSingle(task, false);
+    if (s) { commitTask(task, s.day, s.slot); continue; }
+    stillUnplaced.push({ task, remaining: 1 });
+  }
+
+  // ============================================================
+  // PHASE 4: last resort — allow one extra period of the same
+  // subject per day (cap+1) before giving up.
+  // ============================================================
+  for (const item of stillUnplaced) {
+    let left = item.remaining;
+    while (left > 0) {
+      const s = findBestSingle(item.task, true);
+      if (!s) break;
+      commitTask({ ...item.task, _isDouble: false }, s.day, s.slot);
+      left--;
+    }
+    for (let i = 0; i < left; i++) {
+      unplaced.push({
+        teacher_id: item.task.teacher_id,
+        subject: item.task.subject,
+        class_name: item.task.class_name,
+        reason: diagnoseTask(item.task),
+      });
     }
   }
 
