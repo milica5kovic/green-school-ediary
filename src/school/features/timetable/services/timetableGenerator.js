@@ -191,8 +191,8 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     let penalty = 0;
     for (const usedDay of usedDays) {
       const dist = Math.abs(day - usedDay);
-      if (dist === 1) penalty += 4; // adjacent day — heavy penalty
-      if (dist === 2) penalty += 1; // 2 days apart — light penalty
+      if (dist === 1) penalty += 10; // adjacent day — heavy penalty
+      if (dist === 2) penalty += 2;  // 2 days apart — light penalty
       // 3+ days apart = no penalty (ideal spread)
     }
     return penalty;
@@ -341,6 +341,34 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     }));
     teacherFreeSlots[a.teacher_id] = count;
   });
+
+  const totalWeeklySlots = DAYS.length * slotNumbers.length;
+
+  // How many periods each teacher must deliver in total
+  const teacherRequiredPeriods = {};
+  assignments.forEach(a => {
+    teacherRequiredPeriods[a.teacher_id] =
+      (teacherRequiredPeriods[a.teacher_id] || 0) + (a.periods_per_week || 1);
+  });
+
+  // Constrained = little availability OR little slack between what the
+  // teacher CAN work and what they MUST teach. A teacher free 25 of 35
+  // slots but needing 18 periods (slack 7) is tighter than a full-timer
+  // with 35 free and 10 periods (slack 25) — schedule the former first.
+  const CONSTRAINED_SLACK = 10;
+  const isConstrainedTeacherTask = (task) => {
+    const free = teacherFreeSlots[task.teacher_id] ?? totalWeeklySlots;
+    const required = teacherRequiredPeriods[task.teacher_id] || 0;
+    return free <= totalWeeklySlots * 0.6 || (free - required) <= CONSTRAINED_SLACK;
+  };
+
+  // Pre-period costs almost nothing for tight-schedule teachers: their
+  // upper-year (Y7-Y9) lessons should gladly start at 08:20 so the
+  // regular slots stay free for everything else.
+  const prePeriodPenaltyFor = (task, slot) => {
+    if (!PRE_PERIOD_SLOTS.has(slot)) return 0;
+    return isConstrainedTeacherTask(task) ? 50 : PRE_PERIOD_PENALTY;
+  };
 
   // ---- Separate tasks into three buckets ----
   // cgTasks    — C&G (P1/P6 only): scheduled FIRST so doubles don't steal those slots
@@ -625,18 +653,24 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
           // Consecutive / double-period bonus (same logic as normal placement)
           let consecutiveBonus = 0;
           const existingSameSubjectToday = classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0;
-          if (existingSameSubjectToday > 0 && DOUBLE_PREFERRED_SUBJECTS.has(task.subject)) {
-            const prevSlotIdx = slotNumbers.indexOf(slot) - 1;
-            const prevSlot = prevSlotIdx >= 0 ? slotNumbers[prevSlotIdx] : null;
-            const prevEntry = prevSlot !== null ? grid[day][prevSlot][task.class_name] : null;
-            const isDirectlyAfter = prevEntry && prevEntry.subject === task.subject;
-            consecutiveBonus = isDirectlyAfter ? -50 : -10;
+          if (existingSameSubjectToday > 0) {
+            if (DOUBLE_PREFERRED_SUBJECTS.has(task.subject)) {
+              const prevSlotIdx = slotNumbers.indexOf(slot) - 1;
+              const prevSlot = prevSlotIdx >= 0 ? slotNumbers[prevSlotIdx] : null;
+              const prevEntry = prevSlot !== null ? grid[day][prevSlot][task.class_name] : null;
+              const isDirectlyAfter = prevEntry && prevEntry.subject === task.subject;
+              consecutiveBonus = isDirectlyAfter ? -50 : -10;
+            } else {
+              // Low-fond subjects spread out — no second period same day
+              consecutiveBonus = 40;
+            }
           }
 
           // Strongly prefer regular slots (1-6) over pre-period (0) and after-school (7+)
           const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
-          const prePeriodPenalty = PRE_PERIOD_SLOTS.has(slot) ? PRE_PERIOD_PENALTY : 0;
-          const score = getLoad(task.class_name, day) + consecutiveBonus + afterSchoolPenalty + prePeriodPenalty + getGapPenalty(task.class_name, day, slot);
+          const prePeriodPenalty = prePeriodPenaltyFor(task, slot);
+          const spreadPenalty = weeklySpreadPenalty(task.class_name, task.subject, day);
+          const score = getLoad(task.class_name, day) + consecutiveBonus + afterSchoolPenalty + prePeriodPenalty + spreadPenalty + getGapPenalty(task.class_name, day, slot);
           if (score < bestScore) {
             bestScore = score;
             bestDay = day;
@@ -682,12 +716,15 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
             const isDirectlyAfter = prevEntry && prevEntry.subject === task.subject;
             consecutiveBonus = isDirectlyAfter ? -50 : -10;
           } else {
-            consecutiveBonus = -0.5;
+            // Low-fond subjects (e.g. French 2×/week) should be spread out:
+            // a second period of the same subject on the same day is
+            // discouraged, not rewarded.
+            consecutiveBonus = 40;
           }
         }
 
         const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
-        const prePeriodPenalty = PRE_PERIOD_SLOTS.has(slot) ? PRE_PERIOD_PENALTY : 0;
+        const prePeriodPenalty = prePeriodPenaltyFor(task, slot);
         const spreadPenalty = weeklySpreadPenalty(task.class_name, task.subject, day);
         const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty + prePeriodPenalty + spreadPenalty + getGapPenalty(task.class_name, day, slot);
         if (score < bestScore) {
@@ -715,26 +752,6 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
   // is scheduled BEFORE the rest, in the same CG → doubles → singles
   // order. Group siblings placed along the way keep their sync.
   // ============================================================
-  const totalWeeklySlots = DAYS.length * slotNumbers.length;
-
-  // How many periods each teacher must deliver in total
-  const teacherRequiredPeriods = {};
-  assignments.forEach(a => {
-    teacherRequiredPeriods[a.teacher_id] =
-      (teacherRequiredPeriods[a.teacher_id] || 0) + (a.periods_per_week || 1);
-  });
-
-  // Constrained = little availability OR little slack between what the
-  // teacher CAN work and what they MUST teach. A teacher free 25 of 35
-  // slots but needing 18 periods (slack 7) is tighter than a full-timer
-  // with 35 free and 10 periods (slack 25) — schedule the former first.
-  const CONSTRAINED_SLACK = 10;
-  const isConstrainedTeacherTask = (task) => {
-    const free = teacherFreeSlots[task.teacher_id] ?? totalWeeklySlots;
-    const required = teacherRequiredPeriods[task.teacher_id] || 0;
-    return free <= totalWeeklySlots * 0.6 || (free - required) <= CONSTRAINED_SLACK;
-  };
-
   // Round 1: part-time / heavily blocked teachers
   cgTasks.filter(isConstrainedTeacherTask).forEach(processCGTask);
   doubleTasks.filter(isConstrainedTeacherTask).forEach(processDoubleTask);
@@ -760,15 +777,20 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
         const teacherLoadScore = 0.4 * getTeacherLoad(task.teacher_id, day);
         let consecutiveBonus = 0;
         const sameToday = classSubjectDay[subjectDayKey(task.class_name, day, task.subject)] || 0;
-        if (sameToday > 0 && DOUBLE_PREFERRED_SUBJECTS.has(task.subject)) {
-          const prevSlotIdx = slotNumbers.indexOf(slot) - 1;
-          const prevSlot   = prevSlotIdx >= 0 ? slotNumbers[prevSlotIdx] : null;
-          const prevEntry  = prevSlot !== null ? grid[day][prevSlot][task.class_name] : null;
-          consecutiveBonus = (prevEntry && prevEntry.subject === task.subject) ? -50 : -10;
+        if (sameToday > 0) {
+          if (DOUBLE_PREFERRED_SUBJECTS.has(task.subject)) {
+            const prevSlotIdx = slotNumbers.indexOf(slot) - 1;
+            const prevSlot   = prevSlotIdx >= 0 ? slotNumbers[prevSlotIdx] : null;
+            const prevEntry  = prevSlot !== null ? grid[day][prevSlot][task.class_name] : null;
+            consecutiveBonus = (prevEntry && prevEntry.subject === task.subject) ? -50 : -10;
+          } else {
+            consecutiveBonus = 40; // spread low-fond subjects
+          }
         }
         const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
-        const prePeriodPenalty = PRE_PERIOD_SLOTS.has(slot) ? PRE_PERIOD_PENALTY : 0;
-        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty + prePeriodPenalty + getGapPenalty(task.class_name, day, slot);
+        const prePeriodPenalty = prePeriodPenaltyFor(task, slot);
+        const spreadPenalty = weeklySpreadPenalty(task.class_name, task.subject, day);
+        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty + prePeriodPenalty + spreadPenalty + getGapPenalty(task.class_name, day, slot);
         if (score < bestScore) { bestScore = score; bestDay = day; bestSlot = slot; }
       }
     }

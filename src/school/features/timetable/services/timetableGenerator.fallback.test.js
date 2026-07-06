@@ -155,6 +155,57 @@ describe('Phase 5 — repair by displacing a blocking lesson', () => {
   });
 });
 
+describe('Subject spread (mix predmeta)', () => {
+  test('a 2×/week subject is never twice on the same day nor on adjacent days', () => {
+    const assignments = [
+      { id: 'a1', teacher_id: 't1', subject: 'French', class_name: 'Y9', periods_per_week: 2, parallel_group: null },
+    ];
+    const { placed, unplaced } = generateTimetable(assignments, SLOTS_6, []);
+    expect(unplaced).toHaveLength(0);
+    expect(placed).toHaveLength(2);
+    const [d1, d2] = placed.map(p => p.day_of_week);
+    expect(Math.abs(d1 - d2)).toBeGreaterThanOrEqual(2);
+  });
+
+  test('parallel-group 2×/week lessons spread across the week too', () => {
+    // French + German in a LANG group, 2×/week — occurrences must not
+    // land on the same or adjacent days.
+    const assignments = [
+      { id: 'a1', teacher_id: 'tf', subject: 'French', class_name: 'Y9', periods_per_week: 2, parallel_group: 'Y9-LANG' },
+      { id: 'a2', teacher_id: 'tg', subject: 'German', class_name: 'Y9', periods_per_week: 2, parallel_group: 'Y9-LANG' },
+    ];
+    const { placed, unplaced } = generateTimetable(assignments, SLOTS_6, []);
+    expect(unplaced).toHaveLength(0);
+    const frenchDays = placed.filter(p => p.subject === 'French').map(p => p.day_of_week);
+    expect(new Set(frenchDays).size).toBe(2);
+    expect(Math.abs(frenchDays[0] - frenchDays[1])).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('Pre-period for constrained teachers', () => {
+  test('tight-schedule teacher uses the pre-period when regular slots run out', () => {
+    // Y9's regular week is fully locked; only the pre-period is open.
+    // tm has low slack (blocked heavily) → pre-period is a cheap option.
+    const SLOTS_WITH_PRE = [
+      { slot_number: 0 }, ...SLOTS_6,
+    ];
+    const locked = [];
+    DAYS.forEach(d => SLOTS_6.forEach(({ slot_number: s }, i) => {
+      locked.push({
+        id: `L${d}-${s}`, teacher_id: `lock${d}${s}`, subject: `Sub${i}`,
+        class_name: 'Y9', day_of_week: d, slot_number: s, is_double: false,
+      });
+    }));
+    const assignments = [
+      { id: 'a1', teacher_id: 'tm', subject: 'French', class_name: 'Y9', periods_per_week: 1, parallel_group: null },
+    ];
+    const { placed, unplaced } = generateTimetable(assignments, SLOTS_WITH_PRE, [], locked);
+    expect(unplaced).toHaveLength(0);
+    const french = placed.find(p => p.subject === 'French');
+    expect(french.slot_number).toBe(0);
+  });
+});
+
 describe('Unplaced diagnostics', () => {
   test('genuinely impossible task reports a reason', () => {
     // Teacher blocked everywhere → cannot be placed at all.
