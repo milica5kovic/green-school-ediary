@@ -10,6 +10,7 @@ import {
   useDraggable,
 } from '@dnd-kit/core';
 import { useBranding } from '../../../../core/context/BrandingContext';
+import { classAllowedInSlot, PRE_PERIOD_SLOTS } from '../services/timetableGenerator';
 
 const DAYS = [
   { index: 0, name: 'Monday' },
@@ -76,6 +77,7 @@ function CellModal({
 
   const availableClasses = [...new Set(assignments.map(a => a.class_name))]
     .filter(c => !busyClasses.has(c) || c === existingEntry?.class_name)
+    .filter(c => classAllowedInSlot(c, slot.slot_number))
     .sort();
 
   const [selectedClass, setSelectedClass] = useState(existingEntry?.class_name || '');
@@ -433,6 +435,8 @@ export default function TimetableGrid({
   // Check if dropping activeEntry at [targetDay, targetSlot] is valid
   const isValidDropTarget = (entry, targetDay, targetSlot) => {
     if (!entry) return false;
+    // Pre-period (slot 0) is reserved for Y7–Y9
+    if (!classAllowedInSlot(entry.class_name, targetSlot)) return false;
     const slotsToCheck = entry.is_double ? [targetSlot, targetSlot + 1] : [targetSlot];
     for (const slot of slotsToCheck) {
       const cellEntries = allLookup[targetDay]?.[slot] || [];
@@ -616,9 +620,12 @@ export default function TimetableGrid({
               {sortedSlots.map((slot, si) => (
                 <tr key={slot.slot_number} className={si % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                   <td className="px-4 py-3 border-r border-gray-200"
-                    style={{ backgroundColor: `${primaryColor}08` }}>
+                    style={{ backgroundColor: PRE_PERIOD_SLOTS.has(slot.slot_number) ? '#f59e0b15' : `${primaryColor}08` }}>
                     <div className="font-semibold text-gray-700 text-xs">{slot.label || `Period ${slot.slot_number}`}</div>
                     <div className="text-gray-400 text-xs mt-0.5">{slot.start_time?.slice(0, 5)}–{slot.end_time?.slice(0, 5)}</div>
+                    {PRE_PERIOD_SLOTS.has(slot.slot_number) && (
+                      <div className="text-amber-600 text-[10px] mt-0.5 font-medium">Y7–Y9 only</div>
+                    )}
                   </td>
 
                   {DAYS.map(day => {

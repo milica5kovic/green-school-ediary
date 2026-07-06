@@ -146,7 +146,7 @@ export class StudentsService {
         email: studentData.email || null,
         parent_contact: studentData.parent_contact || null,
         notes: studentData.notes || null,
-        school_year: studentData.school_year || '2025-26',
+        school_year: studentData.school_year || '2026-27',
         status: studentData.status || 'active',
         date_of_birth: studentData.date_of_birth || null,
         school_id: this.schoolId, // ✅ CRITICAL: Multi-tenant
@@ -185,7 +185,7 @@ export class StudentsService {
         email: studentData.email || null,
         parent_contact: studentData.parent_contact || null,
         notes: studentData.notes || null,
-        school_year: studentData.school_year || '2025-26',
+        school_year: studentData.school_year || '2026-27',
         date_of_birth: studentData.date_of_birth || null,
         updated_at: new Date().toISOString()
       };

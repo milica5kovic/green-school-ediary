@@ -1,6 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Save, Clock } from 'lucide-react';
+import { Plus, Trash2, Save, Clock, Sunrise } from 'lucide-react';
 import { useBranding } from '../../../../core/context/BrandingContext';
+
+// slot_number 0 = pre-period (08:20–09:00), only Y7–Y9 can be scheduled there
+const isPrePeriod = (s) => s.slot_number === 0;
+
+// Pre-period keeps slot 0; the rest are numbered 1..N in display order
+const renumber = (slots) => {
+  let n = 0;
+  return slots.map(s => isPrePeriod(s) ? { ...s, slot_number: 0 } : { ...s, slot_number: ++n });
+};
 
 export default function TimeSlotsSetup({ timeSlots, onSave, saving }) {
   const { primaryColor } = useBranding();
@@ -8,9 +17,11 @@ export default function TimeSlotsSetup({ timeSlots, onSave, saving }) {
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
-    setSlots(timeSlots.map(s => ({ ...s })));
+    setSlots([...timeSlots].sort((a, b) => a.slot_number - b.slot_number).map(s => ({ ...s })));
     setDirty(false);
   }, [timeSlots]);
+
+  const hasPrePeriod = slots.some(isPrePeriod);
 
   const update = (index, field, value) => {
     setSlots(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s));
@@ -18,21 +29,30 @@ export default function TimeSlotsSetup({ timeSlots, onSave, saving }) {
   };
 
   const addSlot = () => {
-    const nextNum = slots.length > 0 ? Math.max(...slots.map(s => s.slot_number)) + 1 : 1;
-    setSlots(prev => [
+    const nextNum = slots.filter(s => !isPrePeriod(s)).length + 1;
+    setSlots(prev => renumber([
       ...prev,
       { slot_number: nextNum, label: `Period ${nextNum}`, start_time: '08:00', end_time: '08:45' },
-    ]);
+    ]));
+    setDirty(true);
+  };
+
+  const addPrePeriod = () => {
+    if (hasPrePeriod) return;
+    setSlots(prev => renumber([
+      { slot_number: 0, label: 'Pre-period (Y7–Y9)', start_time: '08:20', end_time: '09:00' },
+      ...prev,
+    ]));
     setDirty(true);
   };
 
   const removeSlot = (index) => {
-    setSlots(prev => prev.filter((_, i) => i !== index).map((s, i) => ({ ...s, slot_number: i + 1 })));
+    setSlots(prev => renumber(prev.filter((_, i) => i !== index)));
     setDirty(true);
   };
 
   const handleSave = async () => {
-    const normalised = slots.map((s, i) => ({ ...s, slot_number: i + 1 }));
+    const normalised = renumber(slots);
     await onSave(normalised);
     setDirty(false);
   };
@@ -48,6 +68,15 @@ export default function TimeSlotsSetup({ timeSlots, onSave, saving }) {
           </span>
         </div>
         <div className="flex gap-2">
+          {!hasPrePeriod && (
+            <button
+              onClick={addPrePeriod}
+              className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg border-2 border-amber-400 text-amber-600 font-medium transition-colors hover:bg-amber-50"
+              title="Early period before Period 1 — only Y7, Y8 and Y9 can have classes there"
+            >
+              <Sunrise size={14} /> Add Pre-period (Y7–Y9)
+            </button>
+          )}
           <button
             onClick={addSlot}
             className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg border-2 font-medium transition-colors"
@@ -78,14 +107,17 @@ export default function TimeSlotsSetup({ timeSlots, onSave, saving }) {
         {slots.map((slot, i) => (
           <div
             key={i}
-            className="flex items-center gap-3 bg-gray-50 rounded-xl p-3 border border-gray-200"
+            className={`flex items-center gap-3 rounded-xl p-3 border ${
+              isPrePeriod(slot) ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'
+            }`}
           >
             {/* Period number badge */}
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-              style={{ backgroundColor: primaryColor }}
+              style={{ backgroundColor: isPrePeriod(slot) ? '#f59e0b' : primaryColor }}
+              title={isPrePeriod(slot) ? 'Pre-period — Y7–Y9 only' : undefined}
             >
-              {i + 1}
+              {isPrePeriod(slot) ? <Sunrise size={15} /> : slot.slot_number}
             </div>
 
             {/* Label */}

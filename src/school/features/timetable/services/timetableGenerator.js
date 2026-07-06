@@ -33,6 +33,16 @@ const AFTER_SCHOOL_SLOTS = new Set([7]);
 // even with gaps, is always preferred over using an after-school slot.
 const AFTER_SCHOOL_PENALTY = 2000;
 
+// Pre-period slot (slot 0, 08:20-09:00 before Period 1).
+// Only upper years (Y7, Y8, Y9) start early — lower years can never be
+// scheduled here. Preferred less than regular slots (penalty) but more
+// than after-school, so it absorbs overflow for the upper years.
+export const PRE_PERIOD_SLOTS = new Set([0]);
+const PRE_PERIOD_CLASS_RE = /^y\s*(7|8|9)\b/i;
+export const classAllowedInSlot = (class_name, slot_number) =>
+  !PRE_PERIOD_SLOTS.has(slot_number) || PRE_PERIOD_CLASS_RE.test(class_name || '');
+const PRE_PERIOD_PENALTY = 1200;
+
 /** Deterministic Fisher-Yates shuffle using an integer seed. */
 function shuffleDeterministic(arr, seed) {
   const result = [...arr];
@@ -60,8 +70,8 @@ function shuffleDeterministic(arr, seed) {
 export function generateTimetable(assignments, timeSlots, availabilityRecords, lockedEntries = [], seed = 0) {
   const slotNumbers = timeSlots.map(s => s.slot_number).sort((a, b) => a - b);
 
-  // Regular slots (P1–P6) vs after-school (slot 7+)
-  const regularSlotNums = slotNumbers.filter(s => !AFTER_SCHOOL_SLOTS.has(s));
+  // Regular slots (P1–P6) vs pre-period (slot 0) and after-school (slot 7+)
+  const regularSlotNums = slotNumbers.filter(s => !AFTER_SCHOOL_SLOTS.has(s) && !PRE_PERIOD_SLOTS.has(s));
 
   // C&G may only go in P1 (first regular slot) or P6 (last regular slot)
   // so the school day connects with Morning Session or Extra-Curricular.
@@ -195,6 +205,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
   // This keeps each class's timetable compact so students never have unexplained free periods.
   const getGapPenalty = (class_name, day, slot) => {
     if (AFTER_SCHOOL_SLOTS.has(slot)) return 0; // after-school sits outside regular hours
+    if (PRE_PERIOD_SLOTS.has(slot)) return 0;   // pre-period sits before regular hours
     const slotIdx = regularSlotNums.indexOf(slot);
     if (slotIdx < 0) return 0;
     const occupiedIndices = regularSlotNums
@@ -216,6 +227,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
 
   // ---- Helper: check if a single task can go at (day, slot) ----
   const canPlace = (task, day, slot) => {
+    if (!classAllowedInSlot(task.class_name, slot)) return false;
     if (!isAvailable(task.teacher_id, day, slot)) return false;
     if (teacherBusy[day][slot].has(task.teacher_id)) {
       // Allow same teacher in same slot ONLY for parallel group combined classes
@@ -614,9 +626,10 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
             consecutiveBonus = isDirectlyAfter ? -50 : -10;
           }
 
-          // Strongly prefer regular slots (1-6) over after-school slots (7+)
+          // Strongly prefer regular slots (1-6) over pre-period (0) and after-school (7+)
           const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
-          const score = getLoad(task.class_name, day) + consecutiveBonus + afterSchoolPenalty + getGapPenalty(task.class_name, day, slot);
+          const prePeriodPenalty = PRE_PERIOD_SLOTS.has(slot) ? PRE_PERIOD_PENALTY : 0;
+          const score = getLoad(task.class_name, day) + consecutiveBonus + afterSchoolPenalty + prePeriodPenalty + getGapPenalty(task.class_name, day, slot);
           if (score < bestScore) {
             bestScore = score;
             bestDay = day;
@@ -667,8 +680,9 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
         }
 
         const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
+        const prePeriodPenalty = PRE_PERIOD_SLOTS.has(slot) ? PRE_PERIOD_PENALTY : 0;
         const spreadPenalty = weeklySpreadPenalty(task.class_name, task.subject, day);
-        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty + spreadPenalty + getGapPenalty(task.class_name, day, slot);
+        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty + prePeriodPenalty + spreadPenalty + getGapPenalty(task.class_name, day, slot);
         if (score < bestScore) {
           bestScore = score;
           bestDay = day;
@@ -716,7 +730,8 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
         }
         const teacherLoadScore = 0.4 * getTeacherLoad(task.teacher_id, day);
         const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
-        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty + getGapPenalty(task.class_name, day, slot);
+        const prePeriodPenalty = PRE_PERIOD_SLOTS.has(slot) ? PRE_PERIOD_PENALTY : 0;
+        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty + prePeriodPenalty + getGapPenalty(task.class_name, day, slot);
         if (score < bestScore) { bestScore = score; bestDay = day; bestSlot = slot; }
       }
     }
@@ -763,7 +778,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
 
         // All entries for this class on targetDay (non-double, regular slots)
         const dayEntries = (byClassDay[`${class_name}|${targetDay}`] || [])
-          .filter(p => !p.is_double && !AFTER_SCHOOL_SLOTS.has(p.slot_number))
+          .filter(p => !p.is_double && !AFTER_SCHOOL_SLOTS.has(p.slot_number) && !PRE_PERIOD_SLOTS.has(p.slot_number))
           .sort((a, b) => a.slot_number - b.slot_number);
 
         if (dayEntries.length < 2) continue;
@@ -788,7 +803,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
           if (srcDay === targetDay || changed) continue;
 
           const srcAllEntries = (byClassDay[`${class_name}|${srcDay}`] || [])
-            .filter(p => !p.is_double && !AFTER_SCHOOL_SLOTS.has(p.slot_number));
+            .filter(p => !p.is_double && !AFTER_SCHOOL_SLOTS.has(p.slot_number) && !PRE_PERIOD_SLOTS.has(p.slot_number));
 
           for (const src of srcAllEntries) {
             // Find siblings (same parallel_group, same day, same slot)
@@ -867,7 +882,8 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
             p.class_name === class_name &&
             p.day_of_week === day &&
             !p.is_double &&
-            !AFTER_SCHOOL_SLOTS.has(p.slot_number)
+            !AFTER_SCHOOL_SLOTS.has(p.slot_number) &&
+            !PRE_PERIOD_SLOTS.has(p.slot_number)
           )
           .sort((a, b) => a.slot_number - b.slot_number);
 

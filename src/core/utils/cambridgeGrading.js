@@ -6,8 +6,10 @@ const SECONDARY_CLASSES = ['Y7', 'Y7A', 'Y7B', 'Y8', 'Y8A', 'Y8B', 'Y9', 'Y9A', 
 
 const isPrimaryClass = (className) => {
   if (!className) return true;
-  const base = className.replace(/[AB]$/, '');
-  return PRIMARY_CLASSES.includes(className) || PRIMARY_CLASSES.includes(base);
+  // Case-insensitive, strip section suffix (a/b/c) so Y1a, Y6B etc. match
+  const upper = className.toUpperCase();
+  const base = upper.replace(/[ABC]$/, '');
+  return PRIMARY_CLASSES.includes(upper) || PRIMARY_CLASSES.includes(base);
 };
 
 // Cambridge Primary: percentage → Band 1-6

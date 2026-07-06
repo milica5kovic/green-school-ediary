@@ -543,7 +543,7 @@ const CSVUploadSection = ({ onUploadComplete, primaryColor }) => {
         await studentsService.addStudent({
           name, class_name: className, email: email || null,
           date_of_birth: dob || null,
-          student_no: currentNo, school_year: '2025-26', status: 'active'
+          student_no: currentNo, school_year: '2026-27', status: 'active'
         });
         currentNo++;
       }
@@ -586,10 +586,10 @@ const AddStudentModal = ({ student, primaryColor, onClose, onSave }) => {
   const { studentsService } = useApp();
   const [formData, setFormData] = useState({
     name: student?.name || '',
-    class_name: student?.class_name || 'Y1',
+    class_name: student?.class_name || 'Y1a',
     email: student?.email || '',
     date_of_birth: student?.date_of_birth || '',
-    school_year: student?.school_year || '2025-26',
+    school_year: student?.school_year || '2026-27',
   });
   const [saving, setSaving] = useState(false);
 
@@ -644,7 +644,7 @@ const AddStudentModal = ({ student, primaryColor, onClose, onSave }) => {
                 onChange={(e) => setFormData({ ...formData, class_name: e.target.value })}
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none"
               >
-                {['Y1','Y2','Y3','Y4','Y5A','Y5B','Y6','Y7','Y8','Y9'].map(c => 
+                {['Y1a','Y1b','Y1c','Y2','Y3','Y4','Y5','Y6a','Y6b','Y7','Y8','Y9'].map(c =>
                   <option key={c} value={c}>{c}</option>
                 )}
               </select>

@@ -1,8 +1,11 @@
 import { generateTimetable } from './timetableGenerator';
 
-// Slots: Morning Session (slot 0) + Periods 1-6 + Extra-Curricular (slot 7)
+// Slots: Pre-period (slot 0, Y7-Y9 only) + Periods 1-6 + Extra-Curricular (slot 7)
+// Slot 0 is the early-morning pre-period reserved for upper years — C&G can
+// no longer start there; its valid anchors are P1 (first regular slot) and
+// P6 (last regular slot) so the day connects with Morning Session / Extra-Curricular.
 const SLOTS_WITH_CG_LABELS = [
-  { slot_number: 0, label: 'Morning Session' },
+  { slot_number: 0, label: 'Pre-period (Y7–Y9)' },
   { slot_number: 1, label: 'Period 1' },
   { slot_number: 2, label: 'Period 2' },
   { slot_number: 3, label: 'Period 3' },
@@ -12,7 +15,10 @@ const SLOTS_WITH_CG_LABELS = [
   { slot_number: 7, label: 'Extra-Curricular' },
 ];
 
-// Slots without Morning Session label (late-pair only available)
+// CG anchors with these slots: first + last regular slot
+const CG_VALID_STARTS = new Set([1, 6]);
+
+// Slots without pre-period
 const SLOTS_LATE_PAIR_ONLY = [
   { slot_number: 1, label: 'Period 1' },
   { slot_number: 2, label: 'Period 2' },
@@ -40,38 +46,37 @@ function makeCG(overrides = {}) {
   };
 }
 
-// ── Block placement: valid slot pairs ──────────────────────────────────────────
+// ── Placement: valid anchor slots ──────────────────────────────────────────────
 
-describe('Cooking & Gardening — block placement', () => {
-  test('CG placed as is_double=true at a valid pair slot', () => {
+describe('Cooking & Gardening — placement', () => {
+  test('CG placed as single periods at valid anchor slots', () => {
     const { placed, unplaced } = generateTimetable(
       [makeCG({ periods_per_week: 2 })],
       SLOTS_WITH_CG_LABELS,
       []
     );
     expect(unplaced).toHaveLength(0);
-    // periods_per_week=2 → 2 blocks, each as a single is_double=true entry
     expect(placed).toHaveLength(2);
     placed.forEach(e => {
-      expect(e.is_double).toBe(true);
       expect(e.subject).toBe('Cooking & Gardening');
+      expect(CG_VALID_STARTS.has(e.slot_number)).toBe(true);
     });
   });
 
-  test('CG block starts only at Morning Session (slot 0) or Period 6 (slot 6)', () => {
+  test('CG never starts in the pre-period (slot 0) or after-school (slot 7)', () => {
     const { placed, unplaced } = generateTimetable(
       [makeCG({ periods_per_week: 2 })],
       SLOTS_WITH_CG_LABELS,
       []
     );
     expect(unplaced).toHaveLength(0);
-    const validStartSlots = new Set([0, 6]);
     placed.forEach(e => {
-      expect(validStartSlots.has(e.slot_number)).toBe(true);
+      expect(e.slot_number).not.toBe(0);
+      expect(e.slot_number).not.toBe(7);
     });
   });
 
-  test('CG with only late pair available starts at slot 6', () => {
+  test('CG without pre-period slot still anchors at P1 or P6', () => {
     const { placed, unplaced } = generateTimetable(
       [makeCG({ periods_per_week: 1 })],
       SLOTS_LATE_PAIR_ONLY,
@@ -79,24 +84,23 @@ describe('Cooking & Gardening — block placement', () => {
     );
     expect(unplaced).toHaveLength(0);
     expect(placed).toHaveLength(1);
-    expect(placed[0].slot_number).toBe(6);
-    expect(placed[0].is_double).toBe(true);
+    expect(CG_VALID_STARTS.has(placed[0].slot_number)).toBe(true);
   });
 
-  test('CG does not occupy a random period slot', () => {
+  test('CG does not occupy an interior period slot', () => {
     const { placed, unplaced } = generateTimetable(
       [makeCG({ periods_per_week: 2 })],
       SLOTS_WITH_CG_LABELS,
       []
     );
     expect(unplaced).toHaveLength(0);
-    const forbiddenSlots = new Set([1, 2, 3, 4, 5]); // interior periods
+    const forbiddenSlots = new Set([0, 2, 3, 4, 5, 7]); // pre-period + interior + after-school
     placed.forEach(e => {
       expect(forbiddenSlots.has(e.slot_number)).toBe(false);
     });
   });
 
-  test('CG blocks on different days', () => {
+  test('CG periods land on different days', () => {
     const { placed, unplaced } = generateTimetable(
       [makeCG({ periods_per_week: 2 })],
       SLOTS_WITH_CG_LABELS,
@@ -104,11 +108,10 @@ describe('Cooking & Gardening — block placement', () => {
     );
     expect(unplaced).toHaveLength(0);
     const days = placed.map(e => e.day_of_week);
-    // Two blocks must land on two distinct days (no two blocks same day)
     expect(new Set(days).size).toBe(2);
   });
 
-  test('CG block does not conflict with regular subjects in same slots', () => {
+  test('CG does not conflict with regular subjects in same slots', () => {
     const assignments = [
       makeCG({ id: 'cg1', teacher_id: 'tcg', periods_per_week: 1 }),
       {
@@ -119,18 +122,18 @@ describe('Cooking & Gardening — block placement', () => {
     const { placed, unplaced } = generateTimetable(assignments, SLOTS_WITH_CG_LABELS, []);
     expect(unplaced).toHaveLength(0);
 
-    // Find the CG block's occupied slots
     const cgEntry = placed.find(e => e.subject === 'Cooking & Gardening');
-    const cgStart = cgEntry.slot_number;
-    const cgEnd = cgStart + 1; // is_double expands to slot+1
+    const cgSlots = cgEntry.is_double
+      ? [cgEntry.slot_number, cgEntry.slot_number + 1]
+      : [cgEntry.slot_number];
     const cgDay = cgEntry.day_of_week;
 
     // No other subject for the same class should overlap
     const others = placed.filter(e => e.subject !== 'Cooking & Gardening' && e.class_name === 'Y1');
     others.forEach(e => {
-      const isSameDay = e.day_of_week === cgDay;
-      if (isSameDay) {
-        expect(e.slot_number === cgStart || e.slot_number === cgEnd).toBe(false);
+      if (e.day_of_week === cgDay) {
+        const eSlots = e.is_double ? [e.slot_number, e.slot_number + 1] : [e.slot_number];
+        expect(eSlots.some(s => cgSlots.includes(s))).toBe(false);
       }
     });
   });
@@ -139,7 +142,7 @@ describe('Cooking & Gardening — block placement', () => {
 // ── Parallel group C&G (shared teacher, same slot across year clusters) ────────
 
 describe('Cooking & Gardening — parallel group (year cluster)', () => {
-  test('Y1 and Y2 CG share the same day and slot pair', () => {
+  test('Y1 and Y2 CG share the same day and slot', () => {
     const assignments = [
       makeCG({ id: 'cg1', teacher_id: 'tcg', class_name: 'Y1', periods_per_week: 1, parallel_group: 'CG-Cluster1' }),
       makeCG({ id: 'cg2', teacher_id: 'tcg', class_name: 'Y2', periods_per_week: 1, parallel_group: 'CG-Cluster1' }),
@@ -154,16 +157,7 @@ describe('Cooking & Gardening — parallel group (year cluster)', () => {
     expect(y1.slot_number).toBe(y2.slot_number);
   });
 
-  test('parallel CG group blocks are always is_double=true', () => {
-    const assignments = [
-      makeCG({ id: 'cg1', teacher_id: 'tcg', class_name: 'Y1', periods_per_week: 1, parallel_group: 'CG-Cluster1' }),
-      makeCG({ id: 'cg2', teacher_id: 'tcg', class_name: 'Y2', periods_per_week: 1, parallel_group: 'CG-Cluster1' }),
-    ];
-    const { placed } = generateTimetable(assignments, SLOTS_WITH_CG_LABELS, []);
-    placed.forEach(e => expect(e.is_double).toBe(true));
-  });
-
-  test('two different CG clusters placed at different valid pairs', () => {
+  test('two different CG clusters placed at valid anchor slots', () => {
     const assignments = [
       makeCG({ id: 'cg1', teacher_id: 'tcg1', class_name: 'Y1', periods_per_week: 1, parallel_group: 'CG-Cluster1' }),
       makeCG({ id: 'cg2', teacher_id: 'tcg1', class_name: 'Y2', periods_per_week: 1, parallel_group: 'CG-Cluster1' }),
@@ -173,10 +167,7 @@ describe('Cooking & Gardening — parallel group (year cluster)', () => {
     const { placed, unplaced } = generateTimetable(assignments, SLOTS_WITH_CG_LABELS, []);
     expect(unplaced).toHaveLength(0);
     expect(placed).toHaveLength(4);
-
-    // All blocks must start at a valid CG slot
-    const validStarts = new Set([0, 6]);
-    placed.forEach(e => expect(validStarts.has(e.slot_number)).toBe(true));
+    placed.forEach(e => expect(CG_VALID_STARTS.has(e.slot_number)).toBe(true));
   });
 });
 
@@ -189,9 +180,7 @@ describe('Cooking & Gardening — fallback (no valid slot labels)', () => {
       SLOTS_NO_LABELS,
       []
     );
-    // Should still place both periods (as regular double-period, via mergeDoubleClasses)
     expect(unplaced).toHaveLength(0);
-    // Either 1 merged double or 2 singles depending on whether they land consecutively
     expect(placed.length).toBeGreaterThanOrEqual(1);
     expect(placed.length).toBeLessThanOrEqual(2);
   });
