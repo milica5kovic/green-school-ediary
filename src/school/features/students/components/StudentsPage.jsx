@@ -644,7 +644,7 @@ const AddStudentModal = ({ student, primaryColor, onClose, onSave }) => {
                 onChange={(e) => setFormData({ ...formData, class_name: e.target.value })}
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none"
               >
-                {['Y1a','Y1b','Y1c','Y2','Y3','Y4','Y5','Y6a','Y6b','Y7','Y8','Y9'].map(c =>
+                {['Y1a','Y1b','Y1c','Y2a','Y2b','Y3','Y4','Y5','Y6a','Y6b','Y7','Y8','Y9'].map(c =>
                   <option key={c} value={c}>{c}</option>
                 )}
               </select>
