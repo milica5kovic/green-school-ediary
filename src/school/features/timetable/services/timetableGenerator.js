@@ -716,8 +716,24 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
   // order. Group siblings placed along the way keep their sync.
   // ============================================================
   const totalWeeklySlots = DAYS.length * slotNumbers.length;
-  const isConstrainedTeacherTask = (task) =>
-    (teacherFreeSlots[task.teacher_id] ?? totalWeeklySlots) <= totalWeeklySlots * 0.6;
+
+  // How many periods each teacher must deliver in total
+  const teacherRequiredPeriods = {};
+  assignments.forEach(a => {
+    teacherRequiredPeriods[a.teacher_id] =
+      (teacherRequiredPeriods[a.teacher_id] || 0) + (a.periods_per_week || 1);
+  });
+
+  // Constrained = little availability OR little slack between what the
+  // teacher CAN work and what they MUST teach. A teacher free 25 of 35
+  // slots but needing 18 periods (slack 7) is tighter than a full-timer
+  // with 35 free and 10 periods (slack 25) — schedule the former first.
+  const CONSTRAINED_SLACK = 10;
+  const isConstrainedTeacherTask = (task) => {
+    const free = teacherFreeSlots[task.teacher_id] ?? totalWeeklySlots;
+    const required = teacherRequiredPeriods[task.teacher_id] || 0;
+    return free <= totalWeeklySlots * 0.6 || (free - required) <= CONSTRAINED_SLACK;
+  };
 
   // Round 1: part-time / heavily blocked teachers
   cgTasks.filter(isConstrainedTeacherTask).forEach(processCGTask);

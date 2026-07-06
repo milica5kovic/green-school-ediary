@@ -91,6 +91,38 @@ describe('Part-time teacher priority', () => {
   });
 });
 
+describe('Slack-based teacher priority', () => {
+  test('teacher with little slack (free minus required) is fully placed', () => {
+    // tm mirrors Marija: 10 of 30 slots blocked (20 free — more than the
+    // 60% availability cutoff) but must deliver 16 periods → slack 4.
+    // A competing full-timer wants doubles in the same classes.
+    const blocked = [];
+    for (let s = 1; s <= 2; s++) DAYS.forEach(d => blocked.push([d, s]));
+    // tm available everywhere EXCEPT slots 1 and 2 every day (10 blocked)
+    const tmAvailability = blocked.map(([d, s]) => ({
+      teacher_id: 'tm', day_of_week: d, slot_number: s, is_available: false,
+    }));
+
+    const classes = ['Y3', 'Y4', 'Y5', 'Y7'];
+    const assignments = [];
+    classes.forEach((c, i) => {
+      assignments.push({ id: `m${i}`, teacher_id: 'tm', subject: 'French', class_name: c, periods_per_week: 4, parallel_group: null });
+      assignments.push({ id: `f${i}`, teacher_id: `tf${i}`, subject: 'Maths', class_name: c, periods_per_week: 10, parallel_group: null });
+    });
+
+    const { placed, unplaced } = generateTimetable(assignments, SLOTS_6, tmAvailability);
+    const tmUnplaced = unplaced.filter(u => u.teacher_id === 'tm');
+    expect(tmUnplaced).toHaveLength(0);
+    const tmPeriods = placed.filter(p => p.teacher_id === 'tm')
+      .reduce((n, p) => n + (p.is_double ? 2 : 1), 0);
+    expect(tmPeriods).toBe(16);
+    // tm never scheduled in a blocked slot
+    placed.filter(p => p.teacher_id === 'tm').forEach(p => {
+      expect([1, 2]).not.toContain(p.slot_number);
+    });
+  });
+});
+
 describe('Phase 5 — repair by displacing a blocking lesson', () => {
   test('moves another class out of the way instead of leaving the task unplaced', () => {
     // tx is available ONLY Monday slots 1+2. ty is available ONLY Monday
