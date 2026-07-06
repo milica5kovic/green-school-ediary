@@ -29,11 +29,18 @@ BEGIN
 
 -- ============================================================
 -- 1. INSERT NEW TEACHERS
+-- (no unique constraint on teachers.email, so guard with NOT EXISTS)
 -- ============================================================
-INSERT INTO teachers (id, school_id, full_name, email, role, created_at) VALUES
-  (gen_random_uuid(), sid, 'Ms. Teodora Vasic',     'teodora.vasic@greenschool.edu',     'teacher', NOW()),
-  (gen_random_uuid(), sid, 'Ms. Andjela Kovacevic', 'andjela.kovacevic@greenschool.edu', 'teacher', NOW())
-ON CONFLICT (email) DO NOTHING;
+INSERT INTO teachers (id, school_id, full_name, email, role, created_at)
+SELECT gen_random_uuid(), sid, v.full_name, v.email, 'teacher', NOW()
+FROM (VALUES
+  ('Ms. Teodora Vasic',     'teodora.vasic@greenschool.edu'),
+  ('Ms. Andjela Kovacevic', 'andjela.kovacevic@greenschool.edu')
+) AS v(full_name, email)
+WHERE NOT EXISTS (
+  SELECT 1 FROM teachers t
+  WHERE t.school_id = sid AND t.email = v.email
+);
 
 SELECT id INTO t_mirjana FROM teachers WHERE school_id = sid AND full_name = 'Ms. Mirjana Ivanovic';
 SELECT id INTO t_teodora FROM teachers WHERE school_id = sid AND full_name = 'Ms. Teodora Vasic';
