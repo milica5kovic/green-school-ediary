@@ -49,25 +49,14 @@ async function loadImageBase64(imageUrl) {
  * @param {string} opts.filterValue   - class name or teacher name
  * @param {Array}  opts.teachers      - all teachers (for name lookup)
  */
-export async function exportTimetablePDF({
-  entries = [],
-  timeSlots = [],
-  schoolName = 'School',
-  logoUrl = null,
-  primaryColor = '#22c55e',
-  filterType = 'all',
-  filterValue = '',
-  teachers = [],
+function renderTimetablePage(doc, {
+  entries, timeSlots, schoolName, logoData, primaryColor,
+  subtitle, perspective, teachers,
 }) {
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const W = doc.internal.pageSize.getWidth();   // 297mm (landscape)
-  const H = doc.internal.pageSize.getHeight();  // 210mm (landscape)
   const headerRgb = hexToRgb(primaryColor);
+  const headerTopY = 10;
 
-  // ---- Header ----
-  let headerTopY = 10;
-
-  const logoData = await loadImageBase64(logoUrl);
   if (logoData) {
     const maxH = 18;
     const ratio = logoData.width / logoData.height;
@@ -80,11 +69,6 @@ export async function exportTimetablePDF({
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(20, 20, 20);
   doc.text(schoolName, W / 2, headerTopY + 6, { align: 'center' });
-
-  // Subtitle
-  let subtitle = 'School Timetable';
-  if (filterType === 'class' && filterValue) subtitle = `Class Timetable — ${filterValue}`;
-  if (filterType === 'teacher' && filterValue) subtitle = `Teacher Timetable — ${filterValue}`;
 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
@@ -126,8 +110,8 @@ export async function exportTimetablePDF({
           const teacherName =
             e.teacher?.full_name || teacherMap[e.teacher_id]?.full_name || '';
           const doubleMarker = e.is_double ? ' ×2' : '';
-          if (filterType === 'class') return `${e.subject}${doubleMarker}\n${teacherName}`;
-          if (filterType === 'teacher') return `${e.class_name} • ${e.subject}${doubleMarker}`;
+          if (perspective === 'class') return `${e.subject}${doubleMarker}\n${teacherName}`;
+          if (perspective === 'teacher') return `${e.class_name} • ${e.subject}${doubleMarker}`;
           return `${e.class_name}: ${e.subject}${doubleMarker}`;
         });
         row.push(lines.join('\n'));
@@ -177,8 +161,11 @@ export async function exportTimetablePDF({
       }
     },
   });
+}
 
-  // ---- Footer ----
+function addFooter(doc, schoolName) {
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
   const pageCount = doc.internal.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
@@ -186,8 +173,42 @@ export async function exportTimetablePDF({
     doc.setTextColor(190, 190, 190);
     doc.text(schoolName, W / 2, H - 5, { align: 'center' });
   }
+}
 
-  // ---- Save ----
+export async function exportTimetablePDF({
+  entries = [],
+  timeSlots = [],
+  schoolName = 'School',
+  logoUrl = null,
+  primaryColor = '#22c55e',
+  filterType = 'all',
+  filterValue = '',
+  teachers = [],
+}) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const logoData = await loadImageBase64(logoUrl);
+
+  let subtitle = 'School Timetable';
+  if (filterType === 'class' && filterValue) subtitle = `Class Timetable — ${filterValue}`;
+  if (filterType === 'teacher' && filterValue) subtitle = `Teacher Timetable — ${filterValue}`;
+
+  // Only the filtered lessons belong on the page
+  const teacherNameOf = (e) =>
+    e.teacher?.full_name || teachers.find(t => t.id === e.teacher_id)?.full_name || '';
+  let pageEntries = entries;
+  if (filterType === 'class' && filterValue) {
+    pageEntries = entries.filter(e => e.class_name === filterValue);
+  } else if (filterType === 'teacher' && filterValue) {
+    pageEntries = entries.filter(e => teacherNameOf(e) === filterValue);
+  }
+
+  renderTimetablePage(doc, {
+    entries: pageEntries, timeSlots, schoolName, logoData, primaryColor,
+    subtitle, perspective: filterType, teachers,
+  });
+
+  addFooter(doc, schoolName);
+
   const safeName = filterValue?.replace(/\s+/g, '-') || '';
   const filename =
     filterType === 'class'   ? `timetable-class-${safeName}.pdf` :
@@ -195,4 +216,64 @@ export async function exportTimetablePDF({
                                `timetable-all.pdf`;
 
   doc.save(filename);
+}
+
+/**
+ * Export a timetable BOOK — one page per class (for students/parents)
+ * or one page per teacher — in a single PDF.
+ *
+ * @param {Object} opts
+ * @param {'classes'|'teachers'} opts.mode
+ * @param {Array}  opts.entries    - timetable_entries (with .teacher nested)
+ * @param {Array}  opts.timeSlots
+ * @param {Array}  opts.classes    - class names (for mode 'classes')
+ * @param {Array}  opts.teachers   - teacher rows (for lookup + mode 'teachers')
+ * @param {string} opts.schoolName
+ * @param {string} opts.logoUrl
+ * @param {string} opts.primaryColor
+ */
+export async function exportTimetableBookPDF({
+  mode = 'classes',
+  entries = [],
+  timeSlots = [],
+  classes = [],
+  teachers = [],
+  schoolName = 'School',
+  logoUrl = null,
+  primaryColor = '#22c55e',
+}) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const logoData = await loadImageBase64(logoUrl);
+
+  const pages = mode === 'classes'
+    ? [...classes].sort().map(c => ({
+        subtitle: `Class Timetable — ${c}`,
+        perspective: 'class',
+        entries: entries.filter(e => e.class_name === c),
+      }))
+    : [...teachers]
+        .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''))
+        .map(t => ({
+          subtitle: `Teacher Timetable — ${t.full_name}`,
+          perspective: 'teacher',
+          entries: entries.filter(e => e.teacher_id === t.id),
+        }))
+        // skip teachers with no lessons — no point printing empty grids
+        .filter(p => p.entries.length > 0);
+
+  if (pages.length === 0) return;
+
+  pages.forEach((page, idx) => {
+    if (idx > 0) doc.addPage();
+    renderTimetablePage(doc, {
+      entries: page.entries,
+      timeSlots, schoolName, logoData, primaryColor,
+      subtitle: page.subtitle,
+      perspective: page.perspective,
+      teachers,
+    });
+  });
+
+  addFooter(doc, schoolName);
+  doc.save(mode === 'classes' ? 'timetables-all-classes.pdf' : 'timetables-all-teachers.pdf');
 }

@@ -7,7 +7,7 @@ import { classAllowedInSlot } from '../services/timetableGenerator';
 import { useBranding } from '../../../../core/context/BrandingContext';
 import { useTenant } from '../../../../core/context/TenantContext';
 import { useTimetable } from '../hooks/useTimetable';
-import { exportTimetablePDF } from '../services/timetablePdfExport';
+import { exportTimetablePDF, exportTimetableBookPDF } from '../services/timetablePdfExport';
 import { exportDutiesPDF } from '../services/dutiesPdfExport';
 import { DutyService } from '../services/dutyService';
 import { tenantSupabase } from '../../../../core/infrastructure/supabaseClient';
@@ -277,6 +277,21 @@ export default function TimetableMakerPage() {
       filterType: pdfFilter.type,
       filterValue: pdfFilter.type === 'teacher' ? filterTeacher?.full_name : pdfFilter.value,
       teachers: tt.teachers,
+    });
+  };
+
+  // One PDF, one page per class (students) or per teacher
+  const handleExportBook = async (mode) => {
+    const exportEntries = viewMode === 'draft' ? tt.draftEntries : tt.publishedEntries;
+    await exportTimetableBookPDF({
+      mode,
+      entries: exportEntries,
+      timeSlots: tt.timeSlots,
+      classes: tt.classes,
+      teachers: tt.teachers,
+      schoolName,
+      logoUrl,
+      primaryColor,
     });
   };
 
@@ -693,6 +708,24 @@ export default function TimetableMakerPage() {
                   >
                     <Download size={13} />
                     Export PDF
+                  </button>
+                  <button
+                    onClick={() => handleExportBook('classes')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border-2 transition-colors"
+                    style={{ borderColor: primaryColor, color: primaryColor }}
+                    title="One PDF — a page for every class (for students and parents)"
+                  >
+                    <Download size={13} />
+                    All classes
+                  </button>
+                  <button
+                    onClick={() => handleExportBook('teachers')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border-2 transition-colors"
+                    style={{ borderColor: primaryColor, color: primaryColor }}
+                    title="One PDF — a page for every teacher"
+                  >
+                    <Download size={13} />
+                    All teachers
                   </button>
                 </div>
               )}
