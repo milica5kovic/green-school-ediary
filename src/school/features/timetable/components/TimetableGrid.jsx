@@ -362,6 +362,7 @@ export default function TimetableGrid({
   onSetCell,
   onDeleteCell,
   onMoveCell,
+  onMoveGroup,
   onSwapCells,
   saving,
   viewMode,
@@ -432,21 +433,37 @@ export default function TimetableGrid({
     return idx >= 0 && idx < sortedSlots.length - 1 ? sortedSlots[idx + 1] : null;
   };
 
-  // Check if dropping activeEntry at [targetDay, targetSlot] is valid
+  // Entries of the same parallel group sitting at the same day+slot —
+  // they move TOGETHER when one of them is dragged (French+German,
+  // English+ESL, combined C&G...).
+  const groupCompanions = (entry) =>
+    entry?.parallel_group
+      ? entries.filter(e =>
+          e.id !== entry.id &&
+          e.parallel_group === entry.parallel_group &&
+          e.day_of_week === entry.day_of_week &&
+          e.slot_number === entry.slot_number
+        )
+      : [];
+
+  // Check if dropping activeEntry (plus its group companions) at
+  // [targetDay, targetSlot] is valid — every mover must fit.
   const isValidDropTarget = (entry, targetDay, targetSlot) => {
     if (!entry) return false;
+    const movers = [entry, ...groupCompanions(entry)];
     // Pre-period (slot 0) is reserved for Y7–Y9
-    if (!classAllowedInSlot(entry.class_name, targetSlot)) return false;
-    const slotsToCheck = entry.is_double ? [targetSlot, targetSlot + 1] : [targetSlot];
-    for (const slot of slotsToCheck) {
-      const cellEntries = allLookup[targetDay]?.[slot] || [];
-      const otherEntries = cellEntries.filter(e => e.id !== entry.id);
-      if (otherEntries.some(e => e.teacher_id === entry.teacher_id)) return false;
-      if (otherEntries.some(e => e.class_name === entry.class_name)) return false;
-      // Also check double-period entries from slot-1 that visually consume this slot
-      const prevDoubles = (allLookup[targetDay]?.[slot - 1] || []).filter(e => e.id !== entry.id && e.is_double);
-      if (prevDoubles.some(e => e.teacher_id === entry.teacher_id)) return false;
-      if (prevDoubles.some(e => e.class_name === entry.class_name)) return false;
+    if (movers.some(m => !classAllowedInSlot(m.class_name, targetSlot))) return false;
+    const movingIds = new Set(movers.map(m => m.id));
+    for (const m of movers) {
+      const slotsToCheck = m.is_double ? [targetSlot, targetSlot + 1] : [targetSlot];
+      for (const slot of slotsToCheck) {
+        const cellEntries = (allLookup[targetDay]?.[slot] || []).filter(e => !movingIds.has(e.id));
+        // Also double-period entries from slot-1 that visually consume this slot
+        const prevDoubles = (allLookup[targetDay]?.[slot - 1] || []).filter(e => !movingIds.has(e.id) && e.is_double);
+        const others = [...cellEntries, ...prevDoubles];
+        if (others.some(e => e.teacher_id === m.teacher_id)) return false;
+        if (others.some(e => e.class_name === m.class_name)) return false;
+      }
     }
     return true;
   };
@@ -515,6 +532,14 @@ export default function TimetableGrid({
 
     const [targetDay, targetSlot] = over.id.toString().split('|').map(Number);
     const dragged = entries.find(e => e.id === active.id);
+    const companions = groupCompanions(dragged);
+
+    // Grouped lessons move as one block — all or nothing
+    if (companions.length > 0) {
+      if (!isValidDropTarget(dragged, targetDay, targetSlot)) return;
+      await onMoveGroup([dragged.id, ...companions.map(c => c.id)], targetDay, targetSlot);
+      return;
+    }
 
     if (!isValidDropTarget(dragged, targetDay, targetSlot)) {
       // Collect all entries occupying the target slot:

@@ -26,7 +26,7 @@ import StaffProjectionTab from './StaffProjectionTab';
 // ============================================================
 const FINDER_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
-function UnplacedSlotFinder({ task, timeSlots, draftEntries, isTeacherAvailable, onPlace, saving }) {
+function UnplacedSlotFinder({ task, timeSlots, draftEntries, isTeacherAvailable, onPlace, onSwapPlace, saving }) {
   const sortedSlots = [...timeSlots].sort((a, b) => a.slot_number - b.slot_number);
   const occupies = (e, day, slot) =>
     e.day_of_week === day && (e.slot_number === slot || (e.is_double && e.slot_number + 1 === slot));
@@ -82,10 +82,25 @@ function UnplacedSlotFinder({ task, timeSlots, draftEntries, isTeacherAvailable,
                   );
                 }
                 if (info.type === 'swap') {
+                  const movable = !info.entry.is_double && !info.entry.parallel_group;
+                  if (movable) {
+                    return (
+                      <td key={d} className="p-0.5">
+                        <button
+                          disabled={saving}
+                          onClick={() => onSwapPlace(d, s.slot_number, info.entry)}
+                          className={`${base} w-full bg-amber-100 border-amber-300 text-amber-700 font-semibold hover:bg-amber-200 cursor-pointer flex items-center`}
+                          title={`Click to move ${info.entry.subject} to another free slot and place ${task.subject} here`}
+                        >
+                          <span className="truncate">⇄ {info.entry.subject}</span>
+                        </button>
+                      </td>
+                    );
+                  }
                   return (
                     <td key={d} className="p-0.5">
-                      <div className={`${base} bg-amber-100 border-amber-300 text-amber-700 flex items-center`}
-                        title={`Teacher is free, but ${task.class_name} has ${info.entry.subject} here (${info.entry.teacher?.full_name || ''})`}>
+                      <div className={`${base} bg-amber-50 border-amber-200 text-amber-500 flex items-center`}
+                        title={`${task.class_name} has ${info.entry.subject} here — it's a ${info.entry.is_double ? 'double period' : 'grouped lesson'}, drag it manually in the grid`}>
                         <span className="truncate">{info.entry.subject}</span>
                       </div>
                     </td>
@@ -122,7 +137,7 @@ function UnplacedSlotFinder({ task, timeSlots, draftEntries, isTeacherAvailable,
       </table>
       <div className="flex gap-3 mt-2 text-[10px] text-gray-500">
         <span><span className="inline-block w-2.5 h-2.5 rounded bg-green-200 border border-green-300 mr-1" />free — click to place</span>
-        <span><span className="inline-block w-2.5 h-2.5 rounded bg-amber-200 border border-amber-300 mr-1" />class busy (swap candidate)</span>
+        <span><span className="inline-block w-2.5 h-2.5 rounded bg-amber-200 border border-amber-300 mr-1" />⇄ class busy — click to auto-swap</span>
         <span><span className="inline-block w-2.5 h-2.5 rounded bg-red-100 border border-red-200 mr-1" />teacher teaching</span>
         <span><span className="inline-block w-2.5 h-2.5 rounded bg-gray-100 border border-gray-200 mr-1" />unavailable</span>
       </div>
@@ -166,6 +181,25 @@ export default function TimetableMakerPage() {
     setFinderIndex(null);
     setPlacedManually(new Set());
   }, [tt.unplacedTasks]);
+
+  // Find a new feasible slot for a lesson that blocks a finder cell
+  const findRelocation = (blocker) => {
+    const sorted = [...tt.timeSlots].sort((a, b) => a.slot_number - b.slot_number);
+    const occupies = (e, day, slot) =>
+      e.day_of_week === day && (e.slot_number === slot || (e.is_double && e.slot_number + 1 === slot));
+    for (let d = 0; d < 5; d++) {
+      for (const s of sorted) {
+        const slot = s.slot_number;
+        if (d === blocker.day_of_week && slot === blocker.slot_number) continue;
+        if (!classAllowedInSlot(blocker.class_name, slot)) continue;
+        if (!tt.isTeacherAvailable(blocker.teacher_id, d, slot)) continue;
+        if (tt.draftEntries.some(e => e.id !== blocker.id && e.class_name === blocker.class_name && occupies(e, d, slot))) continue;
+        if (tt.draftEntries.some(e => e.id !== blocker.id && e.teacher_id === blocker.teacher_id && occupies(e, d, slot))) continue;
+        return { day: d, slot };
+      }
+    }
+    return null;
+  };
 
   // ---- Derived ----
   const hasDraft = tt.draftEntries.length > 0;
@@ -314,6 +348,24 @@ export default function TimetableMakerPage() {
                     isTeacherAvailable={tt.isTeacherAvailable}
                     saving={tt.saving}
                     onPlace={async (day, slot) => {
+                      await tt.manualSetCell({
+                        teacher_id: t.teacher_id,
+                        subject: t.subject,
+                        class_name: t.class_name,
+                        day_of_week: day,
+                        slot_number: slot,
+                      });
+                      setPlacedManually(prev => new Set([...prev, i]));
+                      setFinderIndex(null);
+                    }}
+                    onSwapPlace={async (day, slot, blocker) => {
+                      const home = findRelocation(blocker);
+                      if (!home) {
+                        tt.setError(`No free slot found for ${blocker.subject} (${blocker.class_name}) — drag it manually in the grid first.`);
+                        return;
+                      }
+                      const moved = await tt.moveDraftEntry(blocker.id, home.day, home.slot);
+                      if (!moved) return;
                       await tt.manualSetCell({
                         teacher_id: t.teacher_id,
                         subject: t.subject,
@@ -597,6 +649,7 @@ export default function TimetableMakerPage() {
               onSetCell={tt.manualSetCell}
               onDeleteCell={tt.deleteDraftEntry}
               onMoveCell={tt.moveDraftEntry}
+              onMoveGroup={tt.moveDraftGroup}
               onSwapCells={tt.swapDraftEntries}
               saving={tt.saving}
               viewMode={viewMode}

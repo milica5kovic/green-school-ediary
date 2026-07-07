@@ -868,6 +868,9 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
   // no double) can move somewhere else, move it and place our task in
   // the freed slot. This is exactly what a human does by hand.
   const tryRepair = (task) => {
+    // Grouped lessons must never be placed solo — repair only handles
+    // independent tasks (grouped ones are resolved atomically in Phase 3).
+    if (task.parallel_group) return false;
     for (const day of DAYS) {
       for (const slot of slotNumbers) {
         if (!classAllowedInSlot(task.class_name, slot)) continue;
@@ -920,6 +923,74 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     // A task queued in round 1 may have been placed in round 2 (or as a
     // group sibling) — skip it so it isn't scheduled twice.
     if (task._placed) continue;
+
+    // ── Grouped lessons stay ATOMIC ──────────────────────────
+    // French+German, English+ESL, Serbian pairs and combined C&G must
+    // NEVER be split: either the whole occurrence places together at
+    // one slot, or it stays unplaced for manual handling.
+    if (task.parallel_group) {
+      const mates = unplacedTaskRefs.filter(t =>
+        !t._placed &&
+        t.parallel_group === task.parallel_group &&
+        t._parallelIndex === task._parallelIndex
+      );
+      const committed = parallelGroupSlots[task.parallel_group]?.[task._parallelIndex];
+
+      const tryPlaceSynced = (relaxCap) => {
+        if (committed) {
+          // Part of this occurrence is already on the grid —
+          // join it exactly there or give up (never desync).
+          if (committed.slotB !== undefined) {
+            if (mates.every(m => canPlaceDouble(m, committed.day, committed.slotA, committed.slotB, relaxCap))) {
+              mates.forEach(m => commitDouble(m, committed.day, committed.slotA, committed.slotB));
+              return true;
+            }
+            return false;
+          }
+          if (mates.every(m => canPlace(m, committed.day, committed.slot, relaxCap))) {
+            mates.forEach(m => commitTask(m, committed.day, committed.slot));
+            return true;
+          }
+          return false;
+        }
+        if (task._isDouble) {
+          for (const day of DAYS) {
+            for (const [slotA, slotB] of validDoublePairs) {
+              if (!mates.every(m => canPlaceDouble(m, day, slotA, slotB, relaxCap))) continue;
+              if (!parallelGroupSlots[task.parallel_group]) parallelGroupSlots[task.parallel_group] = [];
+              parallelGroupSlots[task.parallel_group][task._parallelIndex] = { day, slotA, slotB };
+              mates.forEach(m => commitDouble(m, day, slotA, slotB));
+              return true;
+            }
+          }
+          return false;
+        }
+        for (const day of DAYS) {
+          for (const slot of slotNumbers) {
+            if (!mates.every(m => canPlace(m, day, slot, relaxCap))) continue;
+            if (!parallelGroupSlots[task.parallel_group]) parallelGroupSlots[task.parallel_group] = [];
+            parallelGroupSlots[task.parallel_group][task._parallelIndex] = { day, slot };
+            mates.forEach(m => commitTask(m, day, slot));
+            return true;
+          }
+        }
+        return false;
+      };
+
+      if (tryPlaceSynced(false) || tryPlaceSynced(true)) continue;
+
+      const periods = task._isDouble ? 2 : 1;
+      for (let i = 0; i < periods; i++) {
+        unplaced.push({
+          teacher_id: task.teacher_id,
+          subject: task.subject,
+          class_name: task.class_name,
+          reason: diagnoseTask(task),
+        });
+      }
+      continue;
+    }
+
     if (task._isDouble) {
       const d = findBestDouble(task, false);
       if (d) { commitDouble(task, d.day, d.slotA, d.slotB); continue; }

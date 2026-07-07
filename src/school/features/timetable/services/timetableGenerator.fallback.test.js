@@ -19,23 +19,43 @@ function availableOnly(teacher_id, allowed) {
 }
 
 describe('Phase 3 — relaxed fallback for all subjects', () => {
-  test('parallel-group siblings with no common slot are placed out of sync instead of unplaced', () => {
+  test('parallel-group lessons are NEVER split — unplaced together when no common slot', () => {
     // t1 free everywhere EXCEPT day0/slot1; t2 free ONLY day0/slot1.
-    // No common slot → group sync fails → Phase 3 places each separately.
+    // No common slot exists. Splitting the pair would leave half the
+    // class without its option lesson, so both must stay unplaced.
     const assignments = [
-      { id: 'a1', teacher_id: 't1', subject: 'Music', class_name: 'Y3', periods_per_week: 1, parallel_group: 'G-Music' },
-      { id: 'a2', teacher_id: 't2', subject: 'Music', class_name: 'Y4', periods_per_week: 1, parallel_group: 'G-Music' },
+      { id: 'a1', teacher_id: 't1', subject: 'French', class_name: 'Y3', periods_per_week: 1, parallel_group: 'Y3-LANG' },
+      { id: 'a2', teacher_id: 't2', subject: 'German', class_name: 'Y3', periods_per_week: 1, parallel_group: 'Y3-LANG' },
     ];
     const availability = [
       { teacher_id: 't1', day_of_week: 0, slot_number: 1, is_available: false },
       ...availableOnly('t2', [[0, 1]]),
     ];
     const { placed, unplaced } = generateTimetable(assignments, SLOTS_6, availability);
+    expect(placed).toHaveLength(0);
+    expect(unplaced).toHaveLength(2);
+    unplaced.forEach(u => expect(u.reason).toBeTruthy());
+  });
+
+  test('parallel-group occurrence placed together via synced fallback', () => {
+    // Both teachers share exactly ONE common slot (day2/slot3) — the
+    // synced fallback must find it and place French+German together.
+    const assignments = [
+      { id: 'a1', teacher_id: 't1', subject: 'French', class_name: 'Y3', periods_per_week: 1, parallel_group: 'Y3-LANG' },
+      { id: 'a2', teacher_id: 't2', subject: 'German', class_name: 'Y3', periods_per_week: 1, parallel_group: 'Y3-LANG' },
+    ];
+    const availability = [
+      ...availableOnly('t1', [[2, 3], [0, 1]]),
+      ...availableOnly('t2', [[2, 3], [4, 5]]),
+    ];
+    const { placed, unplaced } = generateTimetable(assignments, SLOTS_6, availability);
     expect(unplaced).toHaveLength(0);
     expect(placed).toHaveLength(2);
-    const t2entry = placed.find(p => p.teacher_id === 't2');
-    expect(t2entry.day_of_week).toBe(0);
-    expect(t2entry.slot_number).toBe(1);
+    const [a, b] = placed;
+    expect(a.day_of_week).toBe(b.day_of_week);
+    expect(a.slot_number).toBe(b.slot_number);
+    expect(a.day_of_week).toBe(2);
+    expect(a.slot_number).toBe(3);
   });
 
   test('a failed double splits into two single periods', () => {
