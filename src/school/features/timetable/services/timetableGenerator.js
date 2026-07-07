@@ -840,6 +840,40 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     return 'teacher already teaching another class in every free slot of this class';
   };
 
+  // Group-aware diagnosis: a grouped occurrence (French+German block,
+  // combined C&G, English+ESL...) needs ONE slot where EVERY class is
+  // free and EVERY teacher available+idle at the same time. Diagnosing
+  // a single member would blame the wrong thing (e.g. "daily limit")
+  // when the real blocker is a sibling class/teacher.
+  const diagnoseGroupTask = (mates) => {
+    const groupOf = mates[0]?.parallel_group;
+    const classes = [...new Set(mates.map(m => m.class_name))];
+    const label = `${[...new Set(mates.map(m => m.subject))].join('+')} block (${classes.join(', ')})`;
+    let candidates = 0, classBusyN = 0, blockedN = 0, busyN = 0, freeN = 0;
+    for (const day of DAYS) {
+      for (const slot of slotNumbers) {
+        if (mates.some(m => !classAllowedInSlot(m.class_name, slot))) continue;
+        candidates++;
+        if (mates.some(m => {
+          const g = grid[day][slot][m.class_name];
+          return g && g.parallel_group !== groupOf;
+        })) { classBusyN++; continue; }
+        if (mates.some(m => !isAvailable(m.teacher_id, day, slot))) { blockedN++; continue; }
+        if (mates.some(m =>
+          teacherBusy[day][slot].has(m.teacher_id) &&
+          teacherParallelGroup[day][slot][m.teacher_id] !== groupOf
+        )) { busyN++; continue; }
+        freeN++;
+      }
+    }
+    if (candidates === 0) return `${label}: no slot is allowed for all its classes`;
+    if (freeN > 0) return `${label}: daily subject limit blocks every common free slot`;
+    const max = Math.max(classBusyN, blockedN, busyN);
+    if (max === blockedN) return `${label}: a teacher is unavailable in every common free slot — check Availability`;
+    if (max === busyN) return `${label}: a teacher is teaching elsewhere in every common free slot`;
+    return `${label}: its classes are never free at the same time — move some of their lessons apart`;
+  };
+
   // ---- Move an already-placed entry to a new day/slot (full bookkeeping) ----
   const moveEntry = (entry, newDay, newSlot) => {
     const oldDay = entry.day_of_week, oldSlot = entry.slot_number;
@@ -980,13 +1014,14 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
       if (tryPlaceSynced(false) || tryPlaceSynced(true)) continue;
 
       const periods = task._isDouble ? 2 : 1;
+      const groupReason = diagnoseGroupTask(mates);
       for (let i = 0; i < periods; i++) {
         unplaced.push({
           teacher_id: task.teacher_id,
           subject: task.subject,
           class_name: task.class_name,
           parallel_group: task.parallel_group || null,
-          reason: diagnoseTask(task),
+          reason: groupReason,
         });
       }
       continue;
