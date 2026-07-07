@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Calendar, Settings, Zap, CheckCircle, AlertTriangle,
   Download, Send, Trash2, RefreshCw, UserX, ShieldCheck, Layers, TrendingUp,
 } from 'lucide-react';
+import { classAllowedInSlot } from '../services/timetableGenerator';
 import { useBranding } from '../../../../core/context/BrandingContext';
 import { useTenant } from '../../../../core/context/TenantContext';
 import { useTimetable } from '../hooks/useTimetable';
@@ -17,6 +18,117 @@ import TimetableGrid from './TimetableGrid';
 import SubstitutionSchedule from './SubstitutionSchedule';
 import DutySetup from './DutySetup';
 import StaffProjectionTab from './StaffProjectionTab';
+
+// ============================================================
+// SLOT FINDER — week overview for one unplaced task: where is the
+// teacher free, where does the class have room, what blocks the rest.
+// Green cell = both free → click places the lesson immediately.
+// ============================================================
+const FINDER_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+
+function UnplacedSlotFinder({ task, timeSlots, draftEntries, isTeacherAvailable, onPlace, saving }) {
+  const sortedSlots = [...timeSlots].sort((a, b) => a.slot_number - b.slot_number);
+  const occupies = (e, day, slot) =>
+    e.day_of_week === day && (e.slot_number === slot || (e.is_double && e.slot_number + 1 === slot));
+
+  const cellInfo = (day, slot) => {
+    if (!classAllowedInSlot(task.class_name, slot)) return { type: 'na' };
+    if (!isTeacherAvailable(task.teacher_id, day, slot)) return { type: 'blocked' };
+    const teaching = draftEntries.find(e => e.teacher_id === task.teacher_id && occupies(e, day, slot));
+    if (teaching) return { type: 'teaching', entry: teaching };
+    const classBusy = draftEntries.find(e => e.class_name === task.class_name && occupies(e, day, slot));
+    if (classBusy) return { type: 'swap', entry: classBusy };
+    return { type: 'free' };
+  };
+
+  return (
+    <div className="mt-2 mb-1 bg-white rounded-xl border border-amber-200 p-3">
+      <p className="text-[11px] text-gray-500 mb-2">
+        Week of <strong>{task.teacherName}</strong> vs. <strong>{task.class_name}</strong> —
+        click a <span className="text-green-600 font-semibold">green</span> cell to place {task.subject} there.
+        Yellow = teacher free, but {task.class_name} has the shown lesson (drag it away in the grid, then place).
+      </p>
+      <table className="text-[10px] border-collapse">
+        <thead>
+          <tr>
+            <th className="pr-2 text-left text-gray-400 font-normal">Period</th>
+            {FINDER_DAYS.map(d => (
+              <th key={d} className="px-1 pb-1 text-gray-500 font-semibold text-center w-20">{d}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {sortedSlots.map(s => (
+            <tr key={s.slot_number}>
+              <td className="pr-2 text-gray-500 whitespace-nowrap">
+                {s.label || `Period ${s.slot_number}`}
+                <span className="text-gray-300 ml-1">{s.start_time?.slice(0, 5)}</span>
+              </td>
+              {[0, 1, 2, 3, 4].map(d => {
+                const info = cellInfo(d, s.slot_number);
+                const base = 'h-7 w-20 rounded border text-[9px] leading-tight px-1 overflow-hidden';
+                if (info.type === 'free') {
+                  return (
+                    <td key={d} className="p-0.5">
+                      <button
+                        disabled={saving}
+                        onClick={() => onPlace(d, s.slot_number)}
+                        className={`${base} w-full bg-green-100 border-green-300 text-green-700 font-semibold hover:bg-green-200 cursor-pointer`}
+                        title="Both free — place the lesson here"
+                      >
+                        + Place
+                      </button>
+                    </td>
+                  );
+                }
+                if (info.type === 'swap') {
+                  return (
+                    <td key={d} className="p-0.5">
+                      <div className={`${base} bg-amber-100 border-amber-300 text-amber-700 flex items-center`}
+                        title={`Teacher is free, but ${task.class_name} has ${info.entry.subject} here (${info.entry.teacher?.full_name || ''})`}>
+                        <span className="truncate">{info.entry.subject}</span>
+                      </div>
+                    </td>
+                  );
+                }
+                if (info.type === 'teaching') {
+                  return (
+                    <td key={d} className="p-0.5">
+                      <div className={`${base} bg-red-50 border-red-200 text-red-500 flex items-center`}
+                        title={`Teaching ${info.entry.class_name} (${info.entry.subject})`}>
+                        <span className="truncate">{info.entry.class_name}</span>
+                      </div>
+                    </td>
+                  );
+                }
+                if (info.type === 'blocked') {
+                  return (
+                    <td key={d} className="p-0.5">
+                      <div className={`${base} bg-gray-100 border-gray-200 text-gray-400 flex items-center justify-center`}
+                        title="Teacher marked unavailable (Availability tab)">✕</div>
+                    </td>
+                  );
+                }
+                return (
+                  <td key={d} className="p-0.5">
+                    <div className={`${base} bg-gray-50 border-gray-100 text-gray-300 flex items-center justify-center`}
+                      title="Pre-period — Y7–Y9 only">—</div>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="flex gap-3 mt-2 text-[10px] text-gray-500">
+        <span><span className="inline-block w-2.5 h-2.5 rounded bg-green-200 border border-green-300 mr-1" />free — click to place</span>
+        <span><span className="inline-block w-2.5 h-2.5 rounded bg-amber-200 border border-amber-300 mr-1" />class busy (swap candidate)</span>
+        <span><span className="inline-block w-2.5 h-2.5 rounded bg-red-100 border border-red-200 mr-1" />teacher teaching</span>
+        <span><span className="inline-block w-2.5 h-2.5 rounded bg-gray-100 border border-gray-200 mr-1" />unavailable</span>
+      </div>
+    </div>
+  );
+}
 
 const TABS = [
   { id: 'setup', label: 'Setup', icon: Settings },
@@ -46,6 +158,14 @@ export default function TimetableMakerPage() {
 
   // PDF export state
   const [pdfFilter, setPdfFilter] = useState({ type: 'all', value: '' });
+
+  // Slot-finder state for the unplaced list
+  const [finderIndex, setFinderIndex] = useState(null);
+  const [placedManually, setPlacedManually] = useState(new Set());
+  useEffect(() => {
+    setFinderIndex(null);
+    setPlacedManually(new Set());
+  }, [tt.unplacedTasks]);
 
   // ---- Derived ----
   const hasDraft = tt.draftEntries.length > 0;
@@ -169,18 +289,50 @@ export default function TimetableMakerPage() {
       )}
 
       {/* ---- Unplaced tasks warning ---- */}
-      {hasUnplaced && (
+      {hasUnplaced && tt.unplacedTasks.length > placedManually.size && (
         <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-xl text-sm">
-          <strong>⚠ {tt.unplacedTasks.length} task{tt.unplacedTasks.length !== 1 ? 's' : ''} could not be auto-scheduled:</strong>
+          <strong>
+            ⚠ {tt.unplacedTasks.length - placedManually.size} task
+            {tt.unplacedTasks.length - placedManually.size !== 1 ? 's' : ''} could not be auto-scheduled:
+          </strong>
           <ul className="mt-1 ml-4 list-disc text-xs space-y-0.5">
-            {tt.unplacedTasks.map((t, i) => (
+            {tt.unplacedTasks.map((t, i) => placedManually.has(i) ? null : (
               <li key={i}>
                 {t.class_name} — {t.subject} ({t.teacherName})
                 {t.reason && <span className="text-amber-500"> — {t.reason}</span>}
+                <button
+                  onClick={() => setFinderIndex(finderIndex === i ? null : i)}
+                  className="ml-2 underline font-semibold text-amber-700 hover:text-amber-900"
+                >
+                  {finderIndex === i ? 'hide free slots' : 'find free slots'}
+                </button>
+                {finderIndex === i && (
+                  <UnplacedSlotFinder
+                    task={t}
+                    timeSlots={tt.timeSlots}
+                    draftEntries={tt.draftEntries}
+                    isTeacherAvailable={tt.isTeacherAvailable}
+                    saving={tt.saving}
+                    onPlace={async (day, slot) => {
+                      await tt.manualSetCell({
+                        teacher_id: t.teacher_id,
+                        subject: t.subject,
+                        class_name: t.class_name,
+                        day_of_week: day,
+                        slot_number: slot,
+                      });
+                      setPlacedManually(prev => new Set([...prev, i]));
+                      setFinderIndex(null);
+                    }}
+                  />
+                )}
               </li>
             ))}
           </ul>
-          <p className="text-xs mt-1 text-amber-600">Fix the cause shown next to each task (Availability / Assignments), then use Fill Gaps — or add them manually in the Timetable tab.</p>
+          <p className="text-xs mt-1 text-amber-600">
+            Click "find free slots" to see the teacher's week and place the lesson with one click —
+            or fix the cause (Availability / Assignments) and use Fill Gaps.
+          </p>
         </div>
       )}
 
