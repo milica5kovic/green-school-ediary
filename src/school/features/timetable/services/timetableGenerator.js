@@ -35,13 +35,15 @@ const AFTER_SCHOOL_PENALTY = 2000;
 
 // Pre-period slot (slot 0, 08:20-09:00 before Period 1).
 // Only upper years (Y7, Y8, Y9) start early — lower years can never be
-// scheduled here. Preferred less than regular slots (penalty) but more
-// than after-school, so it absorbs overflow for the upper years.
+// scheduled here. The pre-period should FILL UP FIRST: every upper-year
+// lesson moved to 08:20 frees a regular slot for everyone else
+// (part-timers, combined language blocks, ...), so it gets a BONUS.
 export const PRE_PERIOD_SLOTS = new Set([0]);
 const PRE_PERIOD_CLASS_RE = /^y\s*(7|8|9)\b/i;
 export const classAllowedInSlot = (class_name, slot_number) =>
   !PRE_PERIOD_SLOTS.has(slot_number) || PRE_PERIOD_CLASS_RE.test(class_name || '');
-const PRE_PERIOD_PENALTY = 1200;
+const PRE_PERIOD_BONUS = -25;             // Y7-Y9 lessons gladly start early
+const PRE_PERIOD_BONUS_CONSTRAINED = -80; // tight-schedule teachers even more so
 
 /** Deterministic Fisher-Yates shuffle using an integer seed. */
 function shuffleDeterministic(arr, seed) {
@@ -368,12 +370,12 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     return free <= totalWeeklySlots * 0.6 || (free - required) <= CONSTRAINED_SLACK;
   };
 
-  // Pre-period costs almost nothing for tight-schedule teachers: their
-  // upper-year (Y7-Y9) lessons should gladly start at 08:20 so the
-  // regular slots stay free for everything else.
+  // The pre-period fills up first (bonus = negative penalty): upper-year
+  // singles flow to 08:20, freeing regular slots for part-timers and
+  // combined blocks. Availability and class restrictions still apply.
   const prePeriodPenaltyFor = (task, slot) => {
     if (!PRE_PERIOD_SLOTS.has(slot)) return 0;
-    return isConstrainedTeacherTask(task) ? 50 : PRE_PERIOD_PENALTY;
+    return isConstrainedTeacherTask(task) ? PRE_PERIOD_BONUS_CONSTRAINED : PRE_PERIOD_BONUS;
   };
 
   // ---- Separate tasks into three buckets ----

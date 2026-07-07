@@ -46,9 +46,9 @@ describe('generateTimetable with pre-period slot', () => {
     expect(placed.every(p => p.slot_number !== 0)).toBe(true);
   });
 
-  test('Y9 overflow lands in the pre-period instead of being unplaced', () => {
-    // Fill Y9's whole regular week (6 slots × 5 days = 30) with different
-    // teachers, then one extra subject must use the pre-period.
+  test('Y9 31-period week fits by using the pre-period (nothing unplaced)', () => {
+    // 6 subjects × 5/week + 1 extra = 31 periods for Y9 — more than the
+    // 30 regular slots. With the pre-period it all fits.
     const assignments = [];
     for (let i = 0; i < 6; i++) {
       assignments.push(makeAssignment({
@@ -63,17 +63,21 @@ describe('generateTimetable with pre-period slot', () => {
 
     const { placed, unplaced } = generateTimetable(assignments, SLOTS_WITH_PRE, []);
     expect(unplaced).toHaveLength(0);
+    const totalPeriods = placed.reduce((n, p) => n + (p.is_double ? 2 : 1), 0);
+    expect(totalPeriods).toBe(31);
     const preEntries = placed.filter(p => p.slot_number === 0);
-    expect(preEntries).toHaveLength(1);
-    expect(preEntries[0].class_name).toBe('Y9');
+    expect(preEntries.length).toBeGreaterThanOrEqual(1);
+    preEntries.forEach(p => expect(p.class_name).toBe('Y9'));
   });
 
-  test('pre-period is a last resort — free regular slots win', () => {
+  test('pre-period fills up first — upper-year singles prefer 08:20', () => {
+    // Policy: every Y7-Y9 lesson at the pre-period frees a regular slot
+    // for part-timers and combined blocks, so singles get a bonus there.
     const assignments = [
       makeAssignment({ id: 'a1', teacher_id: 't1', subject: 'History', class_name: 'Y9', periods_per_week: 3 }),
     ];
     const { placed } = generateTimetable(assignments, SLOTS_WITH_PRE, []);
-    expect(placed.every(p => p.slot_number !== 0)).toBe(true);
+    expect(placed.some(p => p.slot_number === 0)).toBe(true);
   });
 
   test('doubles never start in the pre-period', () => {
