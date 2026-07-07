@@ -14,6 +14,20 @@ function hexToRgb(hex) {
     : [34, 120, 80];
 }
 
+// Same palette + hash as the app's timetable chips, so PDF colors match the UI
+const SUBJECT_COLORS = [
+  '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b',
+  '#10b981', '#3b82f6', '#ef4444', '#14b8a6',
+  '#f97316', '#84cc16',
+];
+function subjectColorRgb(subject = '') {
+  let hash = 0;
+  for (const c of subject) hash = (hash * 31 + c.charCodeAt(0)) & 0xffffffff;
+  return hexToRgb(SUBJECT_COLORS[Math.abs(hash) % SUBJECT_COLORS.length]);
+}
+// Soften a color toward white for cell backgrounds
+const pastel = (rgb, strength = 0.15) => rgb.map(v => Math.round(v * strength + 255 * (1 - strength)));
+
 async function loadImageBase64(imageUrl) {
   if (!imageUrl) return null;
   try {
@@ -54,110 +68,170 @@ function renderTimetablePage(doc, {
   subtitle, perspective, teachers,
 }) {
   const W = doc.internal.pageSize.getWidth();   // 297mm (landscape)
+  const H = doc.internal.pageSize.getHeight();  // 210mm (landscape)
   const headerRgb = hexToRgb(primaryColor);
-  const headerTopY = 10;
+
+  // ---- Banner header: full-width colored strip ----
+  const BANNER_H = 24;
+  doc.setFillColor(...headerRgb);
+  doc.rect(0, 0, W, BANNER_H, 'F');
+  // subtle darker accent line under the banner
+  doc.setFillColor(...headerRgb.map(v => Math.round(v * 0.75)));
+  doc.rect(0, BANNER_H, W, 1.2, 'F');
 
   if (logoData) {
-    const maxH = 18;
+    const maxH = 16;
     const ratio = logoData.width / logoData.height;
-    const logoW = Math.min(maxH * ratio, 40);
-    doc.addImage(logoData.data, 'PNG', 10, 8, logoW, maxH);
+    const logoW = Math.min(maxH * ratio, 36);
+    // white card behind the logo so it pops on the colored banner
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(8, 3.5, logoW + 5, maxH + 3, 2, 2, 'F');
+    doc.addImage(logoData.data, 'PNG', 10.5, 5, logoW, maxH);
   }
 
-  // School name — centered
-  doc.setFontSize(15);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(20, 20, 20);
-  doc.text(schoolName, W / 2, headerTopY + 6, { align: 'center' });
+  doc.setFontSize(17);
+  doc.setTextColor(255, 255, 255);
+  doc.text(schoolName, W / 2, 10.5, { align: 'center' });
 
-  doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(80, 80, 80);
-  doc.text(subtitle, W / 2, headerTopY + 13, { align: 'center' });
+  doc.setFontSize(11.5);
+  doc.text(subtitle, W / 2, 18.5, { align: 'center' });
 
-  const tableStartY = headerTopY + 20;
+  doc.setFontSize(7.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text(`School year 2026-27`, W - 8, 8, { align: 'right' });
+
+  const tableStartY = BANNER_H + 4;
 
   // ---- Build table ----
   const sortedSlots = [...timeSlots].sort((a, b) => a.slot_number - b.slot_number);
   const teacherMap = teachers.reduce((acc, t) => { acc[t.id] = t; return acc; }, {});
 
-  // Lookup: lookup[day][slot_number] = array of entries
-  const lookup = {};
+  // Entries starting at each (day, slot)
+  const direct = {};
   DAYS.forEach(d => {
-    lookup[d] = {};
-    sortedSlots.forEach(s => { lookup[d][s.slot_number] = []; });
+    direct[d] = {};
+    sortedSlots.forEach(s => { direct[d][s.slot_number] = []; });
   });
   entries.forEach(e => {
-    if (lookup[e.day_of_week]?.[e.slot_number] !== undefined) {
-      lookup[e.day_of_week][e.slot_number].push(e);
+    if (direct[e.day_of_week]?.[e.slot_number] !== undefined) {
+      direct[e.day_of_week][e.slot_number].push(e);
     }
   });
 
-  const head = [['Period / Time', ...DAY_NAMES]];
+  const cellText = (e) => {
+    const teacherName =
+      e.teacher?.full_name || teacherMap[e.teacher_id]?.full_name || '';
+    if (perspective === 'class') return `${e.subject}\n${teacherName}`;
+    if (perspective === 'teacher') return `${e.subject}\n${e.class_name}`;
+    return `${e.class_name} — ${e.subject}`;
+  };
 
-  const body = sortedSlots.map(slot => {
-    const periodLabel =
-      `${slot.label || `Period ${slot.slot_number}`}\n` +
-      `${slot.start_time.slice(0, 5)} – ${slot.end_time.slice(0, 5)}`;
+  const head = [['Period', ...DAY_NAMES]];
 
-    const row = [periodLabel];
+  // Double periods fill BOTH rows: a pure-double cell merges over the
+  // next period row (rowSpan 2) — no more "×2" markers.
+  const skip = {};
+  DAYS.forEach(d => { skip[d] = new Set(); });
+
+  const body = sortedSlots.map((slot, si) => {
+    const row = [{
+      content:
+        `${slot.label || `Period ${slot.slot_number}`}\n` +
+        `${slot.start_time.slice(0, 5)} – ${slot.end_time.slice(0, 5)}`,
+      _period: true,
+    }];
+
     DAYS.forEach(day => {
-      const cellEntries = lookup[day][slot.slot_number] || [];
+      if (skip[day].has(slot.slot_number)) return; // covered by a rowSpan above
+
+      const startsHere = direct[day][slot.slot_number] || [];
+      const prevSlot = si > 0 ? sortedSlots[si - 1] : null;
+      const carried = prevSlot && prevSlot.slot_number === slot.slot_number - 1 && !skip[day].has(prevSlot.slot_number)
+        ? (direct[day][prevSlot.slot_number] || []).filter(e => e.is_double)
+        : [];
+      const cellEntries = [...carried, ...startsHere];
+
       if (cellEntries.length === 0) {
-        row.push('');
-      } else {
-        const lines = cellEntries.map(e => {
-          const teacherName =
-            e.teacher?.full_name || teacherMap[e.teacher_id]?.full_name || '';
-          const doubleMarker = e.is_double ? ' ×2' : '';
-          if (perspective === 'class') return `${e.subject}${doubleMarker}\n${teacherName}`;
-          if (perspective === 'teacher') return `${e.class_name} • ${e.subject}${doubleMarker}`;
-          return `${e.class_name}: ${e.subject}${doubleMarker}`;
-        });
-        row.push(lines.join('\n'));
+        row.push({ content: '', _empty: true });
+        return;
       }
+
+      const nextSlot = sortedSlots[si + 1];
+      const nextAdjacent = nextSlot && nextSlot.slot_number === slot.slot_number + 1;
+      const canMerge =
+        carried.length === 0 &&
+        startsHere.every(e => e.is_double) &&
+        nextAdjacent &&
+        (direct[day][nextSlot.slot_number] || []).length === 0;
+
+      const cell = {
+        content: [...new Set(cellEntries.map(cellText))].join('\n\n'),
+        _subject: cellEntries[0].subject,
+      };
+      if (canMerge) {
+        cell.rowSpan = 2;
+        skip[day].add(nextSlot.slot_number);
+      }
+      row.push(cell);
     });
     return row;
   });
+
+  // Stretch the table to fill the whole page height
+  const footerSpace = 8;
+  const headH = 9;
+  const rowH = (H - tableStartY - footerSpace - headH) / sortedSlots.length;
 
   autoTable(doc, {
     head,
     body,
     startY: tableStartY,
     theme: 'grid',
+    styles: {
+      lineColor: [255, 255, 255],
+      lineWidth: 0.7,
+    },
     headStyles: {
       fillColor: headerRgb,
       textColor: 255,
       fontStyle: 'bold',
-      fontSize: 8,
+      fontSize: 9.5,
       halign: 'center',
-      cellPadding: 3,
+      valign: 'middle',
+      minCellHeight: headH,
+      cellPadding: 2,
     },
     bodyStyles: {
-      fontSize: 7,
-      cellPadding: { top: 3, right: 3, bottom: 3, left: 3 },
+      fontSize: 8.5,
+      cellPadding: { top: 2, right: 2.5, bottom: 2, left: 2.5 },
       valign: 'middle',
-      textColor: [30, 30, 30],
+      halign: 'center',
+      textColor: [35, 45, 40],
+      minCellHeight: rowH,
     },
-    columnStyles: {
-      0: {
-        cellWidth: 32,
-        fontStyle: 'bold',
-        halign: 'center',
-        fillColor: [245, 247, 245],
-      },
-      1: { halign: 'center' },
-      2: { halign: 'center' },
-      3: { halign: 'center' },
-      4: { halign: 'center' },
-      5: { halign: 'center' },
-    },
-    alternateRowStyles: { fillColor: [250, 253, 250] },
-    margin: { left: 12, right: 12, top: tableStartY },
-    tableWidth: W - 24,
+    columnStyles: (() => {
+      const dayW = (W - 16 - 34) / 5; // equal width for all five days
+      const cols = { 0: { cellWidth: 34 } };
+      for (let i = 1; i <= 5; i++) cols[i] = { cellWidth: dayW, halign: 'center' };
+      return cols;
+    })(),
+    margin: { left: 8, right: 8, top: tableStartY, bottom: footerSpace },
+    tableWidth: W - 16,
     didParseCell(data) {
-      if (data.column.index === 0 && data.section === 'body') {
-        data.cell.styles.fillColor = [238, 248, 242];
+      if (data.section !== 'body') return;
+      const raw = data.cell.raw;
+      if (raw && raw._period) {
+        data.cell.styles.fillColor = pastel(headerRgb, 0.22);
+        data.cell.styles.textColor = headerRgb.map(v => Math.round(v * 0.55));
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.fontSize = 9;
+      } else if (raw && raw._subject) {
+        data.cell.styles.fillColor = pastel(subjectColorRgb(raw._subject));
+        data.cell.styles.fontStyle = 'bold';
+      } else if (raw && raw._empty) {
+        data.cell.styles.fillColor = [248, 249, 250];
       }
     },
   });
@@ -167,11 +241,13 @@ function addFooter(doc, schoolName) {
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const pageCount = doc.internal.getNumberOfPages();
+  const dateStr = new Date().toLocaleDateString('en-GB');
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setFontSize(7);
-    doc.setTextColor(190, 190, 190);
-    doc.text(schoolName, W / 2, H - 5, { align: 'center' });
+    doc.setTextColor(170, 170, 170);
+    doc.text(`${schoolName} — generated ${dateStr}`, W / 2, H - 3.5, { align: 'center' });
+    doc.text(`${i}/${pageCount}`, W - 8, H - 3.5, { align: 'right' });
   }
 }
 
