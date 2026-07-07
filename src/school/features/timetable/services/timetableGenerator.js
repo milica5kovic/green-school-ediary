@@ -985,6 +985,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
           teacher_id: task.teacher_id,
           subject: task.subject,
           class_name: task.class_name,
+          parallel_group: task.parallel_group || null,
           reason: diagnoseTask(task),
         });
       }
@@ -1030,6 +1031,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
         teacher_id: item.task.teacher_id,
         subject: item.task.subject,
         class_name: item.task.class_name,
+        parallel_group: item.task.parallel_group || null,
         reason: diagnoseTask(item.task),
       });
     }

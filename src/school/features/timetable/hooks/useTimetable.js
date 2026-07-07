@@ -461,14 +461,16 @@ export function useTimetable() {
     }
   }, [service, draftEntries, availabilityRecords]);
 
-  const manualSetCell = useCallback(async ({ teacher_id, subject, class_name, day_of_week, slot_number, is_double = false }) => {
+  const manualSetCell = useCallback(async ({ teacher_id, subject, class_name, day_of_week, slot_number, is_double = false, parallel_group = null }) => {
     setSaving(true);
     try {
-      const entry = await service.upsertDraftEntry({ teacher_id, subject, class_name, day_of_week, slot_number, is_double });
+      const entry = await service.upsertDraftEntry({ teacher_id, subject, class_name, day_of_week, slot_number, is_double, parallel_group });
       setDraftEntries(prev => {
         const filtered = prev.filter(
           e => !(e.class_name === class_name && e.day_of_week === day_of_week &&
-            (e.slot_number === slot_number || (is_double && e.slot_number === slot_number + 1)))
+            (e.slot_number === slot_number || (is_double && e.slot_number === slot_number + 1)) &&
+            // same-group entries legitimately share the slot — keep them
+            !(parallel_group && e.parallel_group === parallel_group))
         );
         return [...filtered, entry];
       });

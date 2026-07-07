@@ -225,36 +225,40 @@ export class TimetableService {
     return data ?? [];
   }
 
-  // Upsert a single draft cell (replaces any existing entry for that class+day+slot)
-  async upsertDraftEntry({ teacher_id, subject, class_name, day_of_week, slot_number, is_double = false }) {
+  // Upsert a single draft cell (replaces any existing entry for that
+  // class+day+slot — EXCEPT members of the same parallel group, which
+  // legitimately share the slot as split-class lessons).
+  async upsertDraftEntry({ teacher_id, subject, class_name, day_of_week, slot_number, is_double = false, parallel_group = null }) {
     this._require();
-    // Remove existing entry for this class at this slot
-    await this.supabase
-      .from('timetable_entries')
-      .delete()
-      .eq('school_id', this.schoolId)
-      .eq('status', 'draft')
-      .eq('class_name', class_name)
-      .eq('day_of_week', day_of_week)
-      .eq('slot_number', slot_number);
 
-    // If double class, also clear the next slot for this class (it will be consumed visually)
-    if (is_double) {
-      await this.supabase
+    const clearSlot = async (slotNo) => {
+      const { data: existing } = await this.supabase
         .from('timetable_entries')
-        .delete()
+        .select('id, parallel_group')
         .eq('school_id', this.schoolId)
         .eq('status', 'draft')
         .eq('class_name', class_name)
         .eq('day_of_week', day_of_week)
-        .eq('slot_number', slot_number + 1);
-    }
+        .eq('slot_number', slotNo);
+      const toDelete = (existing || [])
+        .filter(e => !(parallel_group && e.parallel_group === parallel_group))
+        .map(e => e.id);
+      if (toDelete.length > 0) {
+        await this.supabase.from('timetable_entries').delete().in('id', toDelete);
+      }
+    };
+
+    await clearSlot(slot_number);
+    // If double class, also clear the next slot for this class (it will be consumed visually)
+    if (is_double) await clearSlot(slot_number + 1);
 
     const { data, error } = await this.supabase
       .from('timetable_entries')
       .insert([{
         school_id: this.schoolId,
-        teacher_id, subject, class_name, day_of_week, slot_number, is_double, status: 'draft',
+        teacher_id, subject, class_name, day_of_week, slot_number, is_double,
+        parallel_group: parallel_group || null,
+        status: 'draft',
       }])
       .select(`
         *,

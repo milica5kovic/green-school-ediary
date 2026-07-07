@@ -26,27 +26,63 @@ import StaffProjectionTab from './StaffProjectionTab';
 // ============================================================
 const FINDER_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
-function UnplacedSlotFinder({ task, timeSlots, draftEntries, isTeacherAvailable, onPlace, onSwapPlace, saving }) {
+function UnplacedSlotFinder({ task, timeSlots, draftEntries, assignments, teachers, isTeacherAvailable, onPlace, onSwapPlace, saving }) {
   const sortedSlots = [...timeSlots].sort((a, b) => a.slot_number - b.slot_number);
   const occupies = (e, day, slot) =>
     e.day_of_week === day && (e.slot_number === slot || (e.is_double && e.slot_number + 1 === slot));
 
+  // How many periods of an assignment are still missing from the draft
+  const remainingOf = (a) => {
+    const done = draftEntries
+      .filter(e => e.teacher_id === a.teacher_id && e.subject === a.subject && e.class_name === a.class_name)
+      .reduce((n, e) => n + (e.is_double ? 2 : 1), 0);
+    return (a.periods_per_week || 1) - done;
+  };
+
+  // Grouped lesson (French+German × Y6a+Y6b, English+ESL, Serbian pair...):
+  // the WHOLE block lands in one slot, so the finder intersects ALL its
+  // teachers and classes. Members = group assignments still missing periods.
+  const groupMembers = task.parallel_group
+    ? (assignments || []).filter(a => a.parallel_group === task.parallel_group && remainingOf(a) > 0)
+    : [];
+  const members = groupMembers.length > 0 ? groupMembers : [task];
+  const teachersInvolved = [...new Set(members.map(m => m.teacher_id))];
+  const classesInvolved = [...new Set(members.map(m => m.class_name))];
+  const subjectsLabel = [...new Set(members.map(m => m.subject))].join(' + ');
+  const classesLabel = classesInvolved.join(', ');
+  const teacherNames = teachersInvolved
+    .map(tid => (teachers || []).find(tc => tc.id === tid)?.full_name || task.teacherName)
+    .join(', ');
+
+  // Entries of the same group at a slot are joinable, never blockers
+  const sameGroup = (e) => task.parallel_group && e.parallel_group === task.parallel_group;
+
   const cellInfo = (day, slot) => {
-    if (!classAllowedInSlot(task.class_name, slot)) return { type: 'na' };
-    if (!isTeacherAvailable(task.teacher_id, day, slot)) return { type: 'blocked' };
-    const teaching = draftEntries.find(e => e.teacher_id === task.teacher_id && occupies(e, day, slot));
+    if (classesInvolved.some(c => !classAllowedInSlot(c, slot))) return { type: 'na' };
+    if (teachersInvolved.some(tid => !isTeacherAvailable(tid, day, slot))) return { type: 'blocked' };
+    const teaching = draftEntries.find(e =>
+      teachersInvolved.includes(e.teacher_id) && occupies(e, day, slot) && !sameGroup(e)
+    );
     if (teaching) return { type: 'teaching', entry: teaching };
-    const classBusy = draftEntries.find(e => e.class_name === task.class_name && occupies(e, day, slot));
-    if (classBusy) return { type: 'swap', entry: classBusy };
+    const classBusyList = draftEntries.filter(e =>
+      classesInvolved.includes(e.class_name) && occupies(e, day, slot) && !sameGroup(e)
+    );
+    if (classBusyList.length > 0) return { type: 'swap', entries: classBusyList };
     return { type: 'free' };
   };
 
   return (
     <div className="mt-2 mb-1 bg-white rounded-xl border border-amber-200 p-3">
       <p className="text-[11px] text-gray-500 mb-2">
-        Week of <strong>{task.teacherName}</strong> vs. <strong>{task.class_name}</strong> —
-        click a <span className="text-green-600 font-semibold">green</span> cell to place {task.subject} there.
-        Yellow = teacher free, but {task.class_name} has the shown lesson (drag it away in the grid, then place).
+        {members.length > 1 ? (
+          <>Combined block <strong>{subjectsLabel}</strong> for <strong>{classesLabel}</strong> ({teacherNames}) —
+          the whole block goes into ONE slot. </>
+        ) : (
+          <>Week of <strong>{task.teacherName}</strong> vs. <strong>{task.class_name}</strong> — </>
+        )}
+        Click a <span className="text-green-600 font-semibold">green</span> cell to place
+        {members.length > 1 ? ' the whole block' : ` ${task.subject}`} there.
+        Yellow = teacher{teachersInvolved.length > 1 ? 's' : ''} free, but a class has the shown lesson — click ⇄ to auto-swap.
       </p>
       <table className="text-[10px] border-collapse">
         <thead>
@@ -72,9 +108,9 @@ function UnplacedSlotFinder({ task, timeSlots, draftEntries, isTeacherAvailable,
                     <td key={d} className="p-0.5">
                       <button
                         disabled={saving}
-                        onClick={() => onPlace(d, s.slot_number)}
+                        onClick={() => onPlace(d, s.slot_number, members)}
                         className={`${base} w-full bg-green-100 border-green-300 text-green-700 font-semibold hover:bg-green-200 cursor-pointer`}
-                        title="Both free — place the lesson here"
+                        title={members.length > 1 ? 'Everyone free — place the whole block here' : 'Both free — place the lesson here'}
                       >
                         + Place
                       </button>
@@ -82,17 +118,19 @@ function UnplacedSlotFinder({ task, timeSlots, draftEntries, isTeacherAvailable,
                   );
                 }
                 if (info.type === 'swap') {
-                  const movable = !info.entry.is_double && !info.entry.parallel_group;
+                  const blockers = info.entries;
+                  const blockersLabel = [...new Set(blockers.map(b => b.subject))].join(', ');
+                  const movable = blockers.every(b => !b.is_double && !b.parallel_group);
                   if (movable) {
                     return (
                       <td key={d} className="p-0.5">
                         <button
                           disabled={saving}
-                          onClick={() => onSwapPlace(d, s.slot_number, info.entry)}
+                          onClick={() => onSwapPlace(d, s.slot_number, blockers, members)}
                           className={`${base} w-full bg-amber-100 border-amber-300 text-amber-700 font-semibold hover:bg-amber-200 cursor-pointer flex items-center`}
-                          title={`Click to move ${info.entry.subject} to another free slot and place ${task.subject} here`}
+                          title={`Click to move ${blockersLabel} to another free slot and place ${members.length > 1 ? 'the block' : task.subject} here`}
                         >
-                          <span className="truncate">⇄ {info.entry.subject}</span>
+                          <span className="truncate">⇄ {blockersLabel}</span>
                         </button>
                       </td>
                     );
@@ -100,8 +138,8 @@ function UnplacedSlotFinder({ task, timeSlots, draftEntries, isTeacherAvailable,
                   return (
                     <td key={d} className="p-0.5">
                       <div className={`${base} bg-amber-50 border-amber-200 text-amber-500 flex items-center`}
-                        title={`${task.class_name} has ${info.entry.subject} here — it's a ${info.entry.is_double ? 'double period' : 'grouped lesson'}, drag it manually in the grid`}>
-                        <span className="truncate">{info.entry.subject}</span>
+                        title={`Busy with ${blockersLabel} — a double period or grouped lesson, drag it manually in the grid`}>
+                        <span className="truncate">{blockersLabel}</span>
                       </div>
                     </td>
                   );
@@ -182,8 +220,10 @@ export default function TimetableMakerPage() {
     setPlacedManually(new Set());
   }, [tt.unplacedTasks]);
 
-  // Find a new feasible slot for a lesson that blocks a finder cell
-  const findRelocation = (blocker) => {
+  // Find a new feasible slot for a lesson that blocks a finder cell.
+  // extraOccupied = already-planned relocations + the target cell itself,
+  // so sequential moves never land on top of each other.
+  const findRelocation = (blocker, extraOccupied = []) => {
     const sorted = [...tt.timeSlots].sort((a, b) => a.slot_number - b.slot_number);
     const occupies = (e, day, slot) =>
       e.day_of_week === day && (e.slot_number === slot || (e.is_double && e.slot_number + 1 === slot));
@@ -193,6 +233,8 @@ export default function TimetableMakerPage() {
         if (d === blocker.day_of_week && slot === blocker.slot_number) continue;
         if (!classAllowedInSlot(blocker.class_name, slot)) continue;
         if (!tt.isTeacherAvailable(blocker.teacher_id, d, slot)) continue;
+        if (extraOccupied.some(x => x.day === d && x.slot === slot &&
+          (x.class_name === blocker.class_name || x.teacher_id === blocker.teacher_id))) continue;
         if (tt.draftEntries.some(e => e.id !== blocker.id && e.class_name === blocker.class_name && occupies(e, d, slot))) continue;
         if (tt.draftEntries.some(e => e.id !== blocker.id && e.teacher_id === blocker.teacher_id && occupies(e, d, slot))) continue;
         return { day: d, slot };
@@ -345,34 +387,52 @@ export default function TimetableMakerPage() {
                     task={t}
                     timeSlots={tt.timeSlots}
                     draftEntries={tt.draftEntries}
+                    assignments={tt.assignments}
+                    teachers={tt.teachers}
                     isTeacherAvailable={tt.isTeacherAvailable}
                     saving={tt.saving}
-                    onPlace={async (day, slot) => {
-                      await tt.manualSetCell({
-                        teacher_id: t.teacher_id,
-                        subject: t.subject,
-                        class_name: t.class_name,
-                        day_of_week: day,
-                        slot_number: slot,
-                      });
+                    onPlace={async (day, slot, members) => {
+                      for (const m of members) {
+                        await tt.manualSetCell({
+                          teacher_id: m.teacher_id,
+                          subject: m.subject,
+                          class_name: m.class_name,
+                          day_of_week: day,
+                          slot_number: slot,
+                          parallel_group: m.parallel_group || t.parallel_group || null,
+                        });
+                      }
                       setPlacedManually(prev => new Set([...prev, i]));
                       setFinderIndex(null);
                     }}
-                    onSwapPlace={async (day, slot, blocker) => {
-                      const home = findRelocation(blocker);
-                      if (!home) {
-                        tt.setError(`No free slot found for ${blocker.subject} (${blocker.class_name}) — drag it manually in the grid first.`);
-                        return;
+                    onSwapPlace={async (day, slot, blockers, members) => {
+                      // Plan a new home for every blocking lesson first
+                      const moves = [];
+                      for (const b of blockers) {
+                        const home = findRelocation(b, moves.map(mv => ({
+                          day: mv.day, slot: mv.slot,
+                          class_name: mv.blocker.class_name, teacher_id: mv.blocker.teacher_id,
+                        })));
+                        if (!home) {
+                          tt.setError(`No free slot found for ${b.subject} (${b.class_name}) — drag it manually in the grid first.`);
+                          return;
+                        }
+                        moves.push({ blocker: b, day: home.day, slot: home.slot });
                       }
-                      const moved = await tt.moveDraftEntry(blocker.id, home.day, home.slot);
-                      if (!moved) return;
-                      await tt.manualSetCell({
-                        teacher_id: t.teacher_id,
-                        subject: t.subject,
-                        class_name: t.class_name,
-                        day_of_week: day,
-                        slot_number: slot,
-                      });
+                      for (const mv of moves) {
+                        const ok = await tt.moveDraftEntry(mv.blocker.id, mv.day, mv.slot);
+                        if (!ok) return;
+                      }
+                      for (const m of members) {
+                        await tt.manualSetCell({
+                          teacher_id: m.teacher_id,
+                          subject: m.subject,
+                          class_name: m.class_name,
+                          day_of_week: day,
+                          slot_number: slot,
+                          parallel_group: m.parallel_group || t.parallel_group || null,
+                        });
+                      }
                       setPlacedManually(prev => new Set([...prev, i]));
                       setFinderIndex(null);
                     }}
