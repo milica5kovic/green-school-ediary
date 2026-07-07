@@ -206,6 +206,53 @@ describe('Pre-period for constrained teachers', () => {
   });
 });
 
+describe('Phase 5 repair in Fill Gaps mode (locked entries)', () => {
+  test('relocates an existing draft entry to make room and reports it in moved', () => {
+    // Existing draft: tx teaches Y2 at (0,1) [id L1]; ty teaches Y1 at (0,2) [id L2].
+    // tx is available only Monday slots 1+2. New task: tx Music for Y1.
+    //   (0,1): Y1 free but tx busy with locked L1 → L1 can move to (0,2) (Y2 free there)
+    //   (0,2): Y1 busy with L2
+    // Repair must move L1 → (0,2) and place Music(Y1) at (0,1).
+    const locked = [
+      { id: 'L1', teacher_id: 'tx', subject: 'History', class_name: 'Y2', day_of_week: 0, slot_number: 1, is_double: false, parallel_group: null },
+      { id: 'L2', teacher_id: 'ty', subject: 'Library', class_name: 'Y1', day_of_week: 0, slot_number: 2, is_double: false, parallel_group: null },
+    ];
+    const assignments = [
+      { id: 'a1', teacher_id: 'tx', subject: 'Music', class_name: 'Y1', periods_per_week: 1, parallel_group: null },
+    ];
+    const availability = availableOnly('tx', [[0, 1], [0, 2]]);
+
+    const { placed, unplaced, moved } = generateTimetable(assignments, SLOTS_6, availability, locked);
+    expect(unplaced).toHaveLength(0);
+
+    const music = placed.find(p => p.subject === 'Music');
+    expect(music.day_of_week).toBe(0);
+    expect(music.slot_number).toBe(1);
+
+    expect(moved).toHaveLength(1);
+    expect(moved[0].id).toBe('L1');
+    expect(moved[0].day_of_week).toBe(0);
+    expect(moved[0].slot_number).toBe(2);
+
+    // Caller's locked objects must NOT be mutated
+    expect(locked[0].slot_number).toBe(1);
+  });
+
+  test('does not relocate locked doubles or parallel-group entries', () => {
+    const locked = [
+      { id: 'L1', teacher_id: 'tx', subject: 'Maths', class_name: 'Y2', day_of_week: 0, slot_number: 1, is_double: true, parallel_group: null },
+    ];
+    const assignments = [
+      { id: 'a1', teacher_id: 'tx', subject: 'Music', class_name: 'Y1', periods_per_week: 1, parallel_group: null },
+    ];
+    // tx available only where the locked double sits → cannot repair
+    const availability = availableOnly('tx', [[0, 1], [0, 2]]);
+    const { unplaced, moved } = generateTimetable(assignments, SLOTS_6, availability, locked);
+    expect(moved).toHaveLength(0);
+    expect(unplaced).toHaveLength(1);
+  });
+});
+
 describe('Unplaced diagnostics', () => {
   test('genuinely impossible task reports a reason', () => {
     // Teacher blocked everywhere → cannot be placed at all.

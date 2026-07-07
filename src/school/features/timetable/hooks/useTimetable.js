@@ -292,13 +292,24 @@ export function useTimetable() {
         return;
       }
 
-      // Pass existing draft entries as locked — generator works around them
-      const { placed, unplaced } = generateTimetable(
+      // Pass existing draft entries as locked — generator works around them,
+      // but its repair phase may RELOCATE some of them to make room.
+      const { placed, unplaced, moved } = generateTimetable(
         remaining, timeSlots, availabilityRecords, draftEntries
       );
 
+      // Persist repair moves on existing entries
+      for (const m of moved || []) {
+        await service.moveDraftEntry(m.id, m.day_of_week, m.slot_number);
+      }
+
       const saved = await service.saveDraftEntriesIncremental(placed);
-      setDraftEntries(prev => [...prev, ...saved]);
+      setDraftEntries(prev => prev
+        .map(e => {
+          const m = (moved || []).find(x => x.id === e.id);
+          return m ? { ...e, day_of_week: m.day_of_week, slot_number: m.slot_number } : e;
+        })
+        .concat(saved));
 
       const enriched = unplaced.map(t => ({
         ...t,

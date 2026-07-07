@@ -70,6 +70,12 @@ function shuffleDeterministic(arr, seed) {
 export function generateTimetable(assignments, timeSlots, availabilityRecords, lockedEntries = [], seed = 0) {
   const slotNumbers = timeSlots.map(s => s.slot_number).sort((a, b) => a - b);
 
+  // Clone locked entries so repair moves never mutate the caller's state.
+  // Moved locked entries are reported back via `moved` (they carry .id)
+  // so Fill Gaps can persist the new positions.
+  lockedEntries = lockedEntries.map(e => ({ ...e }));
+  const movedLocked = new Set();
+
   // Regular slots (P1–P6) vs pre-period (slot 0) and after-school (slot 7+)
   const regularSlotNums = slotNumbers.filter(s => !AFTER_SCHOOL_SLOTS.has(s) && !PRE_PERIOD_SLOTS.has(s));
 
@@ -873,8 +879,11 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
           return true;
         }
 
-        // Teacher is busy — who blocks this slot?
-        const blockers = placed.filter(p =>
+        // Teacher is busy — who blocks this slot? Search both freshly
+        // placed entries AND locked (existing draft) entries: in Fill
+        // Gaps mode the whole draft is locked, and being allowed to
+        // shuffle it is exactly what makes the repair useful.
+        const blockers = [...placed, ...lockedEntries].filter(p =>
           p.teacher_id === task.teacher_id &&
           p.day_of_week === day &&
           (p.slot_number === slot || (p.is_double && p.slot_number + 1 === slot))
@@ -894,6 +903,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
             if ((classSubjectDay[subjectDayKey(b.class_name, d2, b.subject)] || 0) >= maxPerDay(b.subject)) continue;
 
             moveEntry(b, d2, s2);
+            if (b.id !== undefined && lockedEntries.includes(b)) movedLocked.add(b);
             commitTask({ ...task, _isDouble: false }, day, slot);
             return true;
           }
@@ -1140,7 +1150,9 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
   }
 
   // Doubles are now placed atomically with is_double: true — no merging needed.
-  return { placed, unplaced };
+  // `moved` = locked (existing draft) entries the repair phase relocated;
+  // the caller must persist their new day_of_week/slot_number.
+  return { placed, unplaced, moved: [...movedLocked] };
 }
 
 /**
