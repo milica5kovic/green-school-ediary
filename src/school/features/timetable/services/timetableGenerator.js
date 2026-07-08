@@ -211,12 +211,18 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
   // e.g. class has P1 and P5 → placing at P3 extends the range without gap (OK),
   //      but placing at P7 leaves P6 empty (penalty).
   // This keeps each class's timetable compact so students never have unexplained free periods.
+  // Per-class slot sequence for continuity: Y7-Y9 include the pre-period
+  // (slot 0) so a pre-period lesson followed by an empty Period 1 counts
+  // as a gap — "no pre-period rather than a hole in the morning".
+  const classGapSeq = (class_name) =>
+    slotNumbers.filter(s => !AFTER_SCHOOL_SLOTS.has(s) && classAllowedInSlot(class_name, s));
+
   const getGapPenalty = (class_name, day, slot) => {
     if (AFTER_SCHOOL_SLOTS.has(slot)) return 0; // after-school sits outside regular hours
-    if (PRE_PERIOD_SLOTS.has(slot)) return 0;   // pre-period sits before regular hours
-    const slotIdx = regularSlotNums.indexOf(slot);
+    const seq = classGapSeq(class_name);
+    const slotIdx = seq.indexOf(slot);
     if (slotIdx < 0) return 0;
-    const occupiedIndices = regularSlotNums
+    const occupiedIndices = seq
       .map((s, i) => (grid[day][s]?.[class_name] ? i : -1))
       .filter(i => i >= 0);
     if (occupiedIndices.length === 0) return 0;
@@ -232,6 +238,26 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
   // For double classes, take the larger gap of the two slots
   const getGapPenaltyDouble = (class_name, day, slotA, slotB) =>
     Math.max(getGapPenalty(class_name, day, slotA), getGapPenalty(class_name, day, slotB));
+
+  // Part-timers must have their lessons back-to-back: penalise slots
+  // that leave a hole in a constrained teacher's own day.
+  const getTeacherGapPenalty = (task, day, slot) => {
+    if (AFTER_SCHOOL_SLOTS.has(slot)) return 0;
+    if (!isConstrainedTeacherTask(task)) return 0;
+    const seq = slotNumbers.filter(s => !AFTER_SCHOOL_SLOTS.has(s));
+    const slotIdx = seq.indexOf(slot);
+    if (slotIdx < 0) return 0;
+    const occ = seq
+      .map((s, i) => (teacherBusy[day][s].has(task.teacher_id) ? i : -1))
+      .filter(i => i >= 0);
+    if (occ.length === 0) return 0;
+    const minO = Math.min(...occ);
+    const maxO = Math.max(...occ);
+    let gaps = 0;
+    if (slotIdx < minO) gaps = minO - slotIdx - 1;
+    else if (slotIdx > maxO) gaps = slotIdx - maxO - 1;
+    return gaps * 150;
+  };
 
   // ---- Helper: check if a single task can go at (day, slot) ----
   // relaxCap=true (Phase 4 last resort) allows ONE extra period of the
@@ -678,7 +704,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
           const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
           const prePeriodPenalty = prePeriodPenaltyFor(task, slot);
           const spreadPenalty = weeklySpreadPenalty(task.class_name, task.subject, day);
-          const score = getLoad(task.class_name, day) + consecutiveBonus + afterSchoolPenalty + prePeriodPenalty + spreadPenalty + getGapPenalty(task.class_name, day, slot);
+          const score = getLoad(task.class_name, day) + consecutiveBonus + afterSchoolPenalty + prePeriodPenalty + spreadPenalty + getGapPenalty(task.class_name, day, slot) + getTeacherGapPenalty(task, day, slot);
           if (score < bestScore) {
             bestScore = score;
             bestDay = day;
@@ -734,7 +760,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
         const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
         const prePeriodPenalty = prePeriodPenaltyFor(task, slot);
         const spreadPenalty = weeklySpreadPenalty(task.class_name, task.subject, day);
-        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty + prePeriodPenalty + spreadPenalty + getGapPenalty(task.class_name, day, slot);
+        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty + prePeriodPenalty + spreadPenalty + getGapPenalty(task.class_name, day, slot) + getTeacherGapPenalty(task, day, slot);
         if (score < bestScore) {
           bestScore = score;
           bestDay = day;
@@ -798,7 +824,7 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
         const afterSchoolPenalty = AFTER_SCHOOL_SLOTS.has(slot) ? AFTER_SCHOOL_PENALTY : 0;
         const prePeriodPenalty = prePeriodPenaltyFor(task, slot);
         const spreadPenalty = weeklySpreadPenalty(task.class_name, task.subject, day);
-        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty + prePeriodPenalty + spreadPenalty + getGapPenalty(task.class_name, day, slot);
+        const score = loadScore + teacherLoadScore + consecutiveBonus + afterSchoolPenalty + prePeriodPenalty + spreadPenalty + getGapPenalty(task.class_name, day, slot) + getTeacherGapPenalty(task, day, slot);
         if (score < bestScore) { bestScore = score; bestDay = day; bestSlot = slot; }
       }
     }
@@ -1211,20 +1237,24 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
             p.class_name === class_name &&
             p.day_of_week === day &&
             !p.is_double &&
-            !AFTER_SCHOOL_SLOTS.has(p.slot_number) &&
-            !PRE_PERIOD_SLOTS.has(p.slot_number)
+            !AFTER_SCHOOL_SLOTS.has(p.slot_number)
           )
           .sort((a, b) => a.slot_number - b.slot_number);
 
         if (dayEntries.length < 2) continue;
 
+        // Continuity sequence includes the pre-period for Y7-Y9, so a
+        // lesson at 08:20 followed by a hole at Period 1 gets compacted.
+        const seq = classGapSeq(class_name);
+
         for (let i = 1; i < dayEntries.length; i++) {
           const entry = dayEntries[i];
-          const prevSlotIdx = regularSlotNums.indexOf(dayEntries[i - 1].slot_number);
-          const curSlotIdx  = regularSlotNums.indexOf(entry.slot_number);
+          const prevSlotIdx = seq.indexOf(dayEntries[i - 1].slot_number);
+          const curSlotIdx  = seq.indexOf(entry.slot_number);
+          if (prevSlotIdx < 0 || curSlotIdx < 0) continue;
           if (curSlotIdx === prevSlotIdx + 1) continue; // already adjacent
 
-          const targetSlot = regularSlotNums[prevSlotIdx + 1];
+          const targetSlot = seq[prevSlotIdx + 1];
           if (targetSlot === undefined) continue;
           if (grid[day][targetSlot]?.[class_name]) continue; // occupied by this class already
 

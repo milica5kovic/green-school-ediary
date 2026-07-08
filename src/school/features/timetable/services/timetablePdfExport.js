@@ -71,38 +71,30 @@ function renderTimetablePage(doc, {
   const H = doc.internal.pageSize.getHeight();  // 210mm (landscape)
   const headerRgb = hexToRgb(primaryColor);
 
-  // ---- Banner header: full-width colored strip ----
-  const BANNER_H = 24;
-  doc.setFillColor(...headerRgb);
-  doc.rect(0, 0, W, BANNER_H, 'F');
-  // subtle darker accent line under the banner
-  doc.setFillColor(...headerRgb.map(v => Math.round(v * 0.75)));
-  doc.rect(0, BANNER_H, W, 1.2, 'F');
-
+  // ---- Minimal header: logo on top, title + subtitle, white page ----
+  let y = 8;
   if (logoData) {
-    const maxH = 16;
+    const maxH = 13;
     const ratio = logoData.width / logoData.height;
-    const logoW = Math.min(maxH * ratio, 36);
-    // white card behind the logo so it pops on the colored banner
-    doc.setFillColor(255, 255, 255);
-    doc.roundedRect(8, 3.5, logoW + 5, maxH + 3, 2, 2, 'F');
-    doc.addImage(logoData.data, 'PNG', 10.5, 5, logoW, maxH);
+    const logoW = Math.min(maxH * ratio, 32);
+    doc.addImage(logoData.data, 'PNG', (W - logoW) / 2, y, logoW, maxH);
+    y += maxH + 6;
+  } else {
+    y += 4;
   }
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(17);
-  doc.setTextColor(255, 255, 255);
-  doc.text(schoolName, W / 2, 10.5, { align: 'center' });
+  doc.setFont('times', 'bold');
+  doc.setFontSize(15);
+  doc.setTextColor(30, 30, 30);
+  doc.text(subtitle, W / 2, y, { align: 'center' });
+  y += 4;
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(11.5);
-  doc.text(subtitle, W / 2, 18.5, { align: 'center' });
+  doc.setFont('times', 'italic');
+  doc.setFontSize(9.5);
+  doc.setTextColor(...headerRgb.map(v => Math.round(v * 0.7)));
+  doc.text(`${schoolName} · School year 2026-27`, W / 2, y + 2, { align: 'center' });
 
-  doc.setFontSize(7.5);
-  doc.setTextColor(255, 255, 255);
-  doc.text(`School year 2026-27`, W - 8, 8, { align: 'right' });
-
-  const tableStartY = BANNER_H + 4;
+  const tableStartY = y + 8;
 
   // ---- Build table ----
   const sortedSlots = [...timeSlots].sort((a, b) => a.slot_number - b.slot_number);
@@ -179,10 +171,14 @@ function renderTimetablePage(doc, {
     return row;
   });
 
-  // Stretch the table to fill the whole page height
-  const footerSpace = 8;
-  const headH = 9;
-  const rowH = (H - tableStartY - footerSpace - headH) / sortedSlots.length;
+  // Centered, compact table — equal cells, always one page
+  const footerSpace = 10;
+  const headH = 8;
+  const rowH = Math.min(20, (H - tableStartY - footerSpace - headH) / sortedSlots.length);
+  const tableW = 250;
+  const sideMargin = (W - tableW) / 2;
+  const periodColW = 32;
+  const dayW = (tableW - periodColW) / 5;
 
   autoTable(doc, {
     head,
@@ -190,48 +186,48 @@ function renderTimetablePage(doc, {
     startY: tableStartY,
     theme: 'grid',
     styles: {
-      lineColor: [255, 255, 255],
-      lineWidth: 0.7,
+      font: 'times',
+      lineColor: pastel(headerRgb, 0.35),
+      lineWidth: 0.25,
     },
     headStyles: {
-      fillColor: headerRgb,
-      textColor: 255,
+      fillColor: pastel(headerRgb, 0.18),
+      textColor: headerRgb.map(v => Math.round(v * 0.45)),
       fontStyle: 'bold',
       fontSize: 9.5,
       halign: 'center',
       valign: 'middle',
       minCellHeight: headH,
       cellPadding: 2,
+      lineColor: pastel(headerRgb, 0.35),
+      lineWidth: 0.25,
     },
     bodyStyles: {
       fontSize: 8.5,
       cellPadding: { top: 2, right: 2.5, bottom: 2, left: 2.5 },
       valign: 'middle',
       halign: 'center',
-      textColor: [35, 45, 40],
+      textColor: [40, 40, 40],
       minCellHeight: rowH,
+      fillColor: [255, 255, 255],
     },
     columnStyles: (() => {
-      const dayW = (W - 16 - 34) / 5; // equal width for all five days
-      const cols = { 0: { cellWidth: 34 } };
+      const cols = { 0: { cellWidth: periodColW } };
       for (let i = 1; i <= 5; i++) cols[i] = { cellWidth: dayW, halign: 'center' };
       return cols;
     })(),
-    margin: { left: 8, right: 8, top: tableStartY, bottom: footerSpace },
-    tableWidth: W - 16,
+    margin: { left: sideMargin, right: sideMargin, top: tableStartY, bottom: footerSpace },
+    tableWidth: tableW,
     didParseCell(data) {
       if (data.section !== 'body') return;
       const raw = data.cell.raw;
       if (raw && raw._period) {
-        data.cell.styles.fillColor = pastel(headerRgb, 0.22);
-        data.cell.styles.textColor = headerRgb.map(v => Math.round(v * 0.55));
+        data.cell.styles.fillColor = pastel(headerRgb, 0.08);
+        data.cell.styles.textColor = headerRgb.map(v => Math.round(v * 0.5));
         data.cell.styles.fontStyle = 'bold';
-        data.cell.styles.fontSize = 9;
+        data.cell.styles.fontSize = 8;
       } else if (raw && raw._subject) {
-        data.cell.styles.fillColor = pastel(subjectColorRgb(raw._subject));
         data.cell.styles.fontStyle = 'bold';
-      } else if (raw && raw._empty) {
-        data.cell.styles.fillColor = [248, 249, 250];
       }
     },
   });
@@ -244,7 +240,8 @@ function addFooter(doc, schoolName) {
   const dateStr = new Date().toLocaleDateString('en-GB');
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-    doc.setFontSize(7);
+    doc.setFont('times', 'italic');
+    doc.setFontSize(7.5);
     doc.setTextColor(170, 170, 170);
     doc.text(`${schoolName} — generated ${dateStr}`, W / 2, H - 3.5, { align: 'center' });
     doc.text(`${i}/${pageCount}`, W - 8, H - 3.5, { align: 'right' });
@@ -329,11 +326,15 @@ export async function exportTimetableBookPDF({
       }))
     : [...teachers]
         .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''))
-        .map(t => ({
-          subtitle: `Teacher Timetable — ${t.full_name}`,
-          perspective: 'teacher',
-          entries: entries.filter(e => e.teacher_id === t.id),
-        }))
+        .map(t => {
+          const own = entries.filter(e => e.teacher_id === t.id);
+          const subjects = [...new Set(own.map(e => e.subject))].join(', ');
+          return {
+            subtitle: `${t.full_name} — ${subjects}`,
+            perspective: 'teacher',
+            entries: own,
+          };
+        })
         // skip teachers with no lessons — no point printing empty grids
         .filter(p => p.entries.length > 0);
 
