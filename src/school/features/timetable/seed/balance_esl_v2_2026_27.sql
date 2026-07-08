@@ -18,7 +18,7 @@ DO $$
 DECLARE
   sid UUID := 'f2100ee0-c12b-4418-82b0-3567d6207920';
   pool UUID[]; names TEXT[]; loads NUMERIC[];
-  rec RECORD; eng UUID; best INT; i INT;
+  rec RECORD; eng UUID; best INT; i INT; v NUMERIC;
 BEGIN
 
 SELECT ARRAY[
@@ -45,8 +45,9 @@ WHERE t.school_id = sid AND t.subject = 'ESL'
 -- Starting load = everything each pool teacher teaches that is NOT ESL
 loads := ARRAY[0, 0, 0, 0];
 FOR i IN 1..4 LOOP
-  SELECT COALESCE(SUM(periods_per_week), 0) INTO loads[i]
+  SELECT COALESCE(SUM(periods_per_week), 0) INTO v
   FROM teacher_assignments WHERE school_id = sid AND teacher_id = pool[i] AND subject <> 'ESL';
+  loads[i] := v;
 END LOOP;
 
 -- Greedy: biggest ESL classes first → eligible teacher with lowest total
