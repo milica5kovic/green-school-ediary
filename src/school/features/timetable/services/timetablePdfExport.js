@@ -3,6 +3,7 @@
 // ============================================================
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { registerInter } from './pdfFonts';
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const DAYS = [0, 1, 2, 3, 4];
@@ -83,13 +84,13 @@ function renderTimetablePage(doc, {
     y += 4;
   }
 
-  doc.setFont('times', 'bold');
+  doc.setFont('Inter', 'bold');
   doc.setFontSize(15);
   doc.setTextColor(30, 30, 30);
   doc.text(subtitle, W / 2, y, { align: 'center' });
   y += 4;
 
-  doc.setFont('times', 'italic');
+  doc.setFont('Inter', 'normal');
   doc.setFontSize(9.5);
   doc.setTextColor(...headerRgb.map(v => Math.round(v * 0.7)));
   doc.text(`${schoolName} · School year 2026-27`, W / 2, y + 2, { align: 'center' });
@@ -186,7 +187,7 @@ function renderTimetablePage(doc, {
     startY: tableStartY,
     theme: 'grid',
     styles: {
-      font: 'times',
+      font: 'Inter',
       lineColor: pastel(headerRgb, 0.35),
       lineWidth: 0.25,
     },
@@ -240,7 +241,7 @@ function addFooter(doc, schoolName) {
   const dateStr = new Date().toLocaleDateString('en-GB');
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-    doc.setFont('times', 'italic');
+    doc.setFont('Inter', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(170, 170, 170);
     doc.text(`${schoolName} — generated ${dateStr}`, W / 2, H - 3.5, { align: 'center' });
@@ -259,6 +260,7 @@ export async function exportTimetablePDF({
   teachers = [],
 }) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  registerInter(doc);
   const logoData = await loadImageBase64(logoUrl);
 
   let subtitle = 'School Timetable';
@@ -316,6 +318,7 @@ export async function exportTimetableBookPDF({
   primaryColor = '#22c55e',
 }) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  registerInter(doc);
   const logoData = await loadImageBase64(logoUrl);
 
   const pages = mode === 'classes'
