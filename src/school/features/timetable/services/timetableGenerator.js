@@ -786,6 +786,23 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
   // is scheduled BEFORE the rest, in the same CG → doubles → singles
   // order. Group siblings placed along the way keep their sync.
   // ============================================================
+  // Round 0: MULTI-CLASS blocks first (Y6-LANG, Y6-SRB, combined C&G...).
+  // They need several classes AND several teachers free simultaneously —
+  // the hardest constraint of all — so they claim the empty grid before
+  // anything else fills those classes' slots. They can never be split,
+  // so they must never be squeezed out.
+  const groupClasses = {};
+  assignments.forEach(a => {
+    if (!a.parallel_group) return;
+    (groupClasses[a.parallel_group] = groupClasses[a.parallel_group] || new Set()).add(a.class_name);
+  });
+  const isMultiClassBlockTask = (t) =>
+    t.parallel_group && (groupClasses[t.parallel_group]?.size || 1) > 1;
+
+  cgTasks.filter(isMultiClassBlockTask).forEach(processCGTask);
+  doubleTasks.filter(isMultiClassBlockTask).forEach(processDoubleTask);
+  singleTasks.filter(isMultiClassBlockTask).forEach(processSingleTask);
+
   // Round 1: part-time / heavily blocked teachers
   cgTasks.filter(isConstrainedTeacherTask).forEach(processCGTask);
   doubleTasks.filter(isConstrainedTeacherTask).forEach(processDoubleTask);

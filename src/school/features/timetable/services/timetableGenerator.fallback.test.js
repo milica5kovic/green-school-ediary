@@ -143,6 +143,41 @@ describe('Slack-based teacher priority', () => {
   });
 });
 
+describe('Multi-class block priority (Round 0)', () => {
+  test('French+German across Y6a+Y6b places fully even when both classes are packed', () => {
+    // Both classes end up with exactly 30 periods (28 filler + 2 block):
+    // without Round 0 priority the fillers would fragment the two
+    // classes so no common slot survives for the 4-way block.
+    const assignments = [
+      { id: 'f1', teacher_id: 'tm', subject: 'French', class_name: 'Y6a', periods_per_week: 2, parallel_group: 'Y6-LANG' },
+      { id: 'f2', teacher_id: 'tm', subject: 'French', class_name: 'Y6b', periods_per_week: 2, parallel_group: 'Y6-LANG' },
+      { id: 'g1', teacher_id: 'tr', subject: 'German', class_name: 'Y6a', periods_per_week: 2, parallel_group: 'Y6-LANG' },
+      { id: 'g2', teacher_id: 'tr', subject: 'German', class_name: 'Y6b', periods_per_week: 2, parallel_group: 'Y6-LANG' },
+      ...['Y6a', 'Y6b'].flatMap((c, ci) =>
+        [0, 1, 2, 3].map(k => ({
+          id: `x${ci}${k}`, teacher_id: `t${ci}${k}`, subject: `Sub${k}`,
+          class_name: c, periods_per_week: 7, parallel_group: null,
+        }))
+      ),
+    ];
+    const { placed, unplaced } = generateTimetable(assignments, SLOTS_6, []);
+    expect(unplaced).toHaveLength(0);
+
+    // Every block occurrence: all four lessons share one day+slot
+    const frA = placed.filter(p => p.subject === 'French' && p.class_name === 'Y6a');
+    expect(frA).toHaveLength(2);
+    frA.forEach(f => {
+      ['French|Y6b', 'German|Y6a', 'German|Y6b'].forEach(key => {
+        const [subj, cls] = key.split('|');
+        expect(placed.some(p =>
+          p.subject === subj && p.class_name === cls &&
+          p.day_of_week === f.day_of_week && p.slot_number === f.slot_number
+        )).toBe(true);
+      });
+    });
+  });
+});
+
 describe('Phase 5 — repair by displacing a blocking lesson', () => {
   test('moves another class out of the way instead of leaving the task unplaced', () => {
     // tx is available ONLY Monday slots 1+2. ty is available ONLY Monday
