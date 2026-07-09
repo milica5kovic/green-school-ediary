@@ -102,6 +102,45 @@ describe('generateTimetable — parallel groups', () => {
     expect(placed).toHaveLength(3);
   });
 
+  test('ESL never sits apart from English in a merged block with odd ESL fond', () => {
+    // Real case: Y34-ENG cluster — English Y3 (6) + English Y4 (6) share the
+    // block with a MERGED ESL Y3 (5, Julijana). English fond is even (3 clean
+    // doubles); ESL fond is odd, so one leftover ESL period cannot form a
+    // whole double and must ride on ONE half of an English double.
+    // Invariant: every ESL period is co-scheduled with English — never alone.
+    const assignments = [
+      makeAssignment({ id: 'e3', teacher_id: 't_eng3', subject: 'English', class_name: 'Y3', periods_per_week: 6, parallel_group: 'Y34-ENG' }),
+      makeAssignment({ id: 'e4', teacher_id: 't_eng4', subject: 'English', class_name: 'Y4', periods_per_week: 6, parallel_group: 'Y34-ENG' }),
+      makeAssignment({ id: 'es', teacher_id: 't_julijana', subject: 'ESL', class_name: 'Y3', periods_per_week: 5, parallel_group: 'Y34-ENG' }),
+    ];
+    const { placed } = generateTimetable(assignments, SLOTS, []);
+
+    const esl = placed.filter(e => e.subject === 'ESL');
+    const english = placed.filter(e => e.subject === 'English');
+    // A double entry represents 2 periods — count periods, not rows.
+    const periods = (rows) => rows.reduce((n, e) => n + (e.is_double ? 2 : 1), 0);
+    expect(periods(esl)).toBe(5);
+
+    // Cells (day|slot) covered by English, expanding doubles to both halves.
+    const cellsOf = (rows) => {
+      const s = new Set();
+      rows.forEach(e => {
+        s.add(`${e.day_of_week}|${e.slot_number}`);
+        if (e.is_double) s.add(`${e.day_of_week}|${e.slot_number + 1}`);
+      });
+      return s;
+    };
+    const englishCells = cellsOf(english);
+
+    // Every ESL period must share a slot with English — none scheduled alone.
+    for (const cell of cellsOf(esl)) {
+      expect(englishCells.has(cell)).toBe(true);
+    }
+
+    // English keeps its double-period structure (at least one dvočas).
+    expect(english.some(e => e.is_double)).toBe(true);
+  });
+
   test('moves parallel group to unplaced when no valid slot for all members', () => {
     // Block t1 (French) entirely — the whole group should be unplaced
     const availability = [];

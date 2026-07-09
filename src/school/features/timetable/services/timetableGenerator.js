@@ -18,6 +18,13 @@ const TRIPLE_PER_DAY_SUBJECTS = new Set(['English', 'ESL']);
 // Subjects that should be taught in consecutive double periods wherever possible.
 // E.g., Science on Tuesday P3+P4, not P1 and P5 separately.
 // The generator applies a large bonus score for placing these back-to-back.
+//
+// English & ESL are here too: English is taught as double periods and the
+// merged ESL block rides on those same slots. When ESL has an ODD fond
+// (e.g. 5 vs English's 6) the leftover single ESL period cannot form a whole
+// double — it is placed on ONE half of an English double instead, so ESL is
+// never scheduled apart from English (see the committed-double handling in
+// processSingleTask / Phase 3 tryPlaceSynced).
 const DOUBLE_PREFERRED_SUBJECTS = new Set([
   'Maths', 'Mathematics', 'Math',
   'PE',
@@ -661,9 +668,14 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
       if (committed) {
         // Slot already decided
         if (committed.slotB !== undefined) {
-          // was committed as double — try to place as double
-          if (canPlaceDouble(task, committed.day, committed.slotA, committed.slotB)) {
-            commitDouble(task, committed.day, committed.slotA, committed.slotB);
+          // The occurrence was committed as a DOUBLE (English). This is a
+          // single task — an odd leftover ESL period. Ride on ONE half of
+          // the English double so ESL never sits apart from English; never
+          // expand it into its own double (that would over-count the fond).
+          if (canPlace(task, committed.day, committed.slotA)) {
+            commitTask(task, committed.day, committed.slotA);
+          } else if (canPlace(task, committed.day, committed.slotB)) {
+            commitTask(task, committed.day, committed.slotB);
           } else {
             queueUnplaced(task);
           }
@@ -1028,9 +1040,19 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
           // Part of this occurrence is already on the grid —
           // join it exactly there or give up (never desync).
           if (committed.slotB !== undefined) {
-            if (mates.every(m => canPlaceDouble(m, committed.day, committed.slotA, committed.slotB, relaxCap))) {
-              mates.forEach(m => commitDouble(m, committed.day, committed.slotA, committed.slotB));
-              return true;
+            if (task._isDouble) {
+              if (mates.every(m => canPlaceDouble(m, committed.day, committed.slotA, committed.slotB, relaxCap))) {
+                mates.forEach(m => commitDouble(m, committed.day, committed.slotA, committed.slotB));
+                return true;
+              }
+              return false;
+            }
+            // Single leftover (odd ESL fond) joins ONE half of the English double.
+            for (const s of [committed.slotA, committed.slotB]) {
+              if (mates.every(m => canPlace(m, committed.day, s, relaxCap))) {
+                mates.forEach(m => commitTask(m, committed.day, s));
+                return true;
+              }
             }
             return false;
           }
