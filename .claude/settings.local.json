@@ -19,7 +19,9 @@
       "Bash(git commit *)",
       "Bash(grep -v \"//.*console\")",
       "PowerShell($srcPath = \"C:\\\\Users\\\\Green School Teacher\\\\Documents\\\\Personal Projects\\\\Projects\\\\Akio Platform\\\\.claude\\\\worktrees\\\\dazzling-jones-e4bf22\\\\src\"; Get-ChildItem -Path $srcPath -Directory | ForEach-Object { $_.Name })",
-      "PowerShell($srcPath = \"C:\\\\Users\\\\Green School Teacher\\\\Documents\\\\Personal Projects\\\\Projects\\\\Akio Platform\\\\.claude\\\\worktrees\\\\dazzling-jones-e4bf22\\\\src\"; if \\(Test-Path \"$srcPath\\\\grading\"\\) { Get-ChildItem -Recurse -Path \"$srcPath\\\\grading\" } else { \"grading dir not found\" })"
+      "PowerShell($srcPath = \"C:\\\\Users\\\\Green School Teacher\\\\Documents\\\\Personal Projects\\\\Projects\\\\Akio Platform\\\\.claude\\\\worktrees\\\\dazzling-jones-e4bf22\\\\src\"; if \\(Test-Path \"$srcPath\\\\grading\"\\) { Get-ChildItem -Recurse -Path \"$srcPath\\\\grading\" } else { \"grading dir not found\" })",
+      "PowerShell(git -C \"C:\\\\Users\\\\Green School Teacher\\\\Documents\\\\Personal Projects\\\\Projects\\\\School Hub\" add \"src/school/features/timetable/services/timetableGenerator.js\" \"src/school/features/timetable/seed/swap_y5_english_esl_2026_27.sql\")",
+      "Bash(git restore *)"
     ]
   }
 }
