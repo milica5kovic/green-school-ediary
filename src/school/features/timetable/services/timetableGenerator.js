@@ -8,6 +8,13 @@ const DAYS = [0, 1, 2, 3, 4]; // Monday=0 ... Friday=4
 // (Removed Maths — Maths forms double periods in the original school timetable)
 const SINGLE_PERIOD_SUBJECTS = new Set([]);
 
+// Subjects allowed up to THREE periods on the same day (default cap is 2).
+// English & ESL are merged parallel blocks (fond 5–6) that must co-schedule
+// across several classes at once (Y1abc, Y89, Y34…). With only 2/day those
+// clusters can't all find a common free slot and overflow as unplaced; a
+// 3/day cap gives the tight blocks room to land.
+const TRIPLE_PER_DAY_SUBJECTS = new Set(['English', 'ESL']);
+
 // Subjects that should be taught in consecutive double periods wherever possible.
 // E.g., Science on Tuesday P3+P4, not P1 and P5 separately.
 // The generator applies a large bonus score for placing these back-to-back.
@@ -149,8 +156,11 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     `${class_name}|${day}|${subject}`;
 
   // Max periods allowed per subject per class per day
-  // Single-period subjects must not appear twice in one day
-  const maxPerDay = (subject) => SINGLE_PERIOD_SUBJECTS.has(subject) ? 1 : 2;
+  // Single-period subjects must not appear twice in one day;
+  // English/ESL merged blocks may reach three (see TRIPLE_PER_DAY_SUBJECTS).
+  const maxPerDay = (subject) =>
+    SINGLE_PERIOD_SUBJECTS.has(subject) ? 1 :
+    TRIPLE_PER_DAY_SUBJECTS.has(subject) ? 3 : 2;
 
   // ---- Pre-populate grid from lockedEntries ----
   lockedEntries.forEach(e => {
