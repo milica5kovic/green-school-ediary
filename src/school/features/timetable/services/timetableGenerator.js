@@ -655,6 +655,36 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
     }
   };
 
+  // ---- Odd ESL leftover → ride on an English slot the class doesn't use yet ----
+  // A merged block (English + ESL) with an ODD ESL fond (e.g. 5 vs 6) has one
+  // leftover ESL period. Rather than leave it unplaced (which forces a manual,
+  // error-prone fix), seat it where the class ALREADY has English of the same
+  // group but has NO ESL yet — so ESL is never alone and never stacked on
+  // itself. English keeps 6, ESL fills 5 of those same 6 slots.
+  const rideOnEnglish = (task) => {
+    const partnerSlots = placed.filter(p =>
+      p.class_name === task.class_name &&
+      p.parallel_group === task.parallel_group &&
+      p.subject !== task.subject
+    );
+    for (const es of partnerSlots) {
+      const slots = es.is_double ? [es.slot_number, es.slot_number + 1] : [es.slot_number];
+      for (const slot of slots) {
+        const alreadySame = placed.some(p =>
+          p.class_name === task.class_name && p.subject === task.subject &&
+          p.day_of_week === es.day_of_week &&
+          (p.slot_number === slot || (p.is_double && p.slot_number + 1 === slot))
+        );
+        if (alreadySame) continue;                                   // no ESL stack
+        if (!isAvailable(task.teacher_id, es.day_of_week, slot)) continue;
+        if (teacherBusy[es.day_of_week][slot].has(task.teacher_id)) continue;
+        if ((classSubjectDay[subjectDayKey(task.class_name, es.day_of_week, task.subject)] || 0) >= maxPerDay(task.subject)) continue;
+        return { day: es.day_of_week, slot };
+      }
+    }
+    return null;
+  };
+
   // ---- Single task placement ----
   const processSingleTask = (task) => {
     if (task._placed) return;
@@ -677,7 +707,11 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
           } else if (canPlace(task, committed.day, committed.slotB)) {
             commitTask(task, committed.day, committed.slotB);
           } else {
-            queueUnplaced(task);
+            // Its own occurrence slot is taken — seat it on any other English
+            // slot of this class that has no ESL yet (never alone, never queued).
+            const ride = rideOnEnglish(task);
+            if (ride) commitTask(task, ride.day, ride.slot);
+            else queueUnplaced(task);
           }
         } else {
           if (canPlace(task, committed.day, committed.slot)) {
@@ -1087,6 +1121,14 @@ export function generateTimetable(assignments, timeSlots, availabilityRecords, l
       };
 
       if (tryPlaceSynced(false) || tryPlaceSynced(true)) continue;
+
+      // Last resort for an odd single (leftover ESL): seat it on any English
+      // slot of this class that has no ESL yet — never leave ESL unplaced,
+      // which is what forced the manual, error-prone fixes.
+      if (!task._isDouble && mates.length === 1) {
+        const ride = rideOnEnglish(task);
+        if (ride) { commitTask(task, ride.day, ride.slot); continue; }
+      }
 
       const periods = task._isDouble ? 2 : 1;
       const groupReason = diagnoseGroupTask(mates);

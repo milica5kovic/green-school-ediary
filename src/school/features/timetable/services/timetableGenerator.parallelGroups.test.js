@@ -113,29 +113,31 @@ describe('generateTimetable — parallel groups', () => {
       makeAssignment({ id: 'e4', teacher_id: 't_eng4', subject: 'English', class_name: 'Y4', periods_per_week: 6, parallel_group: 'Y34-ENG' }),
       makeAssignment({ id: 'es', teacher_id: 't_julijana', subject: 'ESL', class_name: 'Y3', periods_per_week: 5, parallel_group: 'Y34-ENG' }),
     ];
-    const { placed } = generateTimetable(assignments, SLOTS, []);
+    const { placed, unplaced } = generateTimetable(assignments, SLOTS, []);
 
     const esl = placed.filter(e => e.subject === 'ESL');
     const english = placed.filter(e => e.subject === 'English');
     // A double entry represents 2 periods — count periods, not rows.
     const periods = (rows) => rows.reduce((n, e) => n + (e.is_double ? 2 : 1), 0);
-    expect(periods(esl)).toBe(5);
 
-    // Cells (day|slot) covered by English, expanding doubles to both halves.
-    const cellsOf = (rows) => {
-      const s = new Set();
-      rows.forEach(e => {
-        s.add(`${e.day_of_week}|${e.slot_number}`);
-        if (e.is_double) s.add(`${e.day_of_week}|${e.slot_number + 1}`);
-      });
-      return s;
-    };
+    // All 5 ESL periods are placed — none left for the user to fix by hand.
+    expect(periods(esl)).toBe(5);
+    expect(unplaced.filter(u => u.subject === 'ESL')).toHaveLength(0);
+
+    // Cells (day|slot) each row covers, expanding doubles to both halves.
+    const expand = (e) => e.is_double
+      ? [`${e.day_of_week}|${e.slot_number}`, `${e.day_of_week}|${e.slot_number + 1}`]
+      : [`${e.day_of_week}|${e.slot_number}`];
+    const cellsOf = (rows) => new Set(rows.flatMap(expand));
     const englishCells = cellsOf(english);
 
-    // Every ESL period must share a slot with English — none scheduled alone.
-    for (const cell of cellsOf(esl)) {
+    // Every ESL period shares a slot with English — none scheduled alone.
+    const eslCellList = esl.flatMap(expand);
+    for (const cell of eslCellList) {
       expect(englishCells.has(cell)).toBe(true);
     }
+    // ESL is never stacked on itself — one ESL entry per (Y3) cell at most.
+    expect(new Set(eslCellList).size).toBe(eslCellList.length);
 
     // English keeps its double-period structure (at least one dvočas).
     expect(english.some(e => e.is_double)).toBe(true);
