@@ -13,8 +13,8 @@
 -- Weekly loads (match the org document):
 --   Julijana 21 = ESL Y1(6)+Y2(5)+Y34(5)+Y89(5)
 --   Jelena   24 = Eng Y5(6)+Y6a(6)+Y8(6) + ESL Y7(6)
---   Tamara   22 = Eng Y6b(6)+Y7(6)+Y9(6) + ESL Y6(4)
---   Snezana       ESL Y5(4) + backup
+--   Tamara   22 = Eng Y6b(6)+Y7(6)+Y9(6) + ESL Y5(4)
+--   Snezana       ESL Y6(4) + backup   (Tamara can't teach Y6 — she has Y6b English)
 --
 -- Also: pre-period 08:20–08:55 · Jelena Seva replaces Zoran (History) ·
 --   Ashlie = Class Teacher Y1b (Teodora removed) · Milos takes Y4 PE ·
@@ -89,9 +89,9 @@ INSERT INTO teacher_assignments (school_id, teacher_id, subject, class_name, per
   (sid, t_julijana, 'ESL', 'Y2a', 5, 'Y2-ENG'),   -- Y2 all together
   (sid, t_julijana, 'ESL', 'Y3',  5, 'Y34-ENG'),  -- Y3 + Y4
   (sid, t_julijana, 'ESL', 'Y8',  5, 'Y89-ENG'),  -- Y8 + Y9
-  (sid, t_tamara,   'ESL', 'Y6a', 4, 'Y6-ENG'),   -- Y6a + Y6b (see note)
+  (sid, t_snezana,  'ESL', 'Y6a', 4, 'Y6-ENG'),   -- Y6a + Y6b (Snezana — Tamara has Y6b English)
   (sid, t_jelena,   'ESL', 'Y7',  6, 'Y7-ENG'),
-  (sid, t_snezana,  'ESL', 'Y5',  4, 'Y5-ENG');
+  (sid, t_tamara,   'ESL', 'Y5',  4, 'Y5-ENG');
 
 -- Pair each cluster's English with its ESL (same parallel_group)
 UPDATE teacher_assignments SET parallel_group = 'Y1-ENG'  WHERE school_id = sid AND subject = 'English' AND class_name IN ('Y1a','Y1b','Y1c');
@@ -100,10 +100,10 @@ UPDATE teacher_assignments SET parallel_group = 'Y34-ENG' WHERE school_id = sid 
 UPDATE teacher_assignments SET parallel_group = 'Y89-ENG' WHERE school_id = sid AND subject = 'English' AND class_name IN ('Y8','Y9');
 UPDATE teacher_assignments SET parallel_group = 'Y5-ENG'  WHERE school_id = sid AND subject = 'English' AND class_name = 'Y5';
 UPDATE teacher_assignments SET parallel_group = 'Y7-ENG'  WHERE school_id = sid AND subject = 'English' AND class_name = 'Y7';
--- Y6: Tamara teaches Y6b English AND Y6 ESL, so they can't be the same
--- slot. Pair Y6 ESL (Tamara) with Y6a English (Jelena) only; Y6b
--- English (Tamara) stays independent. Y6b ESL kids join during this slot.
-UPDATE teacher_assignments SET parallel_group = 'Y6-ENG'  WHERE school_id = sid AND subject = 'English' AND class_name = 'Y6a';
+-- Y6 fully merged: Snezana teaches the ESL (neither Y6 English teacher),
+-- so Y6a English (Jelena) + Y6b English (Tamara) + Y6 ESL (Snezana) all
+-- share one slot — no conflict.
+UPDATE teacher_assignments SET parallel_group = 'Y6-ENG'  WHERE school_id = sid AND subject = 'English' AND class_name IN ('Y6a','Y6b');
 
 -- ============================================================
 -- PD / PSHE (Iva): Y4, Y5, Y6 (a+b combined) + PSHE Y7-Y9; drop Y1-Y3
