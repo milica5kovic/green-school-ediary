@@ -94,7 +94,8 @@ export class TimetableService {
 
   async updateTeacherAssignment(id, { periods_per_week, parallel_group }) {
     this._require();
-    const updates = { periods_per_week };
+    const updates = {};
+    if (periods_per_week !== undefined) updates.periods_per_week = periods_per_week;
     if (parallel_group !== undefined) updates.parallel_group = parallel_group || null;
     const { data, error } = await this.supabase
       .from('teacher_assignments')
